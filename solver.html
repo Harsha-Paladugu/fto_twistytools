@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pyraminx OO — method solver</title>
+<title>Pyraminx.net — method solver</title>
 <meta name="description" content="Human-findable Pyraminx solutions through L4E, ML4E, L5E, TL4E and pseudo V — ranked by ergonomics.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -244,7 +244,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
   <div class="bigtri" aria-hidden="true"></div>
   <div id="boot-label">Waking up…</div>
   <div id="boot-track"><div id="boot-bar"></div></div>
-  <div id="boot-hint">Uses the same cached position map as the home page — if you’ve visited it, this loads instantly.</div>
+  <div id="boot-hint">Uses the same cached position map as the OO pages — if you’ve visited them, this loads instantly.</div>
 </div>
 <div id="app"></div>
 <script>
@@ -1364,11 +1364,13 @@ function slider(label, hint, key, min, max, step) {
 function render() {
   const root = $('#app'); root.innerHTML = '';
   root.appendChild(h('header', { class: 'topbar' },
-    h('a', { href: './', class: 'wordmark' }, h('span', { class: 'tri', 'aria-hidden': 'true' }), 'PYRAMINX ', h('b', null, 'OO')),
+    h('a', { href: 'index.html', class: 'wordmark' }, h('span', { class: 'tri', 'aria-hidden': 'true' }), 'PYRAMINX ', h('b', null, '.net')),
     h('nav', { class: 'navtabs' },
-      h('a', { href: './', class: 'navlink' }, 'Home'),
+      h('a', { href: 'index.html', class: 'navlink' }, 'Home'),
+      h('a', { href: 'oo.html', class: 'navlink' }, 'OO'),
       h('a', { href: 'solver.html', class: 'navlink on' }, 'Solver'),
-      h('a', { href: './#/about', class: 'navlink' }, 'How it works'))));
+      h('a', { href: 'trainer.html', class: 'navlink' }, 'Trainer'),
+      h('a', { href: 'oo.html#/about', class: 'navlink' }, 'How it works'))));
   const main = h('main', { class: 'page' }); root.appendChild(main);
 
   main.appendChild(h('section', { class: 'homeintro' },
@@ -1445,7 +1447,7 @@ function render() {
         h('div', { class: 'sidehead' },
           h('span', { class: 'sidelabel' }, 'scramble'),
           h('span', { class: 'depthchip' }, UI.dopt === 0 ? 'already solved' : 'optimal: ' + UI.dopt + ' moves'),
-          h('a', { class: 'ordinal', href: './#/c/' + E.idx(UI.state) }, 'open this position \u2192')),
+          h('a', { class: 'ordinal', href: 'oo.html#/c/' + E.idx(UI.state) }, 'open this position \u2192')),
         h('div', { class: 'netwrap', html: R.netSVG(UI.state, 300) }))));
     if (UI.dopt > 0) {
       const chips = h('div', { class: 'depthchips' });
