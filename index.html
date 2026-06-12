@@ -58,36 +58,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
 
 .page{max-width:1060px;margin:0 auto;padding:30px 24px 80px}
 
-/* hero */
-.hero{display:grid;grid-template-columns:1.15fr 1fr;gap:40px;align-items:center;margin:18px 0 34px}
-.eyebrow{letter-spacing:.14em;text-transform:uppercase;font-size:12.5px;color:var(--mut);margin:0 0 10px}
-.hero h1{font-family:var(--disp);font-weight:750;font-size:clamp(30px,4.4vw,44px);line-height:1.08;margin:0 0 16px;letter-spacing:-.01em}
-.hero h1 em{font-style:normal;color:var(--yellow)}
-.lede{color:var(--mut);margin:0 0 20px;max-width:46ch}
+/* home */
+.homeintro{margin:34px 0 24px;max-width:640px}
+.homeintro h1{font-family:var(--disp);font-weight:700;font-size:clamp(24px,3.4vw,32px);line-height:1.18;margin:0 0 12px;letter-spacing:-.005em}
+.lede{color:var(--mut);margin:0;max-width:58ch}
 .lede.sm{font-size:14.5px}
-.statline{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px}
-.stat{color:var(--mut);font-size:14px}
-.stat b{color:var(--txt);font-family:var(--disp);font-size:20px;font-weight:700;margin-right:5px}
-.pctstat b{color:var(--yellow)}
+.progressblock{margin:0 0 26px;max-width:640px}
+.progressline{color:var(--mut);font-size:14px;margin:9px 0 0}
+.progressline b{color:var(--txt);font-weight:600}
+.progressline .pct{color:var(--yellow)}
 .barwrap{height:10px;border-radius:6px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
 .bar{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),var(--yellow));min-width:2px;transition:width .8s ease}
-.heroright{display:flex;justify-content:center}
-.mountain{width:100%;max-width:430px;height:auto}
-.mcell{transition:fill .5s ease}
-@media(prefers-reduced-motion:no-preference){.mcell.lit{fill-opacity:0}.mcell.lit.in{fill-opacity:1}.mcell{transition:fill-opacity .45s ease}}
+.homelinks{display:flex;gap:10px;flex-wrap:wrap}
 
 /* search */
-.searchrow{display:flex;gap:10px;margin:0 0 34px}
+.searchrow{display:flex;gap:10px;margin:0 0 18px;max-width:640px}
 .searchin{flex:1;background:var(--panel);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:.7em .95em;font-size:14.5px}
 .searchin::placeholder{color:var(--dim)}
-.centerrow{text-align:center;margin-top:30px}
 
 /* cards */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
 .card.error{border-color:rgba(232,71,61,.5);color:var(--red)}
 .card h3{font-family:var(--disp);font-weight:650;margin:0 0 8px;font-size:17px}
 .card p{color:var(--mut);margin:0;font-size:14.5px}
-.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .empty{color:var(--dim);font-style:italic}
 
 /* pair page */
@@ -101,9 +94,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
 .ordinal{margin-left:auto;color:var(--dim);font-size:13px}
 .depthchip{font-size:12px;border-radius:6px;padding:2px 8px;background:var(--panel2);color:var(--mut);border:1px solid var(--line)}
 .donechip{font-size:12px;border-radius:6px;padding:2px 8px;color:var(--green);border:1px solid rgba(63,191,82,.5)}
-.netwrap{display:flex;justify-content:center;padding:8px 0 12px}
-.oonet polygon{stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round}
-.oonet.thumb polygon{stroke-width:2.4}
+.viewtoggle{display:flex;align-items:center;gap:6px;margin:6px 0 2px}
+.viewbtn{background:transparent;border:1px solid var(--line2);color:var(--mut);border-radius:7px;padding:.2em .7em;font-size:12.5px}
+.viewbtn.on{color:var(--actink);background:var(--act);border-color:var(--act);font-weight:600}
+.viewhint{color:var(--dim);font-size:12px;margin-left:6px}
+.netwrap{display:flex;justify-content:center;padding:8px 0 12px;min-height:200px;align-items:center;touch-action:none}
+.netwrap.grab{cursor:grab}
+.netwrap.grab:active{cursor:grabbing}
+.oonet polygon{stroke:var(--ink);stroke-width:.018;stroke-linejoin:round}
+.oonet .dcap{font-size:.13px;fill:var(--dim);font-family:var(--body)}
+.oonet.oo3d polygon{stroke-width:.022}
 .scrline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0}
 .scrlabel{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
 .scr{font-size:15px;color:var(--txt);word-break:break-word}
@@ -141,7 +141,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
 .depthsel span{font-size:11px;color:var(--dim)}
 .depthsel:hover{border-color:var(--mut)}
 .depthsel.on{border-color:var(--yellow);background:var(--panel2)}
-.classgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.classgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:10px}
 .classcell{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:9px 8px 6px;text-decoration:none;text-align:center}
 .classcell:hover{border-color:var(--mut)}
 .classcell.done{border-color:rgba(63,191,82,.45)}
@@ -182,8 +182,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
 #boot-bar{height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--yellow));transition:width .25s ease}
 
 @media(max-width:860px){
-  .hero{grid-template-columns:1fr}
-  .trio{grid-template-columns:1fr}
   .pairrow{grid-template-columns:1fr}
   .solrow{grid-template-columns:1fr;gap:6px}
   .modrow{grid-template-columns:1fr}
@@ -196,13 +194,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
    Paste your Firebase web-app config below (see SETUP.md).
    Leave firebase:null to run in demo mode (data stays in this browser). */
 window.OO_CONFIG = {
+
      firebase: {
+
        apiKey: "AIzaSyChfW8NzkjT12tfwTE0MTs0C9MEunqALcQ",
+
        authDomain: "pyraminx-oo.firebaseapp.com",
+
        projectId: "pyraminx-oo",
+
        appId: "1:337026212730:web:bff3068050a1b03eb8ecc3"
+
      },
+
      adminEmails: ["harsha.paladugu2@gmail.com"]   // your Google account email
+
    };
 </script>
 </head>
@@ -534,69 +540,49 @@ window.OOEngine=module.exports;})();
 </script>
 <script>
 (function(){
-// Pyraminx OO — full 4-face net renderer.
-// Net: big upright triangle. Top = F (upright), center = D (inverted),
-// bottom-left = Lf, bottom-right = Rf. Corner vertices labeled with puzzle corners
-// so every shared vertex is consistent. Tips are rendered in face color (untracked).
+// Pyraminx OO — renderer v2.
+// 2D: the community-standard top-down diagram (exact port of the V-First Trainer's
+//     geometry: looking down at the U corner, faces F/Lf/Rf around it, per-face shading,
+//     tips drawn twisted together with their axial center), plus a small inset showing
+//     the bottom (D) face as seen by tipping the puzzle forward.
+// 3D: orthographic render of the real tetrahedron, rotatable (yaw/pitch).
 const E = typeof require !== 'undefined' ? require('./engine.js') : window.OOEngine;
 
 const COLORS = { F: '#3fbf52', Lf: '#e8473d', Rf: '#3a7fe8', D: '#f2cf3c' };
+// per-face brightness, as in the trainer (depth cue); D inset is its own viewpoint
+const SHADE = { F: 1, Lf: .82, Rf: .91, D: .94 };
 
-// big triangle in a 200x174 box: apex (100,4), base (10,160)-(190,160); midpoints
-const PT = { apex: [100, 7], bl: [10, 163], br: [190, 163], ml: [55, 85], mr: [145, 85], mb: [100, 163] };
-// faces: vertices in order [v0,v1,v2] with the CORNER name at each vertex
-const NET = [
-  { face: 'F',  pts: [PT.apex, PT.ml, PT.mr], corners: ['U', 'L', 'R'] },
-  { face: 'D',  pts: [PT.mb, PT.mr, PT.ml],  corners: ['B', 'R', 'L'] },
-  { face: 'Lf', pts: [PT.bl, PT.mb, PT.ml],  corners: ['U', 'B', 'L'] },
-  { face: 'Rf', pts: [PT.br, PT.mr, PT.mb],  corners: ['U', 'R', 'B'] },
-];
-
-const lerp = (a, b, t) => [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
-
-// subdivide a face triangle into 9 stickers; classify each as tip / axial / edge
-function faceStickers(def) {
-  const [A, B, C] = def.pts, [cA, cB, cC] = def.corners;
-  const P = (i, j) => { // barycentric grid point: i steps toward B, j toward C (i+j<=3)
-    const t = (i + j) === 0 ? A : lerp(lerp(A, B, (i+j)/3), lerp(A, C, (i+j)/3), (i+j) === 0 ? 0 : j/(i+j));
-    return t;
-  };
-  const grid = [];
-  for (let r = 0; r <= 3; r++) { grid[r] = []; for (let k = 0; k <= r; k++) grid[r][k] = P(r-k, k); }
-  const out = [];
-  for (let r = 0; r < 3; r++) {
-    for (let k = 0; k <= r; k++) {
-      out.push({ pts: [grid[r][k], grid[r+1][k], grid[r+1][k+1]], up: true, r, k });
-      if (k < r) out.push({ pts: [grid[r][k], grid[r][k+1], grid[r+1][k+1]], up: false, r, k });
-    }
-  }
-  // classify: tips at the 3 corners; axial = inverted triangle adjacent to each tip;
-  // edge stickers = the remaining 3 upright triangles, each on the middle of a side.
-  for (const s of out) {
-    const { r, k, up } = s;
-    if (up && r === 0)            { s.kind = 'tip';  s.ref = cA; }
-    else if (up && r === 2 && k === 0) { s.kind = 'tip';  s.ref = cB; }
-    else if (up && r === 2 && k === 2) { s.kind = 'tip';  s.ref = cC; }
-    else if (!up && r === 1)       { s.kind = 'axial'; s.ref = cA; }           // below A's tip
-    else if (!up && r === 2 && k === 0) { s.kind = 'axial'; s.ref = cB; }
-    else if (!up && r === 2 && k === 1) { s.kind = 'axial'; s.ref = cC; }
-    else if (up && r === 1 && k === 0) { s.kind = 'edge'; s.pair = [cA, cB]; } // side A-B middle
-    else if (up && r === 1 && k === 1) { s.kind = 'edge'; s.pair = [cA, cC]; }
-    else if (up && r === 2 && k === 1) { s.kind = 'edge'; s.pair = [cB, cC]; }
-    s.face = def.face;
-  }
-  return out;
+function shade(hex, f) {
+  if (f >= 1) return hex;
+  const v = parseInt(hex.slice(1), 16);
+  const ch = sh => Math.round(((v >> sh) & 255) * f).toString(16).padStart(2, '0');
+  return '#' + ch(16) + ch(8) + ch(0);
 }
-const ALL_STICKERS = NET.flatMap(faceStickers);
 
-// edge slot for a face given the two corner names of that side:
-// the side lies between this face and the face NOT touching either... the edge piece
-// between faces f and g sits on the side whose corners are the two corners shared by f and g.
-// Corners touching face f = all corners except COPP[f]. For side corners {a,b} on face f,
-// the adjacent face g is the one whose corner set also contains a and b: g != f and COPP[g] not in {a,b}... 
-// directly: g is the face opposite the third corner of f (the corner of f not on this side).
+/* ---- sticker subdivision (exact port of the trainer's m4 scheme) ----
+   corners: [n,L,l] corner names; pts: their positions (any dimension).
+   Tips and axial centers share twist coloring; edges resolve via slot+side. */
+function subdivide(face, cornerNames, pts) {
+  const [n, L, l] = cornerNames, [r, i, o] = pts;
+  const dim = r.length;
+  const s = (p, q) => { const out = new Array(dim);
+    for (let d = 0; d < dim; d++) out[d] = r[d] + p / 3 * (i[d] - r[d]) + q / 3 * (o[d] - r[d]);
+    return out; };
+  const c = (p, q) => [s(p, q), s(p + 1, q), s(p, q + 1)];           // upright
+  const f = (p, q) => [s(p + 1, q), s(p, q + 1), s(p + 1, q + 1)];   // inverted
+  const st = [
+    { pts: c(0,0), kind: 'tip',    ref: n }, { pts: c(2,0), kind: 'tip',    ref: L }, { pts: c(0,2), kind: 'tip',    ref: l },
+    { pts: f(0,0), kind: 'center', ref: n }, { pts: f(1,0), kind: 'center', ref: L }, { pts: f(0,1), kind: 'center', ref: l },
+    { pts: c(1,0), kind: 'edge', pair: [n, L] }, { pts: c(0,1), kind: 'edge', pair: [n, l] }, { pts: c(1,1), kind: 'edge', pair: [L, l] },
+  ];
+  for (const x of st) {
+    x.face = face;
+    if (x.kind === 'edge') { const [slot, side] = edgeSlotFor(face, x.pair); x.slot = slot; x.side = side; }
+  }
+  return st;
+}
 function edgeSlotFor(face, pairCorners) {
-  const cs = ['U','L','R','B'].filter(x => E.OPP[x] !== face); // corners of this face
+  const cs = ['U','L','R','B'].filter(x => E.OPP[x] !== face);
   const third = cs.find(x => !pairCorners.includes(x));
   const g = E.OPP[third];
   for (let i = 0; i < 6; i++) {
@@ -605,46 +591,94 @@ function edgeSlotFor(face, pairCorners) {
   }
   throw new Error('no slot for ' + face + '/' + g);
 }
-// precompute sticker resolution metadata
-for (const s of ALL_STICKERS) {
-  if (s.kind === 'edge') { const [slot, side] = edgeSlotFor(s.face, s.pair); s.slot = slot; s.side = side; }
-}
 
-// axial sticker color: piece at corner X twisted t steps CW; sticker now on face f
-// came from face (G4[X])^{-t}(f)
+/* ---- color resolution (identical math to the trainer's v4 / edge formula) ---- */
 function axialColor(state, corner, face) {
-  const tw = corner === 'U' ? state.u : state.c[{ L:0, R:1, B:2 }[corner]];
+  const tw = corner === 'U' ? state.u : state.c[{ L: 0, R: 1, B: 2 }[corner]];
   let f = face;
-  for (let k = 0; k < tw; k++) { // apply inverse rotation t times: find preimage under G4[corner]
-    f = Object.keys(E.G4[corner]).find(x => E.G4[corner][x] === f);
-  }
+  for (let k = 0; k < tw; k++) f = Object.keys(E.G4[corner]).find(x => E.G4[corner][x] === f);
   return f;
 }
 function stickerColor(state, s) {
-  if (s.kind === 'tip') return s.face;
-  if (s.kind === 'axial') return axialColor(state, s.ref, s.face);
-  const piece = state.e[s.slot*2], fl = state.e[s.slot*2+1];
-  return E.XO[piece][s.side ^ fl];
+  if (s.kind === 'tip' || s.kind === 'center') return axialColor(state, s.ref, s.face);
+  return E.XO[state.e[s.slot*2]][s.side ^ state.e[s.slot*2+1]];
 }
 
-function netSVG(state, size, opts) {
+/* ---- 2D top-down view: trainer coordinates, verbatim ---- */
+const kl = [1, .1], Al = [.06, 1.74], xl = [1.94, 1.74], vl = [1, .97];
+const TOP_FACES = [
+  ['F',  ['U','L','R'], [vl, Al, xl]],
+  ['Lf', ['U','L','B'], [vl, Al, kl]],
+  ['Rf', ['U','R','B'], [vl, xl, kl]],
+];
+// bottom-face inset: tip the puzzle forward — L upper-left, R upper-right, B at the point
+const Dl = [2.18, .56], Dr = [3.02, .56], Db = [2.60, 1.29];
+const STICKERS_2D = [
+  ...TOP_FACES.flatMap(([f, c, p]) => subdivide(f, c, p)),
+  ...subdivide('D', ['L','R','B'], [Dl, Dr, Db]),
+];
+const ALL_STICKERS = STICKERS_2D; // 36: 12 tips, 12 centers, 12 edges
+
+function netSVG(state, width, opts) {
   const o = opts || {};
-  const cells = ALL_STICKERS.map(s => {
-    const col = COLORS[stickerColor(state, s)];
-    const dim = s.kind === 'tip' ? .82 : 1;
-    const fill = dim === 1 ? col : shade(col, dim);
-    return `<polygon points="${s.pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="${fill}"/>`;
-  }).join('');
-  return `<svg viewBox="0 0 200 170" width="${size}" height="${size*0.85}" class="${o.cls||'oonet'}" role="img" aria-label="pyraminx state">${cells}</svg>`;
-}
-function shade(hex, f) {
-  const v = parseInt(hex.slice(1), 16);
-  const ch = sh => Math.round(((v >> sh) & 255) * f).toString(16).padStart(2, '0');
-  return '#' + ch(16) + ch(8) + ch(0);
+  const polys = STICKERS_2D.map(s =>
+    `<polygon points="${s.pts.map(p => p[0].toFixed(3) + ',' + p[1].toFixed(3)).join(' ')}" fill="${shade(COLORS[stickerColor(state, s)], SHADE[s.face])}"/>`).join('');
+  const cap = o.thumb ? '' : `<text x="2.60" y="1.50" class="dcap" text-anchor="middle">bottom</text>`;
+  return `<svg viewBox="-0.04 0 3.14 1.86" width="${width}" height="${Math.round(width * 1.86 / 3.14)}" class="${o.cls || 'oonet'}" role="img" aria-label="puzzle state, top view with bottom face">` +
+    `<polygon points="${[kl, Al, xl].map(p => p.join(',')).join(' ')}" fill="none"/>${polys}${cap}</svg>`;
 }
 
-if (typeof module !== 'undefined') module.exports = { netSVG, stickerColor, ALL_STICKERS, COLORS, axialColor };
-else window.OORender = { netSVG, stickerColor, ALL_STICKERS, COLORS, axialColor };
+/* ---- 3D view: real tetrahedron, orthographic, orbitable ---- */
+// regular tetrahedron, side 2, centered at the centroid; U up, L front-left, R front-right, B back
+const V3 = (() => {
+  const h = Math.sqrt(8 / 3);            // height for side 2
+  const rb = 2 / Math.sqrt(3);           // base circumradius
+  const U = [0, h, 0], L = [-1, 0, rb / 2], R = [1, 0, rb / 2], B = [0, 0, -rb];
+  const cy = h / 4;
+  for (const p of [U, L, R, B]) p[1] -= cy;
+  return { U, L, R, B };
+})();
+const FACES_3D = [
+  ['F',  ['U','L','R']], ['Lf', ['U','B','L']], ['Rf', ['U','R','B']], ['D',  ['L','B','R']],
+];
+const STICKERS_3D = FACES_3D.flatMap(([f, c]) => subdivide(f, c, c.map(x => V3[x])));
+
+function rotXY(p, yaw, pitch) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const x = p[0] * cy + p[2] * sy, z = -p[0] * sy + p[2] * cy, y = p[1];
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  return [x, y * cp - z * sp, y * sp + z * cp];
+}
+function iso3dSVG(state, width, yaw, pitch, opts) {
+  const o = opts || {};
+  // cull and depth-sort whole faces (a tetrahedron's faces never interleave)
+  const faces = FACES_3D.map(([f, c]) => {
+    const pts = c.map(x => rotXY(V3[x], yaw, pitch));
+    const u = [pts[1][0]-pts[0][0], pts[1][1]-pts[0][1], pts[1][2]-pts[0][2]];
+    const v = [pts[2][0]-pts[0][0], pts[2][1]-pts[0][1], pts[2][2]-pts[0][2]];
+    const n3 = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+    const len = Math.hypot(n3[0], n3[1], n3[2]) || 1;
+    return { f, z: (pts[0][2]+pts[1][2]+pts[2][2])/3, nz: n3[2]/len };
+  });
+  const byFace = {}; for (const fc of faces) byFace[fc.f] = fc;
+  const drawn = faces.filter(fc => fc.nz > 0.02).sort((a, b) => a.z - b.z);
+  const polys = [];
+  for (const fc of drawn) {
+    const bright = 0.62 + 0.38 * fc.nz;
+    for (const s of STICKERS_3D) {
+      if (s.face !== fc.f) continue;
+      const pp = s.pts.map(p => { const r = rotXY(p, yaw, pitch); return [r[0], -r[1]]; });
+      polys.push(`<polygon points="${pp.map(p => p[0].toFixed(3) + ',' + p[1].toFixed(3)).join(' ')}" fill="${shade(COLORS[stickerColor(state, s)], bright)}"/>`);
+    }
+  }
+  return `<svg viewBox="-1.5 -1.35 3 2.7" width="${width}" height="${Math.round(width * 0.9)}" class="${o.cls || 'oonet oo3d'}" role="img" aria-label="puzzle state, 3D view">${polys.join('')}</svg>`;
+}
+
+const DEFAULT_VIEW = { yaw: 0.55, pitch: 0.42 }; // shows F and Rf from a little above
+
+const api = { netSVG, iso3dSVG, stickerColor, axialColor, ALL_STICKERS, STICKERS_3D, COLORS, DEFAULT_VIEW };
+if (typeof module !== 'undefined') module.exports = api;
+else window.OORender = api;
 
 })();
 </script>
@@ -1017,50 +1051,22 @@ async function render() {
 }
 
 /* ---------------- home ---------------- */
-function mountainSVG(pct) {
-  // signature element: the Mountain — an 11-row subdivided triangle (121 cells) filling bottom-up
-  const cells = []; let n = 0; const total = 121;
-  const filled = Math.round(pct * total);
-  for (let r = 0; r < 11; r++) {
-    for (let k = 0; k < 2 * r + 1; k++) {
-      // bottom rows fill first
-      const ordinal = total - (r + 1) * (r + 1) + k;
-      const on = ordinal < filled;
-      const up = k % 2 === 0;
-      const col = Math.floor(k / 2);
-      const W = 30, H = 26, x0 = 300 - (r + 1) * (W / 2), y0 = r * H;
-      const ax = x0 + col * W + (up ? 0 : W / 2);
-      const pts = up
-        ? `${ax + W/2},${y0} ${ax},${y0 + H} ${ax + W},${y0 + H}`
-        : `${ax + W/2},${y0 + H} ${ax},${y0} ${ax + W},${y0}`;
-      const tone = on ? ['#3fbf52', '#f2cf3c', '#3a7fe8', '#e8473d'][(r + k) % 4] : 'none';
-      cells.push(`<polygon points="${pts}" fill="${on ? tone : 'rgba(180,196,224,.06)'}" stroke="rgba(180,196,224,.16)" stroke-width="1" class="mcell${on ? ' lit' : ''}" style="transition-delay:${(ordinal % 40) * 12}ms"/>`);
-      n++;
-    }
-  }
-  return `<svg viewBox="-2 -2 604 292" class="mountain" role="img" aria-label="progress: ${(pct*100).toFixed(2)}% of positions solved">${cells.join('')}</svg>`;
-}
 async function pageHome(main) {
   const stats = await DB.stats();
   const pct = stats.total ? stats.done / stats.total : 0;
-  const hero = h('section', { class: 'hero' },
-    h('div', { class: 'heroleft' },
-      h('p', { class: 'eyebrow' }, 'A community census of every Pyraminx position'),
-      h('h1', null, 'One best human solution for every position. All ', h('em', null, fmt(T.reps.length)), ' of them.'),
-      h('p', { class: 'lede' },
-        'Every reachable Pyraminx state, condensed by its 12 rotations with mirrors side by side. ',
-        'Pick a scramble, solve it better than anyone has, and put your name on it.'),
-      h('div', { class: 'statline' },
-        h('span', { class: 'stat' }, h('b', null, fmt(stats.done)), ' solved'),
-        h('span', { class: 'stat' }, h('b', null, fmt(stats.total - stats.done)), ' remaining'),
-        h('span', { class: 'stat pctstat' }, h('b', null, (pct * 100).toFixed(pct > 0 && pct < 0.0001 ? 4 : 2) + '%'), ' complete')),
-      h('div', { class: 'barwrap', role: 'progressbar', 'aria-valuenow': (pct*100).toFixed(2), 'aria-valuemin': '0', 'aria-valuemax': '100' },
-        h('div', { class: 'bar', style: 'width:' + Math.max(pct * 100, pct > 0 ? 0.5 : 0) + '%' }))),
-    h('div', { class: 'heroright', html: mountainSVG(pct) }));
-  requestAnimationFrame(() => requestAnimationFrame(() => hero.querySelectorAll('.mcell.lit').forEach(c => c.classList.add('in'))));
-
+  main.appendChild(h('section', { class: 'homeintro' },
+    h('h1', null, 'The best human solution to every Pyraminx position.'),
+    h('p', { class: 'lede' },
+      'There are ' + fmt(T.reps.length) + ' positions once rotations are folded together \u2014 a position and its mirror count as one solve. ',
+      'Paste a scramble to look one up, or browse by depth and claim an unsolved one.')));
+  main.appendChild(h('section', { class: 'progressblock' },
+    h('div', { class: 'barwrap', role: 'progressbar', 'aria-valuenow': (pct*100).toFixed(2), 'aria-valuemin': '0', 'aria-valuemax': '100' },
+      h('div', { class: 'bar', style: 'width:' + Math.max(pct * 100, pct > 0 ? 0.5 : 0) + '%' })),
+    h('p', { class: 'progressline' },
+      h('b', null, fmt(stats.done)), ' solved \u00b7 ', h('b', null, fmt(stats.total - stats.done)), ' to go \u00b7 ',
+      h('b', { class: 'pct' }, (pct * 100).toFixed(pct > 0 && pct < 0.0001 ? 4 : 2) + '%'), ' complete')));
   const searchBox = h('div', { class: 'searchrow' },
-    h('input', { class: 'searchin mono', placeholder: "Paste any scramble \u2014 tips like l r b u are ignored \u2026  e.g.  R U' B L' U R' B'",
+    h('input', { class: 'searchin mono', placeholder: "Paste a scramble \u2014 tips like l r b u are ignored",
       'aria-label': 'scramble search',
       onkeydown: ev => { if (ev.key === 'Enter') doSearch(ev.target); } }),
     h('button', { class: 'primary', onclick: ev => doSearch(ev.target.parentElement.querySelector('input')) }, 'Find this scramble'));
@@ -1073,23 +1079,18 @@ async function pageHome(main) {
     const cid = canonOf(st);
     location.hash = '#/c/' + Math.min(cid, mirrorOf(E.unidx(cid)));
   }
-  const how = h('section', { class: 'trio' },
-    h('div', { class: 'card' }, h('h3', null, '1 \u00b7 Pick a position'),
-      h('p', null, 'Search a scramble from your timer, or browse by depth and take on positions one at a time.')),
-    h('div', { class: 'card' }, h('h3', null, '2 \u00b7 Submit your best solution'),
-      h('p', null, 'Up to 15 moves. Rotations are free, wide moves and doubles count as one. The site checks it actually solves the scramble \u2014 in any rotation, on either mirror.')),
-    h('div', { class: 'card' }, h('h3', null, '3 \u00b7 Moderators publish it'),
-      h('p', null, 'One approved solution marks the position and its mirror done. Mirrored solutions are generated automatically.')));
-  const randBtn = h('div', { class: 'centerrow' },
-    h('button', { class: 'ghost big', onclick: async () => {
+  main.appendChild(searchBox);
+  main.appendChild(h('div', { class: 'homelinks' },
+    h('a', { class: 'ghost', href: '#/browse' }, 'Browse by depth'),
+    h('button', { class: 'ghost', onclick: async () => {
       const bm = await DB.doneMap();
       for (let tries = 0; tries < 4000; tries++) {
         const o = Math.floor(Math.random() * T.reps.length);
         if (!(bm[o >> 3] & (1 << (o & 7)))) { const cid = T.reps[o]; location.hash = '#/c/' + Math.min(cid, mirrorOf(E.unidx(cid))); return; }
       }
-      toast('Could not find an unsolved position \u2014 the mountain may be climbed.');
-    } }, 'Take me to an unsolved position'));
-  main.append(hero, searchBox, how, randBtn);
+      toast('Could not find an unsolved position \u2014 looks like they are all done.');
+    } }, 'Take me to an unsolved position'),
+    h('a', { class: 'ghost', href: '#/about' }, 'How it works')));
 }
 
 /* ---------------- class / pair page ---------------- */
@@ -1107,7 +1108,31 @@ function sidePanel(side, label, doneSet) {
       h('span', { class: 'depthchip d' + side.depth }, side.depth + ' moves deep'),
       doneSet && doneSet.has(side.id) ? h('span', { class: 'donechip' }, '\u2713 solved') : null,
       h('span', { class: 'ordinal' }, '#' + fmt(side.ord + 1))),
-    h('div', { class: 'netwrap', html: R.netSVG(side.state, 230) }),
+    (() => {
+      const vs = { mode: '2d', yaw: R.DEFAULT_VIEW.yaw, pitch: R.DEFAULT_VIEW.pitch };
+      const netBox = h('div', { class: 'netwrap' });
+      const draw = () => {
+        netBox.innerHTML = vs.mode === '2d'
+          ? R.netSVG(side.state, 330)
+          : R.iso3dSVG(side.state, 215, vs.yaw, vs.pitch);
+        netBox.classList.toggle('grab', vs.mode === '3d');
+      };
+      const b2 = h('button', { class: 'viewbtn on', onclick: () => { vs.mode = '2d'; b2.classList.add('on'); b3.classList.remove('on'); hint.textContent = ''; draw(); } }, '2D');
+      const b3 = h('button', { class: 'viewbtn', onclick: () => { vs.mode = '3d'; b3.classList.add('on'); b2.classList.remove('on'); hint.textContent = 'drag to rotate \u00b7 double-click to reset'; draw(); } }, '3D');
+      const hint = h('span', { class: 'viewhint' });
+      let drag = null;
+      netBox.addEventListener('pointerdown', ev => { if (vs.mode !== '3d') return; drag = { x: ev.clientX, y: ev.clientY }; netBox.setPointerCapture(ev.pointerId); });
+      netBox.addEventListener('pointermove', ev => {
+        if (!drag || vs.mode !== '3d') return;
+        vs.yaw += (ev.clientX - drag.x) * 0.012;
+        vs.pitch = Math.max(-1.25, Math.min(1.25, vs.pitch + (ev.clientY - drag.y) * 0.012));
+        drag = { x: ev.clientX, y: ev.clientY }; draw();
+      });
+      netBox.addEventListener('pointerup', () => { drag = null; });
+      netBox.addEventListener('dblclick', () => { if (vs.mode === '3d') { vs.yaw = R.DEFAULT_VIEW.yaw; vs.pitch = R.DEFAULT_VIEW.pitch; draw(); } });
+      draw();
+      return h('div', null, h('div', { class: 'viewtoggle' }, b2, b3, hint), netBox);
+    })(),
     h('div', { class: 'scrline' }, h('span', { class: 'scrlabel' }, 'scramble'), h('code', { class: 'mono scr' }, side.scramble || '(solved)'), side.scramble ? copyBtn(side.scramble) : null));
   // symmetry strip
   const strip = h('div', { class: 'symstrip' });
@@ -1126,7 +1151,7 @@ function sidePanel(side, label, doneSet) {
             h('button', { class: 'ghost sm', onclick: () => show(true) }, 'another'));
         };
         show(false);
-      }, html: R.netSVG(v.state, 72, { cls: 'oonet thumb' }) });
+      }, html: R.netSVG(v.state, 104, { cls: 'oonet thumb', thumb: true }) });
     strip.appendChild(b);
   });
   wrap.append(h('div', { class: 'symhead' }, side.variants.length + (side.variants.length === 1 ? ' unique view' : ' unique views'), h('span', { class: 'hintt' }, ' \u2014 click one for its optimal scramble')), strip, detail);
@@ -1243,7 +1268,7 @@ async function pageBrowse(main, route) {
     const o = list[i], cid = T.reps[o];
     const st = E.unidx(cid);
     grid.appendChild(h('a', { href: '#/c/' + Math.min(cid, mirrorOf(st)), class: 'classcell' + (isDone(o) ? ' done' : '') },
-      h('div', { html: R.netSVG(st, 92, { cls: 'oonet thumb' }) }),
+      h('div', { html: R.netSVG(st, 124, { cls: 'oonet thumb', thumb: true }) }),
       h('div', { class: 'cellmeta' }, '#' + fmt(o + 1), isDone(o) ? h('span', { class: 'tick' }, ' \u2713') : null)));
   }
   main.appendChild(grid);
@@ -1272,7 +1297,7 @@ async function pageMod(main) {
     const pr = pairOf(s.classId);
     const v = verifySolution(s.solution, pr);
     const row = h('section', { class: 'card modrow' },
-      h('div', { class: 'modleft', html: R.netSVG(E.unidx(s.classId), 120, { cls: 'oonet thumb' }) }),
+      h('div', { class: 'modleft', html: R.netSVG(E.unidx(s.classId), 160, { cls: 'oonet thumb', thumb: true }) }),
       h('div', { class: 'modbody' },
         h('div', { class: 'scrline' }, h('span', { class: 'scrlabel' }, 'scramble'), h('code', { class: 'mono scr' }, s.scramble)),
         h('div', { class: 'scrline' }, h('span', { class: 'scrlabel' }, 'solution'), h('code', { class: 'mono sol' }, s.solution)),
