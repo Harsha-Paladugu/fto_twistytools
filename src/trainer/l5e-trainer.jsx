@@ -803,10 +803,11 @@ export default function L5ETrainer() {
     });
   }, [current, phase, allOptimalVs]);
 
-  // Recog (Feature 1): pseudo L4E case recognition. Build the pseudo case STATE
-  // (a home-bar L4E case whose solution is [case alg] + [offset], a post-move
-  // offset), then generate a fresh MASKED scramble to that state so the
-  // scramble never telegraphs which pseudo offset is in play.
+  // Recog (Feature 1): pseudo L4E recognition, setup-move framing. The pseudo
+  // state is a home-bar L4E case with the offset applied to it, so undoing one
+  // offset move returns to the clean case at the SAME AUF. We then mask the
+  // scramble (so it doesn't telegraph the offset) while pinning its net U to
+  // the case AUF, so the pseudo and the revealed case line up on screen.
   const makeRecog = useCallback((psoStr) => {
     const offs = parsePseudoOffsets(psoStr);
     const pool = poolsRef.current && poolsRef.current["l4e-DF"];
@@ -816,13 +817,15 @@ export default function L5ETrainer() {
       const base = makeScramble("l4e", pres.caseKey, pool.classes.get(pres.caseKey));
       if (!base || !base.scramble) continue;
       const off = offs[Math.floor(Math.random() * offs.length)];
-      const invO = invertOffsetTokens(off);
-      // pseudo state: [inverse offset][case scramble] applied to solved
-      const render = applyMoveString((invO ? invO + " " : "") + base.scramble, solvedState());
-      const scramble = maskedScramble(render, distRef.current);  // masked: hides the offset
+      const render = applyMoveString(off.str, base.render);   // pseudo = case . offset
+      let scramble = null;
+      for (let k = 0; k < 16; k++) {
+        const s = maskedScramble(render, distRef.current);
+        if (!s) break;
+        if (uTwistOf(s) === base.uTwist) { scramble = s; break; }   // match the case AUF
+      }
       if (!scramble) continue;
-      // keep the original (pre-mask) case state + AUF so the reveal matches the scramble's framing
-      return { kind: "recog", scramble, render, uTwist: uTwistOf(scramble),
+      return { kind: "recog", scramble, render, uTwist: base.uTwist,
         caseKey: base.caseKey, offsetStr: off.str, caseRender: base.render, caseTwist: base.uTwist };
     }
     return null;
@@ -1252,7 +1255,7 @@ export default function L5ETrainer() {
                   <button className="algbtn" onClick={() => setPanel({ kind: "class", caseKey: last.caseKey, set: "l4e" })}>view algs</button>
                   <button className="restart" style={{ marginTop: 0 }} onClick={nextRecog}>Next</button>
                 </div>
-                <div className="solhead">underlying L4E case</div>
+                <div className="solhead">underlying L4E case — {last.offsetStr} undone (same AUF)</div>
                 <div className="panelimg"><PyraminxNet state={last.caseRender} uTwist={last.caseTwist} /></div>
               </>
             ) : (
