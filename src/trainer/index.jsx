@@ -1,7 +1,7 @@
 /* Entry point: mount the trainer component at #root.
  *
- * The host page (trainer.html in production, trainer-dev.html in development)
- * provides window.storage. If none is present we fall back to localStorage,
+ * The host page (trainer.html) provides window.storage. If none is present we
+ * fall back to localStorage,
  * mirroring the original bundle's behavior so the build runs standalone too. */
 import React from "react";
 import { createRoot } from "react-dom/client";

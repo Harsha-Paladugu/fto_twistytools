@@ -515,17 +515,16 @@ const lookupName = (render, uTwist, caseKey) => {
   }
   return SHEET.CNAME[caseKey] || null;
 };
-// All algs for a state's bar side, merged across the 3 AUF rotations and deduped
-// (the rotations are the same bar side — keep them in one clean list).
-function mergedAlgs(render, uTwist) {
+// Every alg for a case at one bar/slot angle. Pulls from ALL stored
+// presentations at that angle (a symmetric case can have more than the 3 AUF
+// rotations, so a 3-AUF scan of the shown state would miss some), deduped.
+function algsForCaseAngle(caseKey, side, isL4E) {
   const seen = new Set(), out = [];
-  const add = (st, tw) => {
-    for (const row of (SHEET.ALG[stateKey(st) + "|" + tw] || []))
+  for (const [ek, tw] of (SHEET.PRES[caseKey] || [])) {
+    if ((isL4E ? openOfEkey(ek) : barOfEkey(ek)) !== side) continue;
+    for (const row of (SHEET.ALG[ek + "|" + tw] || []))
       if (!seen.has(row[0])) { seen.add(row[0]); out.push(row); }
-  };
-  add(render, uTwist);
-  const u = copyState(render); applyMove(u, "U", false); add(u, (uTwist + 1) % 3);
-  const up = copyState(render); applyMove(up, "U", true); add(up, (uTwist + 2) % 3);
+  }
   return out;
 }
 
@@ -549,8 +548,8 @@ function AlgPanel({ panel, onClose }) {
   let title, body;
   if (panel.kind === "live") {
     title = lookupName(panel.render, panel.uTwist, panel.caseKey) || "Unnamed case";
-    const algs = mergedAlgs(panel.render, panel.uTwist);
     const side = isL4E ? openOfEkey(stateKey(panel.render)) : barOfEkey(stateKey(panel.render));
+    const algs = algsForCaseAngle(panel.caseKey, side, isL4E);
     body = (
       <>
         <div className="panelimg"><PyraminxNet state={panel.render} uTwist={panel.uTwist} /></div>

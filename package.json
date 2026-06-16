@@ -1,11 +1,15 @@
 {
-  "name": "pyraminx-trainer",
+  "name": "pyraminx-net",
   "private": true,
   "version": "0.0.0",
-  "description": "Source + build for the Pyraminx.net V-First / L5E trainer (outputs js/trainer.js).",
+  "description": "Pyraminx.net — static site (OO census, solver, V-First trainer, algorithm reference) plus its build. Sources compile to js/sheet.js and js/trainer.js.",
   "scripts": {
-    "build:trainer": "node build.mjs",
-    "watch:trainer": "node build.mjs --watch"
+    "build:sheet": "node tools/compile-sheet.mjs",
+    "build:trainer": "npm run build:sheet && node build.mjs",
+    "build": "npm run build:trainer",
+    "watch:trainer": "node build.mjs --watch",
+    "check": "node tools/check-sheet.mjs",
+    "test": "node tools/check-sheet.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

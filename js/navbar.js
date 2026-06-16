@@ -6,7 +6,7 @@
  *
  * Usage:
  *   const bar = new SiteNavbar({
- *     active: 'oo',                                   // 'home' | 'oo' | 'solver' | 'trainer'
+ *     active: 'oo',                                   // 'home' | 'oo' | 'solver' | 'trainer' | 'algs'
  *     sub: [{ label: 'Census', href: '#/', on: true }], // optional second row
  *     right: someElement,                             // optional right-side slot
  *   });
@@ -21,6 +21,7 @@
     { id: 'oo',      label: 'OO',      href: 'oo.html' },
     { id: 'solver',  label: 'Solver',  href: 'solver.html' },
     { id: 'trainer', label: 'Trainer', href: 'trainer.html' },
+    { id: 'algs',    label: 'Algorithms', href: 'algs.html' },
   ];
 
   function el(tag, attrs) {

@@ -10,7 +10,7 @@ const XO = [['F','Lf'],['F','Rf'],['Lf','Rf'],['F','D'],['Lf','D'],['Rf','D']];
 const OPP = { U:'D', L:'Rf', R:'Lf', B:'F' };           // corner -> opposite face
 const COPP = { D:'U', Rf:'L', Lf:'R', F:'B' };          // face -> opposite corner
 
-// Move tables (validated against the trainer's engine over 1561 sheet algorithms)
+// Move tables (validated against the full algorithm sheet; see tools/check-sheet.mjs)
 const S4 = {
   U: { cyc: [[0,2,0],[2,1,1],[1,0,1]], center: -1 },
   R: { cyc: [[1,5,0],[5,3,1],[3,1,1]], center: 1 },
@@ -118,15 +118,6 @@ function applySym(sym, s) {
   o.c = [out.L, out.R, out.B]; o.u = out.U;
   return o;
 }
-// move letter mapping under a symmetry: physical axis follows the corner map;
-// a mirror also inverts the turn direction.
-function symMoveIdx(sym, m) {
-  const f = MOVES[m][0], pr = MOVES[m].length > 1;
-  const nf = sym.corner[f];
-  const npr = sym.mirror ? !pr : pr;
-  return MOVES.indexOf(nf + (npr ? "'" : ''));
-}
-
 // generate the 12 rotations (A4 on faces) + the LR mirror
 function buildSyms() {
   const seen = new Map(); const queue = [FACE_ID];
@@ -162,51 +153,35 @@ function makeMirrorCanon(syms) {
   };
 }
 
-// ---------------- BFS distance table ----------------
-function bfs(progress) {
-  const dist = new Int8Array(NSLOTS).fill(-1);
-  let frontier = [solved()];
-  dist[idx(solved())] = 0;
-  let d = 0, total = 1;
-  while (frontier.length) {
-    const next = [];
-    for (const s of frontier) for (let m = 0; m < 8; m++) {
-      const t = copy(s); applyMoveIdx(t, m);
-      const i = idx(t);
-      if (dist[i] === -1) { dist[i] = d + 1; next.push(t); }
-    }
-    d++; total += next.length;
-    if (progress) progress(d, next.length, total);
-    frontier = next;
-  }
-  return dist;
-}
 
 // ---------------- solution / scramble parsing ----------------
 // Tokens: U L R B (+' or 2), wides Uw Lw Rw Bw (1 move), rotations [u] [l] [r] [b] / y (0 moves),
 // lowercase u l r b = tips -> dropped. X2 == X'. Wides follow the sheet convention:
 // Rw = L [l'],  Lw = R [r'],  Uw = B [b'],  Bw = U [u'].
 const WIDE = { R: ['L','L'], L: ['R','R'], U: ['B','B'], B: ['U','U'] }; // [moveLetter, rotAxis] with inverse rotation
+// modifier -> CW applications: none/2' = 1 (a face has order 3, so X2' = X),
+// ' / 2 = 2 (X' = X2). Accepting the `2'` suffix lets pasted scrambles use it.
+const amtOf = (m) => (m === "'" || m === '2') ? 2 : 1;
 function parseAlg(str) {
   const out = []; // {kind:'move'|'rot', f, amt(1|2), wide}
   const toks = String(str).replace(/[()，,]/g, ' ').trim().split(/\s+/).filter(Boolean);
   for (let t of toks) {
     if (!t) continue;
     let m;
-    if ((m = t.match(/^\[([ulrb])(2|')?\]$/))) { // rotation [u] [l'] [r2]...
-      out.push({ kind: 'rot', f: m[1].toUpperCase(), amt: m[2] === '2' || m[2] === "'" ? 2 : 1 });
+    if ((m = t.match(/^\[([ulrb])(2'|2|')?\]$/))) { // rotation [u] [l'] [r2] [r2']...
+      out.push({ kind: 'rot', f: m[1].toUpperCase(), amt: amtOf(m[2]) });
       continue;
     }
-    if ((m = t.match(/^(y)(2|')?$/))) { out.push({ kind: 'rot', f: 'U', amt: m[2] ? 2 : 1 }); continue; }
-    if ((m = t.match(/^([ULRB])w(2|')?$/))) {
-      out.push({ kind: 'move', f: m[1], amt: m[2] ? 2 : 1, wide: true });
+    if ((m = t.match(/^(y)(2'|2|')?$/))) { out.push({ kind: 'rot', f: 'U', amt: amtOf(m[2]) }); continue; }
+    if ((m = t.match(/^([ULRB])w(2'|2|')?$/))) {
+      out.push({ kind: 'move', f: m[1], amt: amtOf(m[2]), wide: true });
       continue;
     }
-    if ((m = t.match(/^([ULRB])(2|')?$/))) {
-      out.push({ kind: 'move', f: m[1], amt: m[2] ? 2 : 1, wide: false });
+    if ((m = t.match(/^([ULRB])(2'|2|')?$/))) {
+      out.push({ kind: 'move', f: m[1], amt: amtOf(m[2]), wide: false });
       continue;
     }
-    if (/^[ulrb](2|')?$/.test(t)) continue; // tip move -> dropped
+    if (/^[ulrb](2'|2|')?$/.test(t)) continue; // tip move -> dropped
     return null; // unparseable token
   }
   return out;
@@ -320,23 +295,114 @@ function optimalScramble(state, dist, rand) {
   const sol = optimalSolution(state, dist, rand);
   return sol === null ? null : (sol === '' ? '' : invertAlg(sol));
 }
-function applyScramble(str, base) {
-  const s = base ? copy(base) : solved();
-  const parsed = parseAlg(str);
-  if (!parsed) return null;
-  for (const t of parsed) {
-    if (t.kind === 'rot' || t.wide) return null; // scrambles: plain moves only
-    for (let k = 0; k < t.amt; k++) move(s, t.f, false);
+
+// ---------------- string keying + alg→case helpers ----------------
+// Edges-only canonical keying used by the sheet, the algorithms page and the
+// build tools. Single source of truth (was copy-pasted across ~5 files). Reuses
+// the S4 move table above so the move geometry is defined exactly once.
+const ROT_TO = [2, 0, 1, 4, 5, 3], ROT_D = [0, 1, 1, 0, 0, 0];
+function stateKey(s) { const e = s.e, p = []; for (let i = 0; i < 6; i++) p.push('' + e[i * 2] + e[i * 2 + 1]); return p.join(','); }
+// keying move: edges (+ axial-center counter), WITHOUT the U-twist that `move`
+// tracks — the sheet's convention carries the U-twist in the key instead.
+function applyMoveK(s, face, inv) {
+  const m = S4[face];
+  for (let t = 0; t < (inv ? 2 : 1); t++) {
+    const e = s.e.slice();
+    for (const [i, o, fl] of m.cyc) { s.e[o * 2] = e[i * 2]; s.e[o * 2 + 1] = e[i * 2 + 1] ^ fl; }
+    if (m.center >= 0) s.c[m.center] = (s.c[m.center] + 1) % 3;
   }
   return s;
+}
+function rotateFrame(s, times) {
+  for (let t = 0; t < ((times % 3) + 3) % 3; t++) {
+    const e = s.e.slice();
+    for (let src = 0; src < 6; src++) {
+      const p = e[src * 2], dst = ROT_TO[src];
+      s.e[dst * 2] = ROT_TO[p];
+      s.e[dst * 2 + 1] = e[src * 2 + 1] ^ ROT_D[src] ^ ROT_D[p];
+    }
+  }
+  return s;
+}
+// lex-min render key (stateKey|twist) over 3 frame rotations x 3 AUF
+function realCanonKey(st, t) {
+  const base = { e: st.e.slice() };
+  let best = null;
+  for (let r = 0; r < 3; r++) {
+    const cur = { e: base.e.slice() };
+    for (let a = 0; a < 3; a++) {
+      const s = stateKey(cur) + '|' + ((t + a) % 3);
+      if (best === null || s < best) best = s;
+      applyMoveK(cur, 'U', false);
+    }
+    rotateFrame(base, 1);
+  }
+  return best;
+}
+function keyToState(k) { const [ek, tw] = k.split('|'); return { e: ek.split(',').flatMap(t => [+t[0], +t[1]]), c: [0, 0, 0], u: +tw }; }
+// expand the sheet's macro notation into tokens parseAlg accepts (S/H/Y; the
+// `2'` suffix is handled by parseAlg directly but normalized here too).
+function preprocessAlg(a) {
+  let s = ' ' + String(a).trim() + ' ';
+  s = s.replace(/\bS\b/g, " R' L R L' ").replace(/\bH\b/g, " L R' L' R ").replace(/\bY\b/g, ' y ');
+  s = s.replace(/([ULRB])2'/g, '$1').replace(/\[([ulrb])2'\]/g, '[$1]');
+  return s.trim().replace(/\s+/g, ' ');
+}
+// inverse permutation of (alg applied to solved): the state the alg solves.
+// Only edges + U-twist are meaningful for keys (centers are tip-fixable).
+function inverseState(X) {
+  const e = new Array(12).fill(0);
+  for (let i = 0; i < 6; i++) { const pos = X.e[2 * i]; e[2 * pos] = i; e[2 * pos + 1] = X.e[2 * i + 1] % 2; }
+  return { e, c: X.c.map(v => (3 - (v % 3)) % 3), u: (3 - (X.u % 3)) % 3 };
+}
+let _syms = null, _rotBy = null, _orbit = null;
+function _keyEnsure() {
+  if (_syms) return;
+  _syms = buildSyms(); _rotBy = makeFrames(_syms);
+  _orbit = new Set(_syms.rots.map(sy => applySym(sy, solved()).e.join()));
+}
+// the exact state an alg solves (edges + U-twist), or null if it doesn't parse
+// or doesn't solve cleanly to a single state.
+function caseStateOf(algStr) {
+  _keyEnsure();
+  const p = parseAlg(preprocessAlg(algStr));
+  if (!p) return null;
+  const cs = inverseState(applyParsed(p, solved(), _syms, _rotBy));
+  const back = applyParsed(p, { e: cs.e.slice(), c: cs.c.slice(), u: cs.u }, _syms, _rotBy);
+  if (back.e.join() !== solved().e.join() || (back.u % 3) !== 0) return null;
+  return cs;
+}
+// display normalization shared by the compiler (so the sheet/trainer show clean
+// algs) and the algorithms page: expand the S/H macros and collapse adjacent
+// identical face turns (R R -> R2, R' R' -> R2'). Single definition, one result
+// everywhere. The moves are unchanged — this is purely notation.
+function normAlg(alg) {
+  let s = String(alg).replace(/\bS\b/g, "R' L R L'").replace(/\bH\b/g, "L R' L' R").replace(/\s+/g, ' ').trim();
+  const toks = s.split(' ').filter(Boolean), out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const m = /^([ULRB])('?)$/.exec(toks[i]);
+    if (m && toks[i + 1] === toks[i]) { out.push(m[1] + (m[2] ? "2'" : '2')); i++; }
+    else out.push(toks[i]);
+  }
+  return out.join(' ');
+}
+// does an alg solve the given render key, up to a whole-puzzle rotation?
+function algSolvesKey(algStr, renderKey) {
+  _keyEnsure();
+  const p = parseAlg(preprocessAlg(algStr));
+  if (!p) return false;
+  return _orbit.has(applyParsed(p, keyToState(renderKey), _syms, _rotBy).e.join());
 }
 
 module.exports = {
   FACES, XO, S4, G4, OPP, COPP, MOVES, NSLOTS,
   solved, copy, eq, move, applyMoveIdx, idx, unidx,
-  buildSyms, symFromFacePerm, applySym, symMoveIdx, composeSym, makeCanon, makeMirrorCanon,
-  bfs, parseAlg, countMoves, applyParsed, makeFrames, mirrorAlg, mirrorToken,
-  optimalSolution, optimalScramble, invertAlg, applyScramble, faceCompose, FACE_ID,
+  buildSyms, symFromFacePerm, applySym, composeSym, makeCanon, makeMirrorCanon,
+  parseAlg, countMoves, applyParsed, makeFrames, mirrorAlg, mirrorToken,
+  optimalSolution, optimalScramble, invertAlg, faceCompose, FACE_ID,
+  // keying + alg→case (single source of truth; see section above)
+  stateKey, applyMoveK, rotateFrame, realCanonKey, keyToState,
+  preprocessAlg, inverseState, caseStateOf, algSolvesKey, normAlg,
 };
 
 window.OOEngine=module.exports;})();
