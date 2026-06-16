@@ -15,10 +15,10 @@ npm install            # once
 npm run build:trainer  # -> js/trainer.js
 npm run watch:trainer  # rebuild on change
 ```
-Test via `trainer-dev.html` (e.g. `python -m http.server 8000`, then
-http://localhost:8000/trainer-dev.html) — it loads the same built `js/trainer.js`
-as the live page but with an isolated `dev:`-prefixed storage key, so testing
-never touches real trainer progress. Then commit the regenerated `js/trainer.js`.
+Then serve the site (e.g. `python -m http.server 8000`) and open
+http://localhost:8000/trainer.html. Signed out, progress is in localStorage; to
+test without touching real progress, use a private window or a throwaway Google
+account. Commit the regenerated `js/trainer.js` with your source change.
 
 ## Integration contract (must stay true for a drop-in build)
 - Mounts at `#root` (React 18 `createRoot`).
@@ -31,9 +31,12 @@ never touches real trainer progress. Then commit the regenerated `js/trainer.js`
   trainer's state `{e,c}` + `uTwist` maps onto the engine state as
   `{e, c, u: uTwist}` (engine `G4` === the trainer's twist convention).
 - Styling comes from `css/site.css` + `css/trainer.css` (the same files the live
-  page loads); the component carries no inline `<style>`. `trainer-dev.html`
-  loads both so the dev build matches the site. New trainer-only classes live in
-  `css/trainer.css`.
+  page loads); the component carries no inline `<style>`. New trainer-only
+  classes live in `css/trainer.css`.
+- State persistence is provided by the host page via `window.storage`:
+  `trainer.html` bridges it to the shared account (`window.OOAccount`) so a
+  signed-in user's progress syncs to the cloud (cloud wins on sign-in), falling
+  back to localStorage when signed out.
 
 ## Status
 Cut over: `trainer.html` serves the build of this source (`js/trainer.js?v=5`),
