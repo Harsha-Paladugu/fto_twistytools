@@ -48,7 +48,8 @@
 
     element() {
       const tabs = SECTIONS.map(s =>
-        el('a', { class: 'navlink' + (s.id === this.active ? ' on' : ''), href: s.href }, s.label));
+        el('a', { class: 'navlink' + (s.id === this.active ? ' on' : ''), href: s.href,
+                  'aria-current': s.id === this.active ? 'page' : null }, s.label));
       // A page may supply its own right-side slot; otherwise fall back to the
       // shared sign-in control so login shows up site-wide.
       const right = this.right
@@ -61,7 +62,8 @@
       const header = el('header', { class: 'topbar' }, main);
       if (this.sub.length) {
         const links = this.sub.map(i =>
-          el('a', { class: 'sublink' + (i.on ? ' on' : ''), href: i.href }, i.label));
+          el('a', { class: 'sublink' + (i.on ? ' on' : ''), href: i.href,
+                    'aria-current': i.on ? 'page' : null }, i.label));
         header.appendChild(el.apply(null, ['nav', { class: 'subnav', 'aria-label': 'section' }].concat(links)));
       }
       return header;

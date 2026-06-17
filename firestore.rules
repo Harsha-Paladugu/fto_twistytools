@@ -1,0 +1,77 @@
+rules_version = '2';
+
+// Pyraminx.net — Firestore security rules (the REAL authorization boundary).
+//
+// These are versioned here so they can be reviewed, diffed, and deployed from
+// source instead of pasted into the console. Deploy with:
+//
+//   firebase deploy --only firestore:rules
+//
+// IMPORTANT: set the admin uid below. The OO page shows your account's user id
+// when you're signed in (see SETUP.md). `adminEmails` in js/config.js only gates
+// the admin UI client-side — these rules are what actually enforce writes.
+//
+// Recommended hardening (not applied here to avoid changing a live deployment):
+// replace the hardcoded uid with an `admins/{uid}` collection lookup, e.g.
+//   function isAdmin() {
+//     return request.auth != null
+//       && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+//   }
+// then bootstrap one `admins/{your-uid}` doc via the console. That removes the
+// per-deploy edit below — but deploy it only after creating that doc, or admin
+// writes lock out until you do.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID';
+    }
+    function isMod() {
+      return isAdmin()
+        || (request.auth != null
+            && exists(/databases/$(database)/documents/moderators/$(request.auth.uid)));
+    }
+
+    // per-user data: solver prefs + trainer progress (own doc only)
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /solutions/{id} {
+      allow read: if resource.data.status == 'approved'
+        || isMod()
+        || (request.auth != null && request.auth.uid == resource.data.uid);
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.moves is int
+        && request.resource.data.moves >= 1 && request.resource.data.moves <= 15
+        && request.resource.data.solution is string
+        && request.resource.data.solution.size() > 0
+        && request.resource.data.solution.size() < 300
+        && request.resource.data.classId is int
+        && request.resource.data.partnerId is int
+        && request.resource.data.pairId is int;
+      allow update: if isMod();
+      allow delete: if isAdmin();
+    }
+
+    match /meta/{doc} {
+      allow read: if true;
+      allow write: if isMod();
+    }
+
+    match /moderators/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow create: if isAdmin()
+        || (request.auth != null && request.auth.uid == uid
+            && exists(/databases/$(database)/documents/moderatorInvites/$(request.auth.token.email)));
+      allow delete: if isAdmin();
+    }
+
+    match /moderatorInvites/{email} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.token.email == email);
+      allow create, delete: if isAdmin();
+    }
+  }
+}

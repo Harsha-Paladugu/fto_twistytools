@@ -253,17 +253,15 @@ function composeSym(a, b) { // apply b then a
 // mirror a solution string token-by-token (LR mirror): R<->L, U->U', B->B', primes flip; rotations/wides likewise
 function mirrorToken(t) {
   const map = { U:'U', B:'B', R:'L', L:'R', u:'u', b:'b', r:'l', l:'r' };
+  // CW turns the modifier denotes (matches amtOf): none/2' = 1, ' / 2 = 2.
+  const cw = mod => (mod === "'" || mod === '2') ? 2 : 1;
+  // mirror reverses direction: 1 CW -> output prime (2 CW), 2 CW -> output bare.
+  const out = mod => cw(mod) === 1 ? "'" : '';
   let m;
-  if ((m = t.match(/^\[([ulrb])(2|')?\]$/))) {
-    const f = map[m[1]]; const p = m[2] ? '' : "'";
-    return '[' + f + p + ']';
-  }
-  if ((m = t.match(/^(y)(2|')?$/))) return m[2] ? 'y' : "y'";
-  if ((m = t.match(/^([ULRB])(w?)(2|')?$/))) {
-    const f = map[m[1]]; const w = m[2]; const p = m[3] ? '' : "'";
-    return f + w + p;
-  }
-  if ((m = t.match(/^([ulrb])(2|')?$/))) { const f = map[m[1]]; const p = m[2] ? '' : "'"; return f + p; }
+  if ((m = t.match(/^\[([ulrb])(2'|2|')?\]$/))) return '[' + map[m[1]] + out(m[2]) + ']';
+  if ((m = t.match(/^(y)(2'|2|')?$/)))          return 'y' + out(m[2]);
+  if ((m = t.match(/^([ULRB])(w?)(2'|2|')?$/))) return map[m[1]] + m[2] + out(m[3]);
+  if ((m = t.match(/^([ulrb])(2'|2|')?$/)))     return map[m[1]] + out(m[2]);
   return t;
 }
 function mirrorAlg(str) {
@@ -302,6 +300,11 @@ function optimalScramble(state, dist, rand) {
 // the S4 move table above so the move geometry is defined exactly once.
 const ROT_TO = [2, 0, 1, 4, 5, 3], ROT_D = [0, 1, 1, 0, 0, 0];
 function stateKey(s) { const e = s.e, p = []; for (let i = 0; i < 6; i++) p.push('' + e[i * 2] + e[i * 2 + 1]); return p.join(','); }
+// edges-only side classifiers (operate on a stateKey string): which bottom slot
+// is "open" for slot-family subsets, or which bottom bar a case sits at otherwise.
+// Single source for the Algorithms page and the trainer (were duplicated in both).
+function openOfEkey(ek) { const p = ek.split(','); if (p[3] !== '30') return 'DF'; if (p[5] !== '50') return 'DR'; if (p[4] !== '40') return 'DL'; return ''; }
+function barOfEkey(ek) { const p = ek.split(','); if (p[4] === '40') return 'DL'; if (p[5] === '50') return 'DR'; if (p[3] === '30') return 'DF'; return ''; }
 // keying move: edges (+ axial-center counter), WITHOUT the U-twist that `move`
 // tracks — the sheet's convention carries the U-twist in the key instead.
 function applyMoveK(s, face, inv) {
@@ -352,7 +355,7 @@ function preprocessAlg(a) {
 // Only edges + U-twist are meaningful for keys (centers are tip-fixable).
 function inverseState(X) {
   const e = new Array(12).fill(0);
-  for (let i = 0; i < 6; i++) { const pos = X.e[2 * i]; e[2 * pos] = i; e[2 * pos + 1] = X.e[2 * i + 1] % 2; }
+  for (let i = 0; i < 6; i++) { const pos = X.e[2 * i]; e[2 * pos] = i; e[2 * pos + 1] = X.e[2 * i + 1]; }
   return { e, c: X.c.map(v => (3 - (v % 3)) % 3), u: (3 - (X.u % 3)) % 3 };
 }
 let _syms = null, _rotBy = null, _orbit = null;
@@ -391,7 +394,8 @@ function algSolvesKey(algStr, renderKey) {
   _keyEnsure();
   const p = parseAlg(preprocessAlg(algStr));
   if (!p) return false;
-  return _orbit.has(applyParsed(p, keyToState(renderKey), _syms, _rotBy).e.join());
+  const end = applyParsed(p, keyToState(renderKey), _syms, _rotBy);
+  return _orbit.has(end.e.join()) && (end.u % 3) === 0;
 }
 
 module.exports = {
@@ -402,6 +406,7 @@ module.exports = {
   optimalSolution, optimalScramble, invertAlg, faceCompose, FACE_ID,
   // keying + alg→case (single source of truth; see section above)
   stateKey, applyMoveK, rotateFrame, realCanonKey, keyToState,
+  openOfEkey, barOfEkey,
   preprocessAlg, inverseState, caseStateOf, algSolvesKey, normAlg,
 };
 

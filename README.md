@@ -70,9 +70,13 @@ store.
 ## Tooling
 
 - **`tools/compile-sheet.mjs`** — compiles the JSON into `js/sheet.js`. Self-checks
-  every emitted alg and refuses to write a sheet that fails.
-- **`tools/check-sheet.mjs`** — independent verifier of the shipped `js/sheet.js`
-  (run via `npm run check`).
+  every emitted alg and refuses to write a sheet that fails; a new unparseable alg
+  fails the build. Carries forward a small set of cases the JSON doesn't reproduce
+  from a committed baseline, **`data/prior-sheet.json`** (not its own output), so a
+  from-scratch rebuild is reproducible from version-controlled inputs.
+- **`tools/check-sheet.mjs`** — verifier of the shipped `js/sheet.js`, run via
+  `npm run check` (also wired into `npm run build`). It shares the engine's keying
+  helpers, so it catches data/structural problems but not engine-level keying bugs.
 - **`build.mjs`** — esbuild config for the React trainer.
 
 ### Module strategy (why no `"type": "module"`)

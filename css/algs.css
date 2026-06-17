@@ -17,6 +17,7 @@
 .algsearch:focus { outline: none; border-color: var(--mut); }
 .algstatus { font: 500 12px var(--mono); color: var(--dim); }
 .algstatus.admin { color: var(--green); }
+.algstatus.err { color: var(--red); }
 .export { white-space: nowrap; }
 
 /* two-column layout: subset nav + main */

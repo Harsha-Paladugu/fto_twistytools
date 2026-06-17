@@ -16,15 +16,15 @@
 <body>
 <div id="boot-status">
   <div class="bigtri" aria-hidden="true"></div>
-  <div id="boot-label">Waking up…</div>
-  <div id="boot-track"><div id="boot-bar"></div></div>
+  <div id="boot-label" role="status" aria-live="polite">Waking up…</div>
+  <div id="boot-track" role="progressbar" aria-label="Loading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="boot-bar"></div></div>
   <div id="boot-hint">Your first visit maps all 933,120 positions — about 20 seconds. After that it’s cached and loads instantly.</div>
 </div>
 <div id="app"></div>
 <script src="js/account.js?v=5"></script>
-<script src="js/engine.js?v=8"></script>
+<script src="js/engine.js?v=10"></script>
 <script src="js/render.js?v=4"></script>
-<script src="js/navbar.js?v=6"></script>
-<script src="js/oo.js?v=6"></script>
+<script src="js/navbar.js?v=7"></script>
+<script src="js/oo.js?v=7"></script>
 </body>
 </html>

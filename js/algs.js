@@ -13,6 +13,13 @@
  * A newly entered alg is auto-checked: it must actually solve the case (any
  * rotation/AUF), and the bar/slot it solves at decides which direction group it
  * is filed under. Algs that don't solve the case are rejected.
+ *
+ * Caveat — TL4E +/- twist: the twist SIGN is an authored label, not a function
+ * of the keyed geometry (the render key ignores center twist, and +/- algs of a
+ * TL4E-R case can share the same center-twist state). So auto-routing cannot tell
+ * + from -: a wrong-sign alg added to a paired TL4E case passes validation and is
+ * filed under the first matching variant (the + one). An admin adding a TL4E alg
+ * must make sure it's the correct twist for the variant. (See validate/adminAdder.)
  */
 (function () {
   'use strict';
@@ -44,9 +51,7 @@
   }
 
   // ---------- engine keying / canonicalization (single source: js/engine.js) ----------
-  const { stateKey, realCanonKey, caseStateOf, applyMoveK } = E;
-  const openOfEkey = (ek) => { const p = ek.split(','); if (p[3] !== '30') return 'DF'; if (p[5] !== '50') return 'DR'; if (p[4] !== '40') return 'DL'; return ''; };
-  const barOfEkey = (ek) => { const p = ek.split(','); if (p[4] === '40') return 'DL'; if (p[5] === '50') return 'DR'; if (p[3] === '30') return 'DF'; return ''; };
+  const { stateKey, realCanonKey, caseStateOf, applyMoveK, openOfEkey, barOfEkey } = E;
   // Slot-family subsets group by open slot; L5E groups by bar. The only live
   // slot-family keys are the merged 'L4E' and the TL4E +/- split keys (TL4E-B+,
   // TL4E-R-, …), which the regex catches.
@@ -239,6 +244,9 @@
     if (!set.size) return { ok: false, reason: 'No reference algorithm for this case yet — can’t auto-check it.' };
     const canon = realCanonKey(cs, cs.u);
     if (!set.has(canon)) return { ok: false, reason: 'Valid moves, but they don’t solve this case.' };
+    // NOTE: realCanonKey ignores center twist, so for paired TL4E (+/-) this
+    // confirms the alg solves the case's EDGES but cannot verify the twist sign —
+    // see the file header caveat. The sign comes from which variant the admin adds to.
     return { ok: true, side: sideOf(subsetKey, cs), state: cs };
   }
 
@@ -254,32 +262,54 @@
     if (LIVE) return adminEmails.includes((A.user.email || '').toLowerCase());
     return true; // demo mode (no Firebase): allow local editing
   }
+  let draftError = ''; // surfaced by refreshStatus when a draft read/write fails
   const Store = {
     async loadAll() {
       overrides.clear();
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
       try {
-        const m = JSON.parse(localStorage.getItem(DRAFT_KEY)) || {};
-        for (const k in m) { const v = m[k]; overrides.set(caseId(v.subset, v.case), { added: (v.added || []).slice(), removed: new Set(v.removed || []), order: (v.order || []).slice() }); }
-      } catch (e) {}
+        const m = JSON.parse(raw) || {};
+        for (const k in m) { const v = m[k]; overrides.set(caseId(v.subset, v.case), { subset: v.subset, case: v.case, added: (v.added || []).slice(), removed: new Set(v.removed || []), order: (v.order || []).slice() }); }
+      } catch (e) {
+        // Don't silently discard the user's draft — set it aside and tell them.
+        console.error('algs: unreadable draft, set aside as ' + DRAFT_KEY + '.bad', e);
+        try { localStorage.setItem(DRAFT_KEY + '.bad', raw); } catch (_) {}
+        draftError = 'Your saved draft was unreadable and has been set aside (' + DRAFT_KEY + '.bad). Starting from the published algs.';
+      }
     },
     async save(subsetKey, caseName) {
       const ov = overrides.get(caseId(subsetKey, caseName)) || { added: [], removed: new Set(), order: [] };
       let m = {}; try { m = JSON.parse(localStorage.getItem(DRAFT_KEY)) || {}; } catch (e) {}
       m[caseId(subsetKey, caseName)] = { subset: subsetKey, case: caseName, added: ov.added, removed: [...ov.removed], order: ov.order || [] };
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(m)); } catch (e) {}
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(m)); draftError = ''; return true; }
+      catch (e) {
+        // Don't pretend the edit persisted — make the failure visible.
+        console.error('algs: draft save failed', e);
+        draftError = 'Draft could NOT be saved (storage full or blocked). Your edits live only in this tab and will be lost on reload — Export now to keep them.';
+        if (typeof refreshStatus === 'function') refreshStatus();
+        return false;
+      }
     },
   };
-  function getOv(id) { let ov = overrides.get(id); if (!ov) { ov = { added: [], removed: new Set(), order: [] }; overrides.set(id, ov); } return ov; }
+  // ov carries its own {subset,case} so exportJSON can map a merged-view edit back
+  // to the authored subset/case it actually belongs to.
+  function getOv(subsetKey, caseName) {
+    const id = caseId(subsetKey, caseName);
+    let ov = overrides.get(id);
+    if (!ov) { ov = { subset: subsetKey, case: caseName, added: [], removed: new Set(), order: [] }; overrides.set(id, ov); }
+    return ov;
+  }
 
   async function addAlg(subsetKey, c, alg, side) {
-    const ov = getOv(caseId(subsetKey, c.name));
+    const ov = getOv(subsetKey, c.name);
     // re-adding a removed baseline alg just clears the tombstone
     if (ov.removed.has(alg)) ov.removed.delete(alg);
     else if (!ov.added.some(x => x.alg === alg) && !c.algs.some(x => x.alg === alg)) ov.added.push({ alg, side });
     await Store.save(subsetKey, c.name);
   }
   async function removeAlg(subsetKey, c, row) {
-    const ov = getOv(caseId(subsetKey, c.name));
+    const ov = getOv(subsetKey, c.name);
     if (row.source === 'add') ov.added = ov.added.filter(x => x.alg !== row.alg);
     else if (!ov.removed.has(row.alg)) ov.removed.add(row.alg);
     if (ov.order) ov.order = ov.order.filter(a => a !== row.alg);
@@ -295,7 +325,7 @@
   async function moveAlg(subKey, c, rows, row, dir) {
     const i = rows.findIndex(r => r.alg === row.alg), j = i + dir;
     if (i < 0 || j < 0 || j >= rows.length) return;
-    const ov = getOv(caseId(subKey, c.name));
+    const ov = getOv(subKey, c.name);
     let order = (ov.order && ov.order.length) ? ov.order.slice() : fullOrder(subKey, c);
     let pa = order.indexOf(row.alg), pb = order.indexOf(rows[j].alg);
     if (pa < 0 || pb < 0) { order = fullOrder(subKey, c); pa = order.indexOf(row.alg); pb = order.indexOf(rows[j].alg); }
@@ -315,7 +345,15 @@
     if (!query) return true;
     const q = query.toLowerCase();
     if (name.toLowerCase().includes(q) || subsetKey.toLowerCase().includes(q)) return true;
-    return c.algs.some(a => a.alg.toLowerCase().includes(q));
+    // search baseline (minus tombstoned) + admin-added algs, in both raw and the
+    // normalized/display notation the page actually shows (so e.g. an expanded
+    // S/H macro or a collapsed R2 typed as seen on screen still matches).
+    const ov = overrides.get(caseId(subsetKey, name)) || { added: [], removed: new Set() };
+    const algs = [
+      ...c.algs.filter(a => !ov.removed.has(a.alg)).map(a => a.alg),
+      ...ov.added.map(a => a.alg),
+    ];
+    return algs.some(a => a.toLowerCase().includes(q) || E.normAlg(a).toLowerCase().includes(q));
   };
 
   function caseDiagram(state, centers) {
@@ -341,12 +379,12 @@
     const i = rows.indexOf(r), admin = isAdmin();
     return h('div', { class: 'algrow' + (r.solves ? '' : ' warn') },
       admin ? h('span', { class: 'ord' },
-        h('button', { class: 'mv', title: 'Move up', disabled: i <= 0 ? 'disabled' : null, onclick: async (ev) => { ev.target.disabled = true; await moveAlg(subKey, c, rows, r, -1); rerender(); } }, '↑'),
-        h('button', { class: 'mv', title: 'Move down', disabled: i >= rows.length - 1 ? 'disabled' : null, onclick: async (ev) => { ev.target.disabled = true; await moveAlg(subKey, c, rows, r, 1); rerender(); } }, '↓')) : null,
+        h('button', { class: 'mv', title: 'Move up', 'aria-label': 'Move alg up', disabled: i <= 0 ? 'disabled' : null, onclick: async (ev) => { ev.target.disabled = true; await moveAlg(subKey, c, rows, r, -1); rerender(); } }, '↑'),
+        h('button', { class: 'mv', title: 'Move down', 'aria-label': 'Move alg down', disabled: i >= rows.length - 1 ? 'disabled' : null, onclick: async (ev) => { ev.target.disabled = true; await moveAlg(subKey, c, rows, r, 1); rerender(); } }, '↓')) : null,
       h('span', { class: 'mono alg' }, r.display),
       r.source === 'add' ? h('span', { class: 'addedtag' }, 'added') : null,
-      !r.solves ? h('span', { class: 'warntag', title: 'This stored alg does not solve the case from this view.' }, '⚠') : null,
-      admin ? h('button', { class: 'rm', title: 'Remove', onclick: async (ev) => { ev.target.disabled = true; await removeAlg(subKey, c, r); rerender(); } }, '×') : null);
+      !r.solves ? h('span', { class: 'warntag', role: 'img', 'aria-label': 'Warning: this stored alg does not solve the case from this view.', title: 'This stored alg does not solve the case from this view.' }, '⚠') : null,
+      admin ? h('button', { class: 'rm', title: 'Remove', 'aria-label': 'Remove alg', onclick: async (ev) => { ev.target.disabled = true; await removeAlg(subKey, c, r); rerender(); } }, '×') : null);
   }
 
   // one labelled row: diagram + heading + (multi-column) alg list. Shared by L4E
@@ -505,35 +543,59 @@
     expanded.clear();
     const sec = sectionById(id);
     if (sec.groups.length === 1) expanded.add(sec.groups[0].key); // auto-open a lone group (L4E)
-    document.querySelectorAll('.sectab').forEach(t => t.className = 'sectab' + (t.getAttribute('data-sec') === id ? ' on' : ''));
+    document.querySelectorAll('.sectab').forEach(t => {
+      const on = t.getAttribute('data-sec') === id;
+      t.className = 'sectab' + (on ? ' on' : '');
+      t.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     renderSidebar();
     renderMain();
   }
 
+  // Export the AUTHORED schema (meta + subsets + other_subsets), not the merged
+  // view, so the file round-trips: tools/compile-sheet.mjs can consume it, and
+  // other_subsets / Pseudo-V / the numbered L4E set / every `twist` field are
+  // preserved verbatim. We deep-clone the original data and apply the admin's
+  // add/remove deltas in place, mapping each merged-view edit back to the
+  // authored subset it actually came from.
   function exportJSON() {
-    // export exactly what's shown: the merged subsets (L4E unified, Pseudo-V
-    // dropped) with overrides applied and each alg's detected direction.
-    const out = { meta: Object.assign({}, DATA.meta, { exported: true, note: 'merged via the Algorithms tab' }), subsets: {} };
-    for (const key of Object.keys(SUBSETMAP)) {
-      const sub = SUBSETMAP[key];
-      out.subsets[key] = {
-        name: sub.name,
-        cases: sub.cases.map(c => ({
-          name: c.name,
-          algs: mergedGroups(key, c).flatMap(([side, rows]) =>
-            rows.map(r => ({ direction: sideToDirection(key, side), alg: r.display }))),
-        })),
-      };
+    const out = JSON.parse(JSON.stringify(DATA));
+    out.meta = Object.assign({}, DATA.meta, { exported: true, note: 'edited via the Algorithms tab' });
+    const findCase = (key, name) => {
+      const cont = out.subsets[key] ? out.subsets : (out.other_subsets[key] ? out.other_subsets : null);
+      return cont ? (cont[key].cases.find(c => c.name === name) || null) : null;
+    };
+    // every authored source a merged key drew its algs from (for removals)
+    const removeKeys = (mergedKey) => {
+      const m = /^(TL4E-[BR])[+-]$/.exec(mergedKey);
+      if (m) return [m[1]];
+      if (mergedKey === 'L4E') return ['ML4E', 'L4E Building Blocks'];
+      return [mergedKey];
+    };
+    for (const ov of overrides.values()) {
+      if (!ov.subset) continue;
+      if (ov.removed && ov.removed.size) {
+        for (const key of removeKeys(ov.subset)) {
+          const c = findCase(key, ov.case);
+          if (c) c.algs = c.algs.filter(a => !ov.removed.has(a.alg));
+        }
+      }
+      for (const a of (ov.added || [])) {
+        // route an added alg to its authored home, with the fields that source uses
+        let key, extra = {}, m;
+        if ((m = /^(TL4E-[BR])([+-])$/.exec(ov.subset))) { key = m[1]; extra = { direction: null, twist: m[2] }; }
+        else if (ov.subset === 'L4E') {
+          if (findCase('L4E Building Blocks', ov.case)) key = 'L4E Building Blocks';
+          else { key = 'ML4E'; extra = { direction: a.side === 'DR' ? 'Right Slot' : 'Left Slot' }; }
+        } else { key = ov.subset; }
+        const c = findCase(key, ov.case);
+        if (c && !c.algs.some(x => x.alg === a.alg)) c.algs.push(Object.assign({}, extra, { alg: a.alg }));
+      }
     }
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = h('a', { href: url, download: 'pyraminx_algs.json' });
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  }
-  function sideToDirection(subsetKey, side) {
-    if (!side) return null;
-    if (isSlotFam(subsetKey)) return { DL: 'Left Slot', DR: 'Right Slot', DF: 'Front' }[side] || null;
-    return { DL: 'Left', DR: 'Right', DF: 'Front' }[side] || null;
   }
 
   // ---------- page shell ----------
@@ -545,7 +607,7 @@
     const exportBtn = h('button', { class: 'ghost sm export', onclick: exportJSON }, 'Export JSON');
 
     const tabs = h('div', { class: 'sectabs' }, SECTIONS.map(s =>
-      h('button', { class: 'sectab' + (s.id === section ? ' on' : ''), 'data-sec': s.id, onclick: () => switchSection(s.id) }, s.label)));
+      h('button', { class: 'sectab' + (s.id === section ? ' on' : ''), 'data-sec': s.id, 'aria-pressed': s.id === section ? 'true' : 'false', onclick: () => switchSection(s.id) }, s.label)));
     const toolbar = h('div', { class: 'algtoolbar' }, search, statusEl, exportBtn);
     sideNav = h('nav', { class: 'algside', 'aria-label': 'subsets' });
     main = h('div', { class: 'algmain' });
@@ -563,11 +625,16 @@
   function refreshStatus() {
     if (!statusEl) return;
     const admin = isAdmin();
-    const keys = Object.keys(SUBSETMAP);
-    const total = keys.reduce((n, k) => n + SUBSETMAP[k].cases.length, 0);
-    statusEl.textContent = keys.length + ' subsets · ' + total + ' cases'
-      + (admin ? ' · editing as admin — local draft, use Export to publish' : '');
-    statusEl.className = 'algstatus' + (admin ? ' admin' : '');
+    if (draftError) {            // a save/load failure outranks the normal status line
+      statusEl.textContent = draftError;
+      statusEl.className = 'algstatus err';
+    } else {
+      const keys = Object.keys(SUBSETMAP);
+      const total = keys.reduce((n, k) => n + SUBSETMAP[k].cases.length, 0);
+      statusEl.textContent = keys.length + ' subsets · ' + total + ' cases'
+        + (admin ? ' · editing as admin — local draft, use Export to publish' : '');
+      statusEl.className = 'algstatus' + (admin ? ' admin' : '');
+    }
     const exp = document.querySelector('.export'); if (exp) exp.style.display = admin ? '' : 'none';
   }
 

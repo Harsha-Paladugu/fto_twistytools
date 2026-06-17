@@ -40,8 +40,8 @@ async function idb(mode, payload) {
   } catch (e) { return null; }
 }
 async function boot() {
-  const label = $('#boot-label'), bar = $('#boot-bar');
-  const rep = (t, n, tot) => { label.textContent = t; bar.style.width = Math.round(100 * n / tot) + '%'; };
+  const label = $('#boot-label'), bar = $('#boot-bar'), track = $('#boot-track');
+  const rep = (t, n, tot) => { const pct = Math.round(100 * n / tot); label.textContent = t; bar.style.width = pct + '%'; if (track) track.setAttribute('aria-valuenow', pct); };
   const cached = await idb('get');
   if (cached && cached.dist) { dist = new Int8Array(cached.dist); rep('Loading cached tables\u2026', 1, 1); }
   else {

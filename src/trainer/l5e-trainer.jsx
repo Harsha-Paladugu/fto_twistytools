@@ -9,37 +9,26 @@ import __sheet from "../../js/sheet.js";
 
 const CLASSMAP = {"00,10,20,31,40,51":"bad-layers","00,11,21,31,40,51":"bad-layers","01,10,21,31,40,51":"bad-layers","01,11,20,31,40,51":"bad-layers","00,10,30,50,40,20":"bl5e","00,10,30,51,40,21":"kl5e","00,10,31,50,40,21":"bl5e","00,10,31,51,40,20":"kl5e","00,11,30,50,40,21":"bl5e","00,11,30,51,40,20":"kl5e","00,11,31,50,40,20":"bl5e","00,11,31,51,40,21":"kl5e","01,10,30,50,40,21":"bl5e","01,10,30,51,40,20":"kl5e","01,10,31,50,40,20":"bl5e","01,10,31,51,40,21":"kl5e","01,11,30,50,40,20":"bl5e","01,11,30,51,40,21":"kl5e","01,11,31,50,40,21":"bl5e","01,11,31,51,40,20":"kl5e","00,10,50,20,40,30":"bl5e","00,10,50,21,40,31":"kl5e","00,10,51,20,40,31":"kl5e","00,10,51,21,40,30":"bl5e","00,11,50,20,40,31":"kl5e","00,11,50,21,40,30":"bl5e","00,11,51,20,40,30":"bl5e","00,11,51,21,40,31":"kl5e","01,10,50,20,40,31":"kl5e","01,10,50,21,40,30":"bl5e","01,10,51,20,40,30":"bl5e","01,10,51,21,40,31":"kl5e","01,11,50,20,40,30":"bl5e","01,11,50,21,40,31":"kl5e","01,11,51,20,40,31":"kl5e","01,11,51,21,40,30":"bl5e","00,20,10,50,40,30":"bad-layers","00,20,10,51,40,31":"bad-layers","00,20,11,50,40,31":"bad-layers","00,20,11,51,40,30":"bad-layers","00,21,10,50,40,31":"bad-layers","00,21,10,51,40,30":"bad-layers","00,21,11,50,40,30":"bad-layers","00,21,11,51,40,31":"bad-layers","01,20,10,50,40,31":"bad-layers","01,20,10,51,40,30":"bad-layers","01,20,11,50,40,30":"bad-layers","01,20,11,51,40,31":"bad-layers","01,21,10,50,40,30":"bad-layers","01,21,10,51,40,31":"bad-layers","01,21,11,50,40,31":"bad-layers","01,21,11,51,40,30":"bad-layers","00,20,30,11,40,51":"fl5e","00,20,31,10,40,51":"fl5e","00,21,30,10,40,51":"fl5e","00,21,31,11,40,51":"fl5e","01,20,30,10,40,51":"fl5e","01,20,31,11,40,51":"fl5e","01,21,30,11,40,51":"fl5e","01,21,31,10,40,51":"fl5e","00,20,50,31,40,11":"fl5e","00,20,51,31,40,10":"fl5e","00,21,50,31,40,10":"fl5e","00,21,51,31,40,11":"fl5e","01,20,50,31,40,10":"fl5e","01,20,51,31,40,11":"fl5e","01,21,50,31,40,11":"fl5e","01,21,51,31,40,10":"fl5e","00,30,10,21,40,51":"fl5e","00,30,11,20,40,51":"fl5e","00,31,10,20,40,51":"fl5e","00,31,11,21,40,51":"fl5e","01,30,10,20,40,51":"fl5e","01,30,11,21,40,51":"fl5e","01,31,10,21,40,51":"fl5e","01,31,11,20,40,51":"fl5e","00,30,20,50,40,10":"bl5e","00,30,20,51,40,11":"kl5e","00,30,21,50,40,11":"bl5e","00,30,21,51,40,10":"kl5e","00,31,20,50,40,11":"bl5e","00,31,20,51,40,10":"kl5e","00,31,21,50,40,10":"bl5e","00,31,21,51,40,11":"kl5e","01,30,20,50,40,11":"bl5e","01,30,20,51,40,10":"kl5e","01,30,21,50,40,10":"bl5e","01,30,21,51,40,11":"kl5e","01,31,20,50,40,10":"bl5e","01,31,20,51,40,11":"kl5e","01,31,21,50,40,11":"bl5e","01,31,21,51,40,10":"kl5e","00,30,50,10,40,20":"ht","00,30,50,11,40,21":"ht","00,30,51,10,40,21":"yy","00,30,51,11,40,20":"yy","00,31,50,10,40,21":"yy","00,31,50,11,40,20":"yy","00,31,51,10,40,20":"ht","00,31,51,11,40,21":"ht","01,30,50,10,40,21":"ht","01,30,50,11,40,20":"ht","01,30,51,10,40,20":"yy","01,30,51,11,40,21":"yy","01,31,50,10,40,20":"yy","01,31,50,11,40,21":"yy","01,31,51,10,40,21":"ht","01,31,51,11,40,20":"ht","00,50,10,31,40,21":"fl5e","00,50,11,31,40,20":"fl5e","00,51,10,31,40,20":"fl5e","00,51,11,31,40,21":"fl5e","01,50,10,31,40,20":"fl5e","01,50,11,31,40,21":"fl5e","01,51,10,31,40,21":"fl5e","01,51,11,31,40,20":"fl5e","00,50,20,10,40,30":"bl5e","00,50,20,11,40,31":"kl5e","00,50,21,10,40,31":"kl5e","00,50,21,11,40,30":"bl5e","00,51,20,10,40,31":"kl5e","00,51,20,11,40,30":"bl5e","00,51,21,10,40,30":"bl5e","00,51,21,11,40,31":"kl5e","01,50,20,10,40,31":"kl5e","01,50,20,11,40,30":"bl5e","01,50,21,10,40,30":"bl5e","01,50,21,11,40,31":"kl5e","01,51,20,10,40,30":"bl5e","01,51,20,11,40,31":"kl5e","01,51,21,10,40,31":"kl5e","01,51,21,11,40,30":"bl5e","00,50,30,20,40,10":"ht","00,50,30,21,40,11":"ht","00,50,31,20,40,11":"yy","00,50,31,21,40,10":"yy","00,51,30,20,40,11":"yy","00,51,30,21,40,10":"yy","00,51,31,20,40,10":"ht","00,51,31,21,40,11":"ht","01,50,30,20,40,11":"ht","01,50,30,21,40,10":"ht","01,50,31,20,40,10":"yy","01,50,31,21,40,11":"yy","01,51,30,20,40,10":"yy","01,51,30,21,40,11":"yy","01,51,31,20,40,11":"ht","01,51,31,21,40,10":"ht","10,20,30,50,40,00":"bl5e","10,20,30,51,40,01":"kl5e","10,20,31,50,40,01":"bl5e","10,20,31,51,40,00":"kl5e","10,21,30,50,40,01":"bl5e","10,21,30,51,40,00":"kl5e","10,21,31,50,40,00":"bl5e","10,21,31,51,40,01":"kl5e","11,20,30,50,40,01":"bl5e","11,20,30,51,40,00":"kl5e","11,20,31,50,40,00":"bl5e","11,20,31,51,40,01":"kl5e","11,21,30,50,40,00":"bl5e","11,21,30,51,40,01":"kl5e","11,21,31,50,40,01":"bl5e","11,21,31,51,40,00":"kl5e","10,20,50,00,40,30":"bl5e","10,20,50,01,40,31":"kl5e","10,20,51,00,40,31":"kl5e","10,20,51,01,40,30":"bl5e","10,21,50,00,40,31":"kl5e","10,21,50,01,40,30":"bl5e","10,21,51,00,40,30":"bl5e","10,21,51,01,40,31":"kl5e","11,20,50,00,40,31":"kl5e","11,20,50,01,40,30":"bl5e","11,20,51,00,40,30":"bl5e","11,20,51,01,40,31":"kl5e","11,21,50,00,40,30":"bl5e","11,21,50,01,40,31":"kl5e","11,21,51,00,40,31":"kl5e","11,21,51,01,40,30":"bl5e","10,30,20,01,40,51":"fl5e","10,30,21,00,40,51":"fl5e","10,31,20,00,40,51":"fl5e","10,31,21,01,40,51":"fl5e","11,30,20,00,40,51":"fl5e","11,30,21,01,40,51":"fl5e","11,31,20,01,40,51":"fl5e","11,31,21,00,40,51":"fl5e","10,30,50,20,40,00":"ht","10,30,50,21,40,01":"ht","10,30,51,20,40,01":"yy","10,30,51,21,40,00":"yy","10,31,50,20,40,01":"yy","10,31,51,20,40,00":"ht","10,31,51,21,40,01":"ht","11,30,50,20,40,01":"ht","11,30,50,21,40,00":"ht","11,30,51,20,40,00":"yy","11,30,51,21,40,01":"yy","11,31,50,20,40,00":"yy","11,31,50,21,40,01":"yy","11,31,51,20,40,01":"ht","11,31,51,21,40,00":"ht","10,50,20,31,40,01":"fl5e","10,50,21,31,40,00":"fl5e","10,51,20,31,40,00":"fl5e","10,51,21,31,40,01":"fl5e","11,50,20,31,40,00":"fl5e","11,50,21,31,40,01":"fl5e","11,51,20,31,40,01":"fl5e","11,51,21,31,40,00":"fl5e","10,50,30,00,40,20":"ht","10,50,30,01,40,21":"ht","10,50,31,00,40,21":"yy","10,50,31,01,40,20":"yy","10,51,30,00,40,21":"yy","10,51,30,01,40,20":"yy","10,51,31,00,40,20":"ht","10,51,31,01,40,21":"ht","11,50,30,00,40,21":"ht","11,50,30,01,40,20":"ht","11,50,31,00,40,20":"yy","11,50,31,01,40,21":"yy","11,51,30,00,40,20":"yy","11,51,30,01,40,21":"yy","11,51,31,00,40,21":"ht","11,51,31,01,40,20":"ht","20,30,50,00,40,10":"ht","20,30,50,01,40,11":"ht","20,30,51,00,40,11":"yy","20,30,51,01,40,10":"yy","20,31,50,00,40,11":"yy","20,31,50,01,40,10":"yy","20,31,51,00,40,10":"ht","20,31,51,01,40,11":"ht","21,30,50,00,40,11":"ht","21,30,50,01,40,10":"ht","21,30,51,00,40,10":"yy","21,30,51,01,40,11":"yy","21,31,50,00,40,10":"yy","21,31,50,01,40,11":"yy","21,31,51,00,40,11":"ht","21,31,51,01,40,10":"ht","20,50,30,10,40,00":"ht","20,50,30,11,40,01":"ht","20,50,31,10,40,01":"yy","20,50,31,11,40,00":"yy","20,51,30,10,40,01":"yy","20,51,30,11,40,00":"yy","20,51,31,10,40,00":"ht","20,51,31,11,40,01":"ht","21,50,30,10,40,01":"ht","21,50,30,11,40,00":"ht","21,50,31,10,40,00":"yy","21,50,31,11,40,01":"yy","21,51,30,10,40,00":"yy","21,51,30,11,40,01":"yy","21,51,31,10,40,01":"ht","21,51,31,11,40,00":"ht","10,31,50,21,40,00":"yy"};
 
-// ---------- verified pyraminx engine ----------
+// ---------- pyraminx engine: single source = js/engine.js (window.OOEngine) ----------
 // Edge slots: 0 FL, 1 FR, 2 BK, 3 DF, 4 DL, 5 DR
 // state.e = [p0,f0,...,p5,f5], state.c = [L,R,B] center twists
-const MOVES = {
-  U: { cyc: [[0, 2, 0], [2, 1, 1], [1, 0, 1]], center: -1 },
-  R: { cyc: [[1, 5, 0], [5, 3, 1], [3, 1, 1]], center: 1 },
-  L: { cyc: [[0, 3, 1], [3, 4, 1], [4, 0, 0]], center: 0 },
-  B: { cyc: [[2, 4, 1], [4, 5, 1], [5, 2, 0]], center: 2 },
-};
+// The move table + keying/canonicalization helpers were hand-duplicated here;
+// they are now aliased to the shared engine (loaded before this bundle by
+// trainer.html), so a change to move geometry or canonicalization reaches the
+// trainer automatically. The BFS coordinate helpers (stateIndex/unindex/keyToState)
+// use the trainer's own no-U-twist representation and stay local below.
+const E = window.OOEngine;
+const stateKey = E.stateKey;
+const applyMove = E.applyMoveK;        // keying move: edges + center counter, no U-twist
+const rotateFrame = E.rotateFrame;
+const realCanonKey = E.realCanonKey;
+const openOfEkey = E.openOfEkey;
+const barOfEkey = E.barOfEkey;
 const MOVE_NAMES = ["U", "U'", "R", "R'", "L", "L'", "B", "B'"];
 
 const solvedState = () => ({ e: [0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0], c: [0, 0, 0] });
 const copyState = (s) => ({ e: s.e.slice(), c: s.c.slice() });
 
-function applyMove(s, face, inv) {
-  const times = inv ? 2 : 1;
-  const m = MOVES[face];
-  for (let t = 0; t < times; t++) {
-    const e = s.e.slice();
-    for (const [src, dst, d] of m.cyc) {
-      s.e[dst * 2] = e[src * 2];
-      s.e[dst * 2 + 1] = e[src * 2 + 1] ^ d;
-    }
-    if (m.center >= 0) s.c[m.center] = (s.c[m.center] + 1) % 3;
-  }
-}
-function stateKey(s) {
-  const parts = [];
-  for (let i = 0; i < 6; i++) parts.push("" + s.e[i * 2] + s.e[i * 2 + 1]);
-  return parts.join(",");
-}
 function aufCanonKey(s) {
   let best = null;
   const t = copyState(s);
@@ -298,21 +287,8 @@ function maskedScramble(target, dist) {
   return out.map((mi) => MOVE_NAMES[mi]).join(" ");
 }
 
-// frame rotation [u]: re-express a DL-frame case with the bar at DR (1x) or DF (2x)
-const ROT_TO = [2, 0, 1, 4, 5, 3];
-const ROT_D = [0, 1, 1, 0, 0, 0];
-function rotateFrame(s, times) {
-  for (let t = 0; t < ((times % 3) + 3) % 3; t++) {
-    const e = s.e.slice();
-    for (let src = 0; src < 6; src++) {
-      const p = e[src * 2];
-      const dst = ROT_TO[src];
-      s.e[dst * 2] = ROT_TO[p];
-      s.e[dst * 2 + 1] = e[src * 2 + 1] ^ ROT_D[src] ^ ROT_D[p];
-    }
-  }
-  return s;
-}
+// frame rotation [u] (re-express a DL-frame case with the bar at DR/DF) is
+// engine.rotateFrame, aliased above.
 const BAR_ROT = { DL: 0, DR: 1, DF: 2 };
 // L4E angle: the canonical L4E case has the open slot at the front (DF). ML4E-R
 // / ML4E-L are the SAME cases viewed from another angle (a frame rotation), so
@@ -377,20 +353,6 @@ const SET_BY_ID = Object.fromEntries(SETS.map((s) => [s.id, s]));
 const L5E_IDS = SETS.filter((s) => s.group === "L5E").map((s) => s.id);
 const ALL_IDS = SETS.map((s) => s.id);
 
-const realCanonKey = (st, t) => {
-  const base = copyState(st);
-  let best = null;
-  for (let r = 0; r < 3; r++) {
-    const cur = copyState(base);
-    for (let a = 0; a < 3; a++) {
-      const s = stateKey(cur) + "|" + ((t + a) % 3);
-      if (best === null || s < best) best = s;
-      applyMove(cur, "U", false);
-    }
-    rotateFrame(base, 1);
-  }
-  return best;
-};
 
 function buildPools() {
   const pools = {};
@@ -491,20 +453,6 @@ const displayState = (caseKey, setId, bar) => {
 const SHEET = __sheet.SHEET; // single source: js/sheet.js
 const BAR_LABEL = { DL: "bar on left", DR: "bar on right", DF: "bar on front" };
 const L4E_LABEL = { DF: "L4E", DR: "ML4E-R", DL: "ML4E-L" };
-const openOfEkey = (ek) => {
-  const p = ek.split(",");
-  if (p[3] !== "30") return "DF";
-  if (p[5] !== "50") return "DR";
-  if (p[4] !== "40") return "DL";
-  return "";
-};
-const barOfEkey = (ek) => {
-  const p = ek.split(",");
-  if (p[4] === "40") return "DL";
-  if (p[5] === "50") return "DR";
-  if (p[3] === "30") return "DF";
-  return "";
-};
 const lookupName = (render, uTwist, caseKey) => {
   // exact angle first, then the AUF-rotations of the same real case, then class label
   const t = copyState(render);
@@ -1089,6 +1037,7 @@ export default function L5ETrainer() {
   }, []);
   const startTimer = useCallback(() => {
     if (!current || !current.scramble) return;
+    cancelAnimationFrame(raf.current); // never stack a prior (orphaned) frame loop
     t0.current = performance.now();
     setElapsed(0);
     setPhase("running");
@@ -1159,6 +1108,11 @@ export default function L5ETrainer() {
   }, [phase, trigger, stopTimer, panel, caseBrowser, mode, submitGuess, nextSolution, nextRecog, revealRecog, last]);
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
+
+  // Whenever we leave the running phase (stop, tab switch, or any setting change
+  // that regenerates via the effect above and resets phase to "ready"), kill the
+  // frame loop so it can't keep firing setElapsed and re-rendering forever.
+  useEffect(() => { if (phase !== "running") cancelAnimationFrame(raf.current); }, [phase]);
 
   // aggregate per VARIANT = (set, angle), so each orientation gets its own row
   const setAgg = useMemo(() => {

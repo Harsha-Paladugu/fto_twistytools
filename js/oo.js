@@ -219,7 +219,7 @@ function liveDB() {
   // Recompute moderator/admin status whenever the shared session changes.
   async function recomputeRole() {
     const user = A.user;
-    isAdmin = !!user && adminEmails.includes(user.email);
+    isAdmin = !!user && adminEmails.includes((user.email || '').toLowerCase());
     isMod = isAdmin;
     if (user && !isMod) {
       try { const m = await F.getDoc(F.doc(fs, 'moderators', user.uid)); isMod = m.exists(); } catch {}
@@ -302,7 +302,11 @@ function liveDB() {
           for (let i = 0; i < bin.length && i < bm.length; i++) bm[i] = bin.charCodeAt(i);
         }
         let added = 0;
-        for (const cid of [data.classId, data.partnerId]) {
+        // Re-derive the partner from classId (matching pairOf's mirrorOf) rather
+        // than trusting the submitter-supplied partnerId, so a forged value can't
+        // flip an unrelated position's done-bit.
+        const partnerId = mirrorOf(E.unidx(data.classId));
+        for (const cid of [data.classId, partnerId]) {
           const o = ordinalOf(cid);
           if (o >= 0 && !(bm[o >> 3] & (1 << (o & 7)))) { bm[o >> 3] |= 1 << (o & 7); added++; }
         }
@@ -420,7 +424,7 @@ async function pageHome(main) {
 
 /* ---------------- class / pair page ---------------- */
 function copyBtn(text) {
-  return h('button', { class: 'copy', title: 'Copy', onclick: ev => {
+  return h('button', { class: 'copy', title: 'Copy', 'aria-label': 'Copy', onclick: ev => {
     (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
       .then(() => toast('Copied'))
       .catch(() => { const ta = h('textarea', null, text); document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied'); });
@@ -441,14 +445,25 @@ function sidePanel(side, label, doneSet, exactView) {
     (() => {
       const vs = { mode: '2d', M: R.viewMatrix(R.DEFAULT_VIEW.yaw, R.DEFAULT_VIEW.pitch) };
       const netBox = h('div', { class: 'netwrap' });
+      const resetView = () => { vs.M = R.viewMatrix(R.DEFAULT_VIEW.yaw, R.DEFAULT_VIEW.pitch); draw(); };
       const draw = () => {
-        netBox.innerHTML = vs.mode === '2d'
-          ? R.netSVG(shownState, 330)
-          : R.iso3dSVG(shownState, 215, vs.M);
-        netBox.classList.toggle('grab', vs.mode === '3d');
+        const is3d = vs.mode === '3d';
+        netBox.innerHTML = is3d ? R.iso3dSVG(shownState, 215, vs.M) : R.netSVG(shownState, 330);
+        netBox.classList.toggle('grab', is3d);
+        // keyboard access: only the 3D view is interactive, so only it is focusable
+        if (is3d) { netBox.setAttribute('tabindex', '0'); netBox.setAttribute('aria-label', '3D puzzle view \u2014 arrow keys rotate, Home or Escape resets'); }
+        else { netBox.removeAttribute('tabindex'); netBox.removeAttribute('aria-label'); }
       };
-      const b2 = h('button', { class: 'viewbtn on', onclick: () => { vs.mode = '2d'; b2.classList.add('on'); b3.classList.remove('on'); hint.textContent = ''; draw(); } }, '2D');
-      const b3 = h('button', { class: 'viewbtn', onclick: () => { vs.mode = '3d'; b3.classList.add('on'); b2.classList.remove('on'); hint.textContent = 'drag to rotate \u00b7 double-click to reset'; draw(); } }, '3D');
+      const setMode = (mode) => {
+        vs.mode = mode; const is3d = mode === '3d';
+        b3.classList.toggle('on', is3d); b2.classList.toggle('on', !is3d);
+        b3.setAttribute('aria-pressed', is3d ? 'true' : 'false'); b2.setAttribute('aria-pressed', is3d ? 'false' : 'true');
+        hint.textContent = is3d ? 'drag or arrow keys to rotate \u00b7 double-click or Home to reset' : '';
+        draw();
+        if (is3d) netBox.focus();
+      };
+      const b2 = h('button', { class: 'viewbtn on', 'aria-pressed': 'true', onclick: () => setMode('2d') }, '2D');
+      const b3 = h('button', { class: 'viewbtn', 'aria-pressed': 'false', onclick: () => setMode('3d') }, '3D');
       const hint = h('span', { class: 'viewhint' });
       let drag = null;
       netBox.addEventListener('pointerdown', ev => { if (vs.mode !== '3d') return; drag = { x: ev.clientX, y: ev.clientY }; try { netBox.setPointerCapture(ev.pointerId); } catch (e) {} });
@@ -458,7 +473,18 @@ function sidePanel(side, label, doneSet, exactView) {
         drag = { x: ev.clientX, y: ev.clientY }; draw();
       });
       netBox.addEventListener('pointerup', () => { drag = null; });
-      netBox.addEventListener('dblclick', () => { if (vs.mode === '3d') { vs.M = R.viewMatrix(R.DEFAULT_VIEW.yaw, R.DEFAULT_VIEW.pitch); draw(); } });
+      netBox.addEventListener('dblclick', () => { if (vs.mode === '3d') resetView(); });
+      netBox.addEventListener('keydown', ev => {
+        if (vs.mode !== '3d') return;
+        const s = 0.18;
+        if (ev.key === 'ArrowLeft') vs.M = R.rotateView(vs.M, -s, 0);
+        else if (ev.key === 'ArrowRight') vs.M = R.rotateView(vs.M, s, 0);
+        else if (ev.key === 'ArrowUp') vs.M = R.rotateView(vs.M, 0, -s);
+        else if (ev.key === 'ArrowDown') vs.M = R.rotateView(vs.M, 0, s);
+        else if (ev.key === 'Home' || ev.key === 'Escape') { resetView(); ev.preventDefault(); return; }
+        else return;
+        draw(); ev.preventDefault();
+      });
       draw();
       return h('div', null, h('div', { class: 'viewtoggle' }, b2, b3, hint), netBox);
     })(),
@@ -484,17 +510,33 @@ function symPopup(v, i, total) {
       h('code', { class: 'mono scr' }, scr), copyBtn(scr));
   };
   show(false);
-  const esc = ev => { if (ev.key === 'Escape') close(); };
-  const ov = h('div', { class: 'modal-ov', onclick: ev => { if (ev.target === ov) close(); } },
-    h('div', { class: 'modal-box', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'rotation view' },
-      h('button', { class: 'modal-x', 'aria-label': 'close', onclick: () => close() }, '\u00d7'),
-      h('div', { class: 'symhead' }, 'rotation ' + (i + 1) + ' of ' + total),
-      h('div', { class: 'netwrap modal-net', html: R.netSVG(v.state, 280) }),
-      scrLine,
-      h('button', { class: 'ghost sm', onclick: () => show(true) }, 'show me another scramble')));
-  function close() { ov.remove(); document.removeEventListener('keydown', esc); }
-  document.addEventListener('keydown', esc);
+  const prevFocus = document.activeElement;          // restore focus here on close
+  const closeX = h('button', { class: 'modal-x', 'aria-label': 'close', onclick: () => close() }, '\u00d7');
+  const box = h('div', { class: 'modal-box', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'rotation view' },
+    closeX,
+    h('div', { class: 'symhead' }, 'rotation ' + (i + 1) + ' of ' + total),
+    h('div', { class: 'netwrap modal-net', html: R.netSVG(v.state, 280) }),
+    scrLine,
+    h('button', { class: 'ghost sm', onclick: () => show(true) }, 'show me another scramble'));
+  const ov = h('div', { class: 'modal-ov', onclick: ev => { if (ev.target === ov) close(); } }, box);
+  // Escape closes; Tab/Shift+Tab is trapped inside the dialog (aria-modal promises it).
+  const onKey = ev => {
+    if (ev.key === 'Escape') { close(); return; }
+    if (ev.key !== 'Tab') return;
+    const f = box.querySelectorAll('button, [href], input, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (ev.shiftKey && document.activeElement === first) { last.focus(); ev.preventDefault(); }
+    else if (!ev.shiftKey && document.activeElement === last) { first.focus(); ev.preventDefault(); }
+  };
+  function close() {
+    ov.remove();
+    document.removeEventListener('keydown', onKey);
+    if (prevFocus && prevFocus.focus) prevFocus.focus();   // return focus to the trigger
+  }
+  document.addEventListener('keydown', onKey);
   document.body.appendChild(ov);
+  closeX.focus();                                          // move focus into the dialog
 }
 async function pageClass(main, anyId) {
   if (!(anyId >= 0) || anyId >= E.NSLOTS || T.dist[anyId] < 0) { main.appendChild(h('div', { class: 'card error' }, 'That position doesn\u2019t exist \u2014 check the link and try again.')); return; }
@@ -715,11 +757,13 @@ function pageAbout(main) {
 /* ---------------- boot ---------------- */
 async function boot() {
   const bootEl = $('#boot-status');
-  const label = $('#boot-label'), barEl = $('#boot-bar');
+  const label = $('#boot-label'), barEl = $('#boot-bar'), trackEl = $('#boot-track');
   const report = (stage, n, total) => {
     const names = { cache: 'Loading cached tables', bfs: 'Mapping all 933,120 positions', classes: 'Condensing symmetries' };
+    const pct = Math.round(100 * n / total);
     label.textContent = (names[stage] || stage) + '\u2026';
-    barEl.style.width = Math.round(100 * n / total) + '%';
+    barEl.style.width = pct + '%';
+    if (trackEl) trackEl.setAttribute('aria-valuenow', pct);   // announce progress to AT
   };
   DB = (window.OOAccount.mode === 'live') ? liveDB() : demoDB();
   DB.onChange(() => render());

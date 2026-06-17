@@ -28,66 +28,19 @@ write access.
 
 ## 3. Firestore security rules
 
-Set these in the Firebase console (Firestore → Rules), replacing the uid:
+The rules are version-controlled in [`firestore.rules`](firestore.rules) (wired up
+by [`firebase.json`](firebase.json)) — they are the real authorization boundary
+(`adminEmails` in `config.js` only gates the admin UI). Set the admin uid in
+`firestore.rules` (the OO page shows your user id when signed in), then deploy:
 
 ```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    function isAdmin() {
-      return request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID';
-    }
-    function isMod() {
-      return isAdmin()
-        || (request.auth != null
-            && exists(/databases/$(database)/documents/moderators/$(request.auth.uid)));
-    }
-
-    // per-user data: solver prefs + trainer progress (own doc only)
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    match /solutions/{id} {
-      allow read: if resource.data.status == 'approved'
-        || isMod()
-        || (request.auth != null && request.auth.uid == resource.data.uid);
-      allow create: if request.auth != null
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.moves is int
-        && request.resource.data.moves >= 1 && request.resource.data.moves <= 15
-        && request.resource.data.solution is string
-        && request.resource.data.solution.size() > 0
-        && request.resource.data.solution.size() < 300
-        && request.resource.data.classId is int
-        && request.resource.data.partnerId is int
-        && request.resource.data.pairId is int;
-      allow update: if isMod();
-      allow delete: if isAdmin();
-    }
-
-    match /meta/{doc} {
-      allow read: if true;
-      allow write: if isMod();
-    }
-
-    match /moderators/{uid} {
-      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow create: if isAdmin()
-        || (request.auth != null && request.auth.uid == uid
-            && exists(/databases/$(database)/documents/moderatorInvites/$(request.auth.token.email)));
-      allow delete: if isAdmin();
-    }
-
-    match /moderatorInvites/{email} {
-      allow read: if isAdmin() || (request.auth != null && request.auth.token.email == email);
-      allow create, delete: if isAdmin();
-    }
-  }
-}
+firebase deploy --only firestore:rules
 ```
+
+You can also paste the file's contents into the Firebase console (Firestore →
+Rules) if you'd rather not use the CLI. See the header comment in
+`firestore.rules` for a recommended hardening (drive admin from an `admins/{uid}`
+collection instead of a hardcoded uid).
 
 > Note: the algorithm sheet no longer uses Firestore. Editing happens in
 > `data/pyraminx_algs.json` (directly or via the Algorithms page's Export), so

@@ -31,7 +31,12 @@ const ROOT = path.resolve(__dirname, '..');
 globalThis.window = {};
 require(path.join(ROOT, 'js', 'engine.js'));
 const E = globalThis.window.OOEngine;
-const OLD = require(path.join(ROOT, 'js', 'sheet.js')).SHEET;
+// Carry-forward baseline. Read from a COMMITTED snapshot (data/prior-sheet.json),
+// not the compiler's own output (js/sheet.js), so the build is reproducible from
+// version-controlled inputs alone — deleting/regenerating js/sheet.js can no longer
+// silently drop the cases/algs that are carried forward but not reproduced by the
+// JSON. Re-baseline by overwriting prior-sheet.json with a freshly built sheet.
+const OLD = require(path.join(ROOT, 'data', 'prior-sheet.json'));
 const J = require(path.join(ROOT, 'data', 'pyraminx_algs.json'));
 
 // keying + alg→case helpers are the engine's single source of truth.
@@ -51,7 +56,7 @@ const casePart = (name) => String(name).split(' · ').slice(-1)[0];
 
 // ---- pass 1: group every alg by the canonical key it actually solves ----
 const byKey = {}; // canon -> { items:[{alg, renderKey, label, deferred}] }
-const report = { algs: 0, skipped: [], centerCollisions: 0, mislabels: 0, renames: [], carried: 0, primaryNew: 0, deferredKeys: 0, keptBroken: 0 };
+const report = { algs: 0, skipped: [], centerCollisions: 0, mislabels: 0, misfiled: [], renames: [], carried: 0, primaryNew: 0, deferredKeys: 0, keptBroken: 0 };
 function collect(subsetKey, caseName, alg) {
   report.algs++;
   const cs = caseStateOf(alg.alg);
@@ -102,7 +107,13 @@ for (const [canon, rec] of Object.entries(byKey)) {
     emit(MAIN, canon, primary, name);
     if (!OLD.CNAME[canon]) report.primaryNew++;
     else if (OLD.CNAME[canon] !== name) report.renames.push(canon + ' :: ' + OLD.CNAME[canon] + ' -> ' + name);
-    for (const it of primary) if (it.label !== name) report.mislabels++;
+    // A real (non-tautological) check: an alg authored under one case but
+    // grouped under a different CASE (not just an ML4E-L/-R prefix flip) is a
+    // genuine mis-file — surface it. Advisory only; it does not fail the build.
+    for (const it of primary) if (it.label !== name) {
+      report.mislabels++;
+      if (casePart(it.label) !== casePart(name)) report.misfiled.push(casePart(it.label) + ' → ' + casePart(name) + '   [' + it.alg + ']');
+    }
   }
   if (deferred.length) {
     if (rec.items.some(it => !it.deferred) || OLD.CNAME[canon]) report.centerCollisions += deferred.length;
@@ -211,6 +222,21 @@ const distinctMain = new Set(Object.values(MAIN.CNAME)).size;
 console.log(check ? '== compile (--check, not written) ==' : '== compiled js/sheet.js ==');
 console.log('algs read:', report.algs, '| skipped (unparseable):', report.skipped.length);
 report.skipped.forEach(s => console.log('   SKIP', s));
+// Build hardening: a NEW unparseable alg is silent data loss from the source of
+// truth, so it must fail the build. The two entries below are known-broken
+// "X2"-notation algs in a deferred subset (unparseable AND they don't solve "4
+// Flip"); they're allowlisted so the build stays green until the data is fixed,
+// while any other skip trips the gate.
+const SKIP_ALLOW = new Set([
+  "L4E Building Blocks / 4 Flip: R U' R' L' U L X2",
+  "L4E Building Blocks / 4 Flip: L' U L R U' R' X2",
+]);
+const unexpectedSkips = report.skipped.filter(s => !SKIP_ALLOW.has(s));
+if (unexpectedSkips.length) {
+  process.exitCode = 1;
+  console.error('*** ' + unexpectedSkips.length + ' UNEXPECTED unparseable alg(s) — failing build (fix the JSON or extend parseAlg):');
+  unexpectedSkips.forEach(s => console.error('   SKIP ' + s));
+}
 console.log('MAIN  keys  ALG:', Object.keys(MAIN.ALG).length, 'NAME:', Object.keys(MAIN.NAME).length,
   'CNAME:', Object.keys(MAIN.CNAME).length, 'PRES:', Object.keys(MAIN.PRES).length, '| distinct names:', distinctMain);
 console.log('DEFERRED keys ALG:', Object.keys(DEF.ALG).length, 'CNAME:', Object.keys(DEF.CNAME).length);
@@ -219,6 +245,14 @@ console.log('primary-new cases (added to drilled surface):', report.primaryNew);
 console.log('center-twist collisions (deferred algs routed to DEFERRED):', report.centerCollisions);
 console.log('within-primary mislabeled algs (filed under the case they solve):', report.mislabels);
 console.log('OLD broken algs kept (only where a canonical would otherwise be empty):', report.keptBroken);
+// Advisory: algs authored under a different CASE than they actually solve. Not a
+// build failure (the alg still ships under the case it geometrically solves), but
+// each is a likely authoring typo worth a look — the tautological self-check below
+// can't catch these.
+if (report.misfiled.length) {
+  console.log('\nADVISORY: ' + report.misfiled.length + ' alg(s) authored under a different case than they solve:');
+  report.misfiled.forEach(s => console.log('   MISFILED ' + s));
+}
 
 // coverage guarantee vs old
 const gaps = Object.keys(OLD.CNAME).filter(k => !MAIN.CNAME[k]);

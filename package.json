@@ -6,7 +6,7 @@
   "scripts": {
     "build:sheet": "node tools/compile-sheet.mjs",
     "build:trainer": "npm run build:sheet && node build.mjs",
-    "build": "npm run build:trainer",
+    "build": "npm run build:trainer && npm run check",
     "watch:trainer": "node build.mjs --watch",
     "check": "node tools/check-sheet.mjs",
     "test": "node tools/check-sheet.mjs"
