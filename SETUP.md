@@ -21,26 +21,27 @@ the Firestore security rules below. Leave `firebase: null` to run in demo mode.
 
 ## 2. Become the admin
 
-The OO page shows your account's **user id** when you're signed in. Paste it into
-`isAdmin()` in the Firestore rules so your account is the admin. `adminEmails` in
-`config.js` gates the admin UI client-side; the rules are what actually enforce
-write access.
+Admin is driven by an `admins/{uid}` collection (the rules trust any uid with a
+doc there). The OO page shows your account's **user id** when you're signed in;
+create a document `admins/{your-uid}` (any contents) in the Firebase console —
+console writes bypass the rules, which is how you bootstrap the first admin.
+After that, existing admins can grant/revoke others. `adminEmails` in `config.js`
+only gates the admin UI client-side; the rules are what actually enforce writes.
 
 ## 3. Firestore security rules
 
 The rules are version-controlled in [`firestore.rules`](firestore.rules) (wired up
 by [`firebase.json`](firebase.json)) — they are the real authorization boundary
-(`adminEmails` in `config.js` only gates the admin UI). Set the admin uid in
-`firestore.rules` (the OO page shows your user id when signed in), then deploy:
+(`adminEmails` in `config.js` only gates the admin UI). Deploy them with:
 
 ```
 firebase deploy --only firestore:rules
 ```
 
 You can also paste the file's contents into the Firebase console (Firestore →
-Rules) if you'd rather not use the CLI. See the header comment in
-`firestore.rules` for a recommended hardening (drive admin from an `admins/{uid}`
-collection instead of a hardcoded uid).
+Rules) if you'd rather not use the CLI. Admin access comes from the `admins/{uid}`
+collection (step 2) — no per-deploy uid edit needed — so deploy only once your
+own `admins/{uid}` doc exists, or admin writes lock out until you create it.
 
 > Note: the algorithm sheet no longer uses Firestore. Editing happens in
 > `data/pyraminx_algs.json` (directly or via the Algorithms page's Export), so

@@ -296,49 +296,9 @@ const BAR_ROT = { DL: 0, DR: 1, DF: 2 };
 const L4E_ROT = { DF: 0, DL: 1, DR: 2 };
 
 // ---------- state enumeration ----------
-function permutationsOf(arr) {
-  if (arr.length <= 1) return [arr];
-  const out = [];
-  for (let i = 0; i < arr.length; i++) {
-    const rest = arr.slice(0, i).concat(arr.slice(i + 1));
-    for (const p of permutationsOf(rest)) out.push([arr[i]].concat(p));
-  }
-  return out;
-}
-function permParity(p) {
-  let par = 0;
-  const seen = new Array(p.length).fill(false);
-  for (let i = 0; i < p.length; i++) {
-    if (seen[i]) continue;
-    let j = i, len = 0;
-    while (!seen[j]) { seen[j] = true; j = p[j]; len++; }
-    par ^= (len - 1) & 1;
-  }
-  return par;
-}
-// scramble `freeSlots`, keep every other edge solved
-function enumerateSpace(freeSlots) {
-  const out = [];
-  const fixed = [0, 1, 2, 3, 4, 5].filter((s) => !freeSlots.includes(s));
-  for (const perm of permutationsOf(freeSlots)) {
-    const full = [0, 1, 2, 3, 4, 5];
-    freeSlots.forEach((slot, i) => { full[slot] = perm[i]; });
-    if (permParity(full) !== 0) continue;
-    const n = freeSlots.length;
-    for (let bits = 0; bits < 1 << n; bits++) {
-      let sum = 0;
-      for (let i = 0; i < n; i++) sum += (bits >> i) & 1;
-      if (sum % 2) continue;
-      const e = [];
-      for (let slot = 0; slot < 6; slot++) {
-        const fi = freeSlots.indexOf(slot);
-        e.push(full[slot], fi >= 0 ? (bits >> fi) & 1 : 0);
-      }
-      out.push({ e, c: [0, 0, 0] });
-    }
-  }
-  return out;
-}
+// "scramble freeSlots, keep every other edge solved" — single source = engine.
+// (States carry a harmless u:0; the trainer's keys/indices never read it.)
+const enumerateSpace = E.enumFreeSlots;
 
 // ---------- sets ----------
 const SETS = [

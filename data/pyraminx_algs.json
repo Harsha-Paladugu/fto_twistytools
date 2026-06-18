@@ -10682,10 +10682,10 @@
           "section": "Flipped Edges",
           "algs": [
             {
-              "alg": "R U' R' L' U L X2"
+              "alg": "R U' R' L' U L R U' R' L' U L"
             },
             {
-              "alg": "L' U L R U' R' X2"
+              "alg": "L' U L R U' R' L' U L R U' R'"
             }
           ]
         },

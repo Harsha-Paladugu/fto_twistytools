@@ -47,46 +47,9 @@ function makeSolverCore(E, dist) {
     return out;
   }
 
-  /* ---------- pools (port of the trainer's Sl) ---------- */
-  function perms(arr) {
-    if (arr.length <= 1) return [arr];
-    const out = [];
-    for (let i = 0; i < arr.length; i++) {
-      const rest = arr.slice(0, i).concat(arr.slice(i + 1));
-      for (const p of perms(rest)) out.push([arr[i]].concat(p));
-    }
-    return out;
-  }
-  function permParity(p) {
-    let par = 0; const seen = new Array(p.length).fill(false);
-    for (let i = 0; i < p.length; i++) {
-      if (seen[i]) continue;
-      let j = i, len = 0;
-      while (!seen[j]) { seen[j] = true; j = p[j]; len++; }
-      par ^= (len - 1) & 1;
-    }
-    return par;
-  }
-  function pool(freeSlots) { // states: listed slots scrambled (even perm, even flips), rest solved, c=[0,0,0]
-    const out = [];
-    for (const asg of perms(freeSlots)) {
-      const full = [0, 1, 2, 3, 4, 5];
-      freeSlots.forEach((slot, i) => { full[slot] = asg[i]; });
-      if (permParity(full) !== 0) continue;
-      const n = freeSlots.length;
-      for (let bits = 0; bits < (1 << n); bits++) {
-        let pc = 0; for (let b = 0; b < n; b++) pc += (bits >> b) & 1;
-        if (pc % 2) continue;
-        const e = [];
-        for (let s = 0; s < 6; s++) {
-          const k = freeSlots.indexOf(s);
-          e.push(full[s], k >= 0 ? (bits >> k) & 1 : 0);
-        }
-        out.push({ e, c: [0, 0, 0], u: 0 });
-      }
-    }
-    return out;
-  }
+  /* ---------- pools (single source = engine.enumFreeSlots) ---------- */
+  // states: listed slots scrambled (even perm, even flips), rest solved, c=[0,0,0], u=0
+  const pool = E.enumFreeSlots;
   const HOME_FREE = [0, 1, 2, 3];                       // V at DL+DR
   const ANGLE_FREE = [[0, 1, 2, 4], [0, 1, 2, 5]];      // V at DF+DR / DF+DL
   const L5E_FREE = [[0, 1, 2, 3, 4], [0, 1, 2, 3, 5], [0, 1, 2, 4, 5]];

@@ -7,24 +7,21 @@ rules_version = '2';
 //
 //   firebase deploy --only firestore:rules
 //
-// IMPORTANT: set the admin uid below. The OO page shows your account's user id
-// when you're signed in (see SETUP.md). `adminEmails` in js/config.js only gates
-// the admin UI client-side — these rules are what actually enforce writes.
+// Admin is driven by an `admins/{uid}` collection (not a hardcoded uid), so
+// adding/removing admins needs no rules edit or redeploy. The OO page shows your
+// account's user id when you're signed in (see SETUP.md). `adminEmails` in
+// js/config.js only gates the admin UI client-side — these rules enforce writes.
 //
-// Recommended hardening (not applied here to avoid changing a live deployment):
-// replace the hardcoded uid with an `admins/{uid}` collection lookup, e.g.
-//   function isAdmin() {
-//     return request.auth != null
-//       && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-//   }
-// then bootstrap one `admins/{your-uid}` doc via the console. That removes the
-// per-deploy edit below — but deploy it only after creating that doc, or admin
-// writes lock out until you do.
+// BOOTSTRAP: create the first `admins/{your-uid}` document in the Firebase
+// console (console writes bypass rules) before relying on admin access; after
+// that, existing admins can manage the collection. Deploy these rules only once
+// that doc exists, or admin writes lock out until you create it.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isAdmin() {
-      return request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID';
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
     function isMod() {
       return isAdmin()
@@ -72,6 +69,13 @@ service cloud.firestore {
     match /moderatorInvites/{email} {
       allow read: if isAdmin() || (request.auth != null && request.auth.token.email == email);
       allow create, delete: if isAdmin();
+    }
+
+    // admin allowlist: who isAdmin() trusts. Bootstrap the first entry via the
+    // console; thereafter only existing admins can grant/revoke admin.
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if isAdmin();
     }
   }
 }

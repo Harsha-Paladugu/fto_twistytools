@@ -223,14 +223,9 @@ console.log(check ? '== compile (--check, not written) ==' : '== compiled js/she
 console.log('algs read:', report.algs, '| skipped (unparseable):', report.skipped.length);
 report.skipped.forEach(s => console.log('   SKIP', s));
 // Build hardening: a NEW unparseable alg is silent data loss from the source of
-// truth, so it must fail the build. The two entries below are known-broken
-// "X2"-notation algs in a deferred subset (unparseable AND they don't solve "4
-// Flip"); they're allowlisted so the build stays green until the data is fixed,
-// while any other skip trips the gate.
-const SKIP_ALLOW = new Set([
-  "L4E Building Blocks / 4 Flip: R U' R' L' U L X2",
-  "L4E Building Blocks / 4 Flip: L' U L R U' R' X2",
-]);
+// truth, so any skipped (unparseable) alg fails the build. Add an entry here only
+// to deliberately tolerate a known-bad alg.
+const SKIP_ALLOW = new Set([]);
 const unexpectedSkips = report.skipped.filter(s => !SKIP_ALLOW.has(s));
 if (unexpectedSkips.length) {
   process.exitCode = 1;
