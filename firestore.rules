@@ -47,8 +47,11 @@ service cloud.firestore {
         && request.resource.data.solution.size() > 0
         && request.resource.data.solution.size() < 300
         && request.resource.data.classId is int
+        && request.resource.data.classId >= 0 && request.resource.data.classId < 3732480
         && request.resource.data.partnerId is int
-        && request.resource.data.pairId is int;
+        && request.resource.data.partnerId >= 0 && request.resource.data.partnerId < 3732480
+        && request.resource.data.pairId is int
+        && request.resource.data.pairId >= 0 && request.resource.data.pairId < 3732480;
       allow update: if isMod();
       allow delete: if isAdmin();
     }

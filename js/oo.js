@@ -110,6 +110,9 @@ function ordinalOf(classId) { // binary search in reps
 }
 const canonOf = s => E.makeCanon(T.syms)(s);
 const mirrorOf = s => E.makeMirrorCanon(T.syms)(s);
+// a state index is usable only if it's an in-range integer (E.unidx has no bounds
+// guard); client-side mirror of the Firestore create-rule bounds.
+const validId = id => Number.isInteger(id) && id >= 0 && id < E.NSLOTS;
 function variantsOf(classId) { // unique rotation variants of a class, each with its sym
   const s = E.unidx(classId), seen = new Set(), out = [];
   for (const sym of T.syms.rots) {
@@ -219,7 +222,12 @@ function liveDB() {
   // Recompute moderator/admin status whenever the shared session changes.
   async function recomputeRole() {
     const user = A.user;
-    isAdmin = !!user && adminEmails.includes((user.email || '').toLowerCase());
+    // Source of truth for admin is the admins/{uid} collection (what the rules
+    // enforce); adminEmails is kept as a bootstrap/display convenience so the
+    // owner sees the admin UI before creating their admins doc.
+    let adminDoc = false;
+    if (user) { try { adminDoc = (await F.getDoc(F.doc(fs, 'admins', user.uid))).exists(); } catch {} }
+    isAdmin = !!user && (adminDoc || adminEmails.includes((user.email || '').toLowerCase()));
     isMod = isAdmin;
     if (user && !isMod) {
       try { const m = await F.getDoc(F.doc(fs, 'moderators', user.uid)); isMod = m.exists(); } catch {}
@@ -685,6 +693,15 @@ async function pageMod(main) {
   main.appendChild(head);
   if (!items.length) main.appendChild(h('p', { class: 'empty' }, 'Nothing to review right now \u2014 the queue refreshes when you reopen this tab.'));
   for (const s of items) {
+    // a malformed submission (out-of-range ids from a direct/forged write) would
+    // make pairOf -> E.unidx produce garbage; surface it as rejectable, don't render it.
+    if (!(validId(s.classId) && validId(s.partnerId) && validId(s.pairId))) {
+      main.appendChild(h('section', { class: 'card modrow' },
+        h('div', { class: 'modbody' }, h('div', { class: 'verifyline bad' }, '✗ malformed submission — out-of-range puzzle ids')),
+        h('div', { class: 'modacts' },
+          h('button', { class: 'danger', onclick: async () => { await DB.review(s.id, 'rejected'); toast('Rejected.'); render(); } }, 'Reject'))));
+      continue;
+    }
     const pr = pairOf(s.classId);
     const v = verifySolution(s.solution, pr);
     const row = h('section', { class: 'card modrow' },

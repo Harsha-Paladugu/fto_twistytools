@@ -6,7 +6,13 @@
 //     tips drawn twisted together with their axial center), plus a small inset showing
 //     the bottom (D) face as seen by tipping the puzzle forward.
 // 3D: orthographic render of the real tetrahedron, rotatable (yaw/pitch).
-const E = typeof require !== 'undefined' ? require('./engine.js') : window.OOEngine;
+// Browser loads engine.js first (window.OOEngine). Node tools stub
+// globalThis.window before requiring engine.js for its side effect, so read the
+// global there too — require('./engine.js') returns {} (engine attaches to
+// window, not module.exports). The require() is only a last resort.
+const E = (typeof window !== 'undefined' && window.OOEngine) ? window.OOEngine
+  : (typeof globalThis !== 'undefined' && globalThis.window && globalThis.window.OOEngine) ? globalThis.window.OOEngine
+  : (typeof require !== 'undefined' ? require('./engine.js') : null);
 
 const COLORS = { F: '#3fbf52', Lf: '#e8473d', Rf: '#3a7fe8', D: '#f2cf3c' };
 // per-face brightness, as in the trainer (depth cue); D inset is its own viewpoint
