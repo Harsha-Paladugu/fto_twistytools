@@ -185,9 +185,9 @@ function makeSolverCore(E, dist) {
 
   /* ---------- ergonomics: grip-state DP over renderings ---------- */
   const ERGO_DEFAULTS = {
-    wrist: 1.0, flickU: 1.0, bCold: 2.0, bSetup: 1.0, wide: 1.75,
-    silentReset: 0.6, altBonus: 0.25, uBusy: 0.3, rotCost: 0, grace: 2,
-    displacedTax: 0.12, startDelay: 0.2, bWindow: 2,
+    wrist: 1.0, flickU: 1.0, bBase: 2.0, bColdExtra: 1.5, wide: 3.0,
+    silentReset: 1.5, altBonus: 0.3, uBusy: 0.3, rotCost: 0,
+    excursion: 0.5, bWindow: 1,
   };
   // physical token list (ints 0..7) -> { score, tokens (display strings; Rw/Lw substituted when cheaper) }
   // detail=true also returns `breakdown`: { start, steps:[{tok,cost,parts:[{label,val}]}], rotation, total }
@@ -201,14 +201,16 @@ function makeSolverCore(E, dist) {
     const ensureFrame = f => { const k = frameKey(f); if (!frameIdx.has(k)) { frameIdx.set(k, frames.length); frames.push(f); } return frameIdx.get(k); };
     // DP state: (frame, dialL, dialR, sinceL, sinceR, lastHand)
     // dial: thumb position relative to home (-1 bottom, 0 front, +1 top by that hand's CW);
-    // since: moves since that hand last turned its wrist (capped, for the B setup window);
+    // since: moves since that hand last placed its thumb (capped; drives the B set-up
+    // window and the excursion tax). Start grips are FREE — like rotations, you set them
+    // during inspection — and a thumb that starts raised counts as freshly placed, which
+    // is what makes an opening B set-up-priced (this replaces the old `grace` rule).
     const CAP = 5;
     const startStates = new Map();
     for (const dl of [-1, 0, 1]) for (const dr of [-1, 0, 1]) {
-      const c0 = (dl !== 0 ? w.startDelay : 0) + (dr !== 0 ? w.startDelay : 0);
-      const st0 = { cost: c0, toks: [] };
-      if (detail) st0.det = { start: { dl, dr, cost: c0 }, steps: [] };
-      startStates.set('0|' + dl + '|' + dr + '|' + CAP + '|' + CAP + '|n', st0);
+      const st0 = { cost: 0, toks: [] };
+      if (detail) st0.det = { start: { dl, dr, cost: 0 }, steps: [] };
+      startStates.set('0|' + dl + '|' + dr + '|' + (dl === 1 ? 0 : CAP) + '|' + (dr === 1 ? 0 : CAP) + '|n', st0);
     }
     let layer = startStates;
     for (let i = 0; i < seq.length; i++) {
@@ -222,10 +224,8 @@ function makeSolverCore(E, dist) {
         const renders = [{ kind: 'base', letter: written }];
         if (written === 'L' || written === 'R') renders.push({ kind: 'wide', letter: written === 'L' ? 'R' : 'L' });
         for (const r of renders) {
-          let cost = 0, dl = +dl0, dr = +dr0, sl = +sl0, sr = +sr0;
-          let hand = null, tok, nf = +fI;
-          const parts = detail ? [] : null;
           const L = r.letter;
+          let tok, nf = +fI;
           if (r.kind === 'wide') {
             tok = L + 'w' + (prime ? "'" : '');
             // wide frame change per engine: Xw applies move WIDE[X][0] + rotation about WIDE[X][1]
@@ -236,44 +236,54 @@ function makeSolverCore(E, dist) {
             for (let q = 0; q < steps; q++) f2 = E.composeSym(rotBy[physAxis], f2);
             nf = ensureFrame(f2);
           } else tok = L + (prime ? "'" : '');
+          // a render can admit several executions (which hand flicks a U, which index
+          // pokes a B); the DP branches on ALL of them and keeps the min per state, so
+          // the alternation bonus is credited to the genuinely best hand assignment
+          const options = [];
           if (L === 'L' || L === 'R') {
             // wrist move; the executing hand is the letter's hand (a wide is the SAME wrist
             // motion as its underlying move done by the other hand's letter -- Rw acts like an L)
-            hand = (r.kind === 'wide') ? (L === 'R' ? 'right' : 'left') : (L === 'L' ? 'left' : 'right');
-            cost += r.kind === 'wide' ? w.wide : w.wrist;
-            if (parts) parts.push({ label: r.kind === 'wide' ? 'wide' : 'turn', val: r.kind === 'wide' ? w.wide : w.wrist });
-            const dir = prime ? -1 : 1;
-            // dial sense: right hand R = +1; left hand L' = +1 (thumb toward top), mirrored
-            const delta = hand === 'right' ? dir : -dir;
-            let cur = hand === 'left' ? dl : dr;
-            let nd = cur + delta;
-            if (Math.abs(nd) > 1) { cost += w.silentReset; nd = delta; if (parts) parts.push({ label: 'hidden regrip', val: w.silentReset }); }
-            if (hand === 'left') { dl = nd; sl = 0; sr = Math.min(CAP, sr + 1); }
-            else { dr = nd; sr = 0; sl = Math.min(CAP, sl + 1); }
+            const hand = (r.kind === 'wide') ? (L === 'R' ? 'right' : 'left') : (L === 'L' ? 'left' : 'right');
+            options.push({ hand, base: r.kind === 'wide' ? w.wide : w.wrist, label: r.kind === 'wide' ? 'wide' : 'turn', wrist: true });
           } else if (L === 'U') {
-            const cl = dl !== 0 ? w.uBusy : 0, cr = dr !== 0 ? w.uBusy : 0;
-            hand = cl <= cr ? 'left' : 'right';
-            cost += w.flickU + Math.min(cl, cr);
-            if (parts) { parts.push({ label: 'U flick', val: w.flickU }); if (Math.min(cl, cr) > 0) parts.push({ label: 'busy U', val: Math.min(cl, cr) }); }
-            sl = Math.min(CAP, sl + 1); sr = Math.min(CAP, sr + 1);
-          } else { // B: cheap only with a thumb up top AND recently placed there, or out of inspection
-            const setup = (dr === 1 && sr <= w.bWindow) || (dl === 1 && sl <= w.bWindow) || i < w.grace;
-            cost += setup ? w.bSetup : w.bCold;
-            if (parts) parts.push({ label: setup ? 'B set-up' : 'B cold', val: setup ? w.bSetup : w.bCold });
-            hand = (dr === 1 && sr <= w.bWindow) ? 'right' : (dl === 1 && sl <= w.bWindow) ? 'left' : 'right';
-            sl = Math.min(CAP, sl + 1); sr = Math.min(CAP, sr + 1);
+            for (const hand of ['left', 'right']) {
+              const busy = (hand === 'left' ? +dl0 : +dr0) !== 0 ? w.uBusy : 0;
+              options.push({ hand, base: w.flickU, label: 'U flick', extra: busy ? { label: 'busy U', val: busy } : null });
+            }
+          } else { // B: cheap only with that hand's thumb up top AND recently placed there
+            for (const hand of ['left', 'right']) {
+              const dial = hand === 'left' ? +dl0 : +dr0, since = hand === 'left' ? +sl0 : +sr0;
+              const setup = dial === 1 && since <= w.bWindow;
+              options.push({ hand, base: setup ? w.bBase : w.bBase + w.bColdExtra, label: setup ? 'B set-up' : 'B cold' });
+            }
           }
-          if (lh0 !== 'n' && lh0 !== hand) { cost -= w.altBonus; if (parts) parts.push({ label: 'alternation', val: -w.altBonus }); }       // hand alternation flows
-          const disp = (dl !== 0 ? 1 : 0) + (dr !== 0 ? 1 : 0);
-          cost += disp * w.displacedTax; // time away from home grip
-          if (parts && disp > 0) parts.push({ label: 'away-from-home' + (disp > 1 ? ' ×' + disp : ''), val: disp * w.displacedTax });
-          const nk = nf + '|' + dl + '|' + dr + '|' + sl + '|' + sr + '|' + hand;
-          const tot = st.cost + cost;
-          const prev = next.get(nk);
-          if (!prev || prev.cost > tot) {
-            const ns = { cost: tot, toks: st.toks.concat(tok) };
-            if (detail) ns.det = { start: st.det.start, steps: st.det.steps.concat([{ tok, cost: +cost.toFixed(2), parts }]) };
-            next.set(nk, ns);
+          for (const o of options) {
+            let cost = o.base, dl = +dl0, dr = +dr0, sl = +sl0, sr = +sr0;
+            const parts = detail ? [{ label: o.label, val: o.base }] : null;
+            if (o.extra) { cost += o.extra.val; if (parts) parts.push(o.extra); }
+            if (o.wrist) {
+              const dir = prime ? -1 : 1;
+              // dial sense: right hand R = +1; left hand L' = +1 (thumb toward top), mirrored
+              const delta = o.hand === 'right' ? dir : -dir;
+              const cur = o.hand === 'left' ? dl : dr;
+              let nd = cur + delta;
+              if (Math.abs(nd) > 1) { cost += w.silentReset; nd = delta; if (parts) parts.push({ label: 'hidden regrip', val: w.silentReset }); }
+              if (o.hand === 'left') { dl = nd; sl = 0; sr = Math.min(CAP, sr + 1); }
+              else { dr = nd; sr = 0; sl = Math.min(CAP, sl + 1); }
+            } else { sl = Math.min(CAP, sl + 1); sr = Math.min(CAP, sr + 1); }
+            if (lh0 !== 'n' && lh0 !== o.hand) { cost -= w.altBonus; if (parts) parts.push({ label: 'alternation', val: -w.altBonus }); } // hand alternation flows
+            // excursion tax: the move that puts a thumb off home is free; every move it then
+            // LINGERS out costs, so quick returns like R U R' stay cheap but parking doesn't
+            const linger = (dl !== 0 && sl >= 1 ? 1 : 0) + (dr !== 0 && sr >= 1 ? 1 : 0);
+            if (linger) { cost += linger * w.excursion; if (parts) parts.push({ label: 'lingering thumb' + (linger > 1 ? ' ×' + linger : ''), val: linger * w.excursion }); }
+            const nk = nf + '|' + dl + '|' + dr + '|' + sl + '|' + sr + '|' + o.hand;
+            const tot = st.cost + cost;
+            const prev = next.get(nk);
+            if (!prev || prev.cost > tot) {
+              const ns = { cost: tot, toks: st.toks.concat(tok) };
+              if (detail) ns.det = { start: st.det.start, steps: st.det.steps.concat([{ tok, cost: +cost.toFixed(2), parts }]) };
+              next.set(nk, ns);
+            }
           }
         }
       }

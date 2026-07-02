@@ -82,10 +82,29 @@ function reconstruction(it) {
 /* ---- per-user preferences (saved to the account when signed in) ---- */
 // Only the tuning lives here — scramble, results and requested lengths stay session-local.
 const PREF_KEYS = ['methods', 'caps', 'offsetsText', 'slack', 'maxCancel', 'weights'];
+// the tunable comfort weights; everything else in ERGO_DEFAULTS is frozen
+const SLIDER_KEYS = ['bBase', 'bColdExtra', 'wide', 'excursion', 'altBonus'];
+// weights saved before the 2026-07 metric rework used different keys and shapes;
+// map them onto the current model so old accounts keep their calibration
+function migrateWeights(w) {
+  if (!w || typeof w !== 'object') return {};
+  const o = {};
+  for (const k of SLIDER_KEYS) if (typeof w[k] === 'number') o[k] = w[k];
+  if (o.bBase === undefined && typeof w.bSetup === 'number') o.bBase = w.bSetup;
+  if (o.bColdExtra === undefined && typeof w.bCold === 'number') {
+    const base = o.bBase !== undefined ? o.bBase : C.ERGO_DEFAULTS.bBase;
+    o.bColdExtra = Math.max(0, +(w.bCold - base).toFixed(2));
+  }
+  // the old linear away-from-home tax charged every displaced move; the excursion tax
+  // skips the first, so 1.25x matches it on long parks
+  if (o.excursion === undefined && typeof w.displacedTax === 'number') o.excursion = Math.min(1, +(w.displacedTax * 1.25).toFixed(2));
+  return o;
+}
 function snapshotPrefs() { const o = {}; for (const k of PREF_KEYS) o[k] = UI[k]; return o; }
 function applyPrefs(p) {
   if (!p || typeof p !== 'object') return;
   for (const k of PREF_KEYS) if (p[k] !== undefined && p[k] !== null) UI[k] = p[k];
+  UI.weights = migrateWeights(UI.weights);
 }
 let _saveTimer = null;
 function persistPrefs() {
@@ -192,10 +211,6 @@ function scoreBreakdown(bd, prefix) {
     h('span', { class: 'bkparts' }, parts),
     h('span', { class: 'bksum mono' }, sum));
   const rows = [];
-  if (bd.start && bd.start.cost > 0) {
-    const which = [bd.start.dl !== 0 ? 'left' : null, bd.start.dr !== 0 ? 'right' : null].filter(Boolean).join(' & ');
-    rows.push(line('', 'start', 'alternate start grip (' + which + ')', sgn(bd.start.cost)));
-  }
   bd.steps.forEach((s, i) => rows.push(line(String(i + 1), s.tok,
     s.parts.map(p => p.label + ' ' + sgn(p.val)).join('   ·   '), sgn(s.cost))));
   if (bd.rotation && bd.rotation.count > 0)
@@ -264,7 +279,6 @@ function renderInner() {
     h('button', { class: 'opthead', onclick: () => { UI.optionsOpen = !UI.optionsOpen; render(); } },
       (UI.optionsOpen ? '\u25be' : '\u25b8') + ' Options: filters and comfort'));
   if (UI.optionsOpen) {
-    const W = Object.assign({}, C.ERGO_DEFAULTS, UI.weights);
     const capIn = (id) => h('label', { class: 'capin' }, METHOD_LABEL[id],
       h('input', { type: 'number', min: '0', max: '9', value: UI.caps[id], onchange: ev => { UI.caps[id] = +ev.target.value; fullResearch(); } }));
     drawer.appendChild(h('div', { class: 'optgrid' },
@@ -283,15 +297,11 @@ function renderInner() {
       h('div', { class: 'optcol' },
         h('h4', null, 'Comfort (re-ranks instantly)'),
         h('p', { class: 'opthint' }, 'Each move adds a small cost, and the score is the total, so lower means nicer to turn. Raise a slider if something bugs you more than the default.'),
-        slider('cold B', 'a B with no setup, when nothing has put your index in place for it (like the B in L U \u2026 B)', 'bCold', 1, 3, 0.1),
-        slider('set-up B', 'a B right after R or L\u2032 raises a thumb (the B in R B R\u2032), or in the first two moves of the solve', 'bSetup', 0.5, 2, 0.05),
-        slider('B setup fades after', 'how many moves a raised thumb stays ready for B before it counts as cold again', 'bWindow', 0, 4, 1),
-        slider('wide move', 'an Rw or Lw, compared with a normal turn (1.0 means no penalty)', 'wide', 0.5, 3, 0.05),
-        slider('hidden regrip', 'repeating a wrist direction, like the second L\u2032 in L\u2032 R L\u2032, where the hand has to reset before it can turn again', 'silentReset', 0, 1.5, 0.05),
-        slider('away-from-home tax', 'a small cost for every move a thumb spends off home grip, so quick returns like R U R\u2032 and R\u2032 L R L\u2032 are favored', 'displacedTax', 0, 0.4, 0.02),
-        slider('hand alternation bonus', 'a discount each time the turning hand switches, since bouncing between R and L flows', 'altBonus', 0, 0.5, 0.05),
-        slider('alternate starting grip', 'starting with a thumb on bottom or top instead of home, which unlocks openers like R U R for a small delay', 'startDelay', 0, 1, 0.05),
-        slider('U with no free index', 'a U when both hands are busy and neither index is parked at the top', 'uBusy', 0, 1, 0.05),
+        slider('B move', 'any B, compared with a wrist turn \u2014 the index has to reach over the top', 'bBase', 1, 4, 0.05),
+        slider('cold B extra', 'added on top of a B when no freshly raised thumb is waiting for it, like the B in L U \u2026 B', 'bColdExtra', 0, 4, 0.1),
+        slider('wide move', 'an Rw or Lw, compared with a normal turn (1.0 means no penalty)', 'wide', 0.5, 5, 0.05),
+        slider('lingering thumb', 'each move a thumb stays off home after the move that raised it, so quick returns like R U R\u2032 stay cheap but parking a thumb does not', 'excursion', 0, 1, 0.05),
+        slider('hand alternation bonus', 'a discount each time the turning hand switches, since bouncing between R and L flows', 'altBonus', 0, 0.6, 0.05),
         h('button', { class: 'ghost sm', onclick: () => { UI.weights = {}; rescoreAll(); } }, 'reset to defaults'))));
   }
   main.appendChild(drawer);
