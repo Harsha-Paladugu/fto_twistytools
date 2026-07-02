@@ -24,7 +24,6 @@
   'use strict';
 
   const CFG = window.OO_CONFIG || {};
-  const adminEmails = (CFG.adminEmails || []).map(e => e.toLowerCase());
   const LIVE = !!(CFG.firebase && CFG.firebase.apiKey);
 
   const subs = new Set();

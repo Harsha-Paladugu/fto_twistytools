@@ -202,20 +202,21 @@
     const groups = new Map();
     for (const r of rows) { const side = r.state ? sideOf(subsetKey, r.state) : ''; if (!groups.has(side)) groups.set(side, []); groups.get(side).push(r); }
     const ord = ov.order || [];
-    for (const grp of groups.values()) {
-      // image = the first authored (insertion-order) alg's position — stable when
-      // the display order is changed below.
+    const out = [];
+    for (const [side, grp] of groups) {
+      // image = the first authored (insertion-order) alg's position — computed
+      // BEFORE the display sort below, so reordering never changes the diagram.
       const anchor = grp.find(r => r.state) || grp[0];
       const image = anchor && anchor.state ? anchor.state : null;
-      grp.image = image;
       for (const r of grp) {
         if (image && r.state) { const p = aufAmount(image, r.state); r.display = p != null ? prependAUF(p, r.core) : r.core; }
         else r.display = r.core;
         r.solves = !!r.state; // only a parse/solve failure warns, not an AUF difference
       }
       grp.sort((x, y) => ordIx(ord, x.alg) - ordIx(ord, y.alg));
+      out.push({ side, rows: grp, image });
     }
-    return [...groups.entries()].sort((a, b) => SIDE_ORDER.indexOf(a[0]) - SIDE_ORDER.indexOf(b[0]));
+    return out.sort((a, b) => SIDE_ORDER.indexOf(a.side) - SIDE_ORDER.indexOf(b.side));
   }
 
   // validate a candidate alg for a case -> {ok, side} | {ok:false, reason}
@@ -311,7 +312,7 @@
   // the current full display order of a case's alg strings (groups by SIDE_ORDER,
   // within group by the saved order) — used to materialize ov.order on first move.
   function fullOrder(subKey, c) {
-    return mergedGroups(subKey, c).flatMap(([, rows]) => rows.map(r => r.alg));
+    return mergedGroups(subKey, c).flatMap(g => g.rows.map(r => r.alg));
   }
   // move `row` up (dir=-1) or down (dir=+1) within its side group; persisted.
   async function moveAlg(subKey, c, rows, row, dir) {
@@ -382,8 +383,7 @@
   // one labelled row: diagram + heading + (multi-column) alg list. Shared by L4E
   // single cases and the variant rows of paired (L5E / TL4E) cases. The diagram
   // shows the group's image position that every alg in the list is aligned to.
-  function sideRow(subKey, c, labelText, rows, rerender) {
-    const image = rows.image || (rows.find(r => r.state) || {}).state || null;
+  function sideRow(subKey, c, labelText, rows, image, rerender) {
     return h('div', { class: 'sidegrp' },
       caseDiagram(image, diagramCenters(subKey, image)),
       h('div', { class: 'sidebody' },
@@ -399,7 +399,7 @@
     const body = h('div', { class: 'casebody' });
     const groups = mergedGroups(subKey, c);
     if (!groups.length) body.appendChild(h('div', { class: 'noalgs' }, 'No algorithms yet.'));
-    for (const [side, rows] of groups) body.appendChild(sideRow(subKey, c, sideLabel(subKey, side), rows, rerender));
+    for (const g of groups) body.appendChild(sideRow(subKey, c, sideLabel(subKey, g.side), g.rows, g.image, rerender));
     if (isAdmin()) body.appendChild(adminAdder([{ subKey, c }], card, () => rerender()));
     card.appendChild(body);
     return card;
@@ -416,10 +416,10 @@
     card.appendChild(h('div', { class: 'casehd' }, h('span', { class: 'casename' }, name)));
     const body = h('div', { class: 'casebody' });
     for (const v of variants) {
-      for (const [side, rows] of mergedGroups(v.subKey, v.c)) {
-        const sl = sideLabel(v.subKey, side);
+      for (const g of mergedGroups(v.subKey, v.c)) {
+        const sl = sideLabel(v.subKey, g.side);
         const label = sl === 'Algorithms' ? v.label : v.label + ' · ' + sl;
-        body.appendChild(sideRow(v.subKey, v.c, label, rows, rerender));
+        body.appendChild(sideRow(v.subKey, v.c, label, g.rows, g.image, rerender));
       }
     }
     if (isAdmin()) body.appendChild(adminAdder(variants.map(v => ({ subKey: v.subKey, c: v.c })), card, rerender));
@@ -584,7 +584,11 @@
         if ((m = /^(TL4E-[BR])([+-])$/.exec(ov.subset))) { key = m[1]; extra = { direction: null, twist: m[2] }; }
         else if (ov.subset === 'L4E') {
           if (findCase('L4E Building Blocks', ov.case)) key = 'L4E Building Blocks';
-          else { key = 'ML4E'; extra = { direction: a.side === 'DR' ? 'Right Slot' : 'Left Slot' }; }
+          // direction is authoring metadata only (no build tool reads it). ML4E
+          // cases are Right/Left Slot; a DF-side alg landing here (its case has
+          // no Building Blocks entry) gets the greppable 'Front Slot' rather
+          // than a silently wrong side label.
+          else { key = 'ML4E'; extra = { direction: a.side === 'DR' ? 'Right Slot' : a.side === 'DL' ? 'Left Slot' : 'Front Slot' }; }
         } else { key = ov.subset; }
         const c = findCase(key, ov.case);
         if (c && !c.algs.some(x => x.alg === a.alg)) c.algs.push(Object.assign({}, extra, { alg: a.alg }));

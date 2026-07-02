@@ -44,6 +44,7 @@ const UI = {
   weights: {},
   lengths: new Set(),       // requested total lengths
   results: {},              // L -> items (raw from core)
+  showAll: new Set(),       // lengths whose full result list is expanded
   searching: false, truncated: false,
   optionsOpen: false,
 };
@@ -117,7 +118,6 @@ async function runSearch(newLengths) {
   UI.searching = true; render();
   await tick(); await tick();
   const lengths = [...newLengths].filter(L => L >= UI.dopt && L <= 11);
-  const t0 = Date.now();
   try {
     const res = C.search(UI.state, {
       methods: UI.methods, caps: UI.caps, offsets,
@@ -129,9 +129,8 @@ async function runSearch(newLengths) {
     for (const L of lengths) UI.results[L] = res.byLength[L] || [];
     UI.truncated = res.truncated;
     for (const L of lengths) UI.lengths.add(L);
-  } catch (err) { toast('Something went wrong searching. Please try again.'); }
+  } catch (err) { console.error(err); toast('Something went wrong searching. Please try again.'); }
   UI.searching = false;
-  UI.lastMs = Date.now() - t0;
   render();
 }
 function rescoreAll() { // ergonomics changed: re-rank cached results, no re-search
@@ -161,7 +160,7 @@ function onSolve() {
   const st = E.applyParsed(parsed, E.solved(), syms, rotBy);
   UI.scramble = txt; UI.parsed = parsed; UI.state = st;
   UI.dopt = dist[E.idx(st)];
-  UI.results = {}; UI.lengths = new Set(); UI.truncated = false;
+  UI.results = {}; UI.lengths = new Set(); UI.showAll = new Set(); UI.truncated = false;
   if (UI.dopt === 0) { render(); return; }
   const init = new Set([UI.dopt]);
   if (UI.dopt + 1 <= 11) init.add(UI.dopt + 1);
@@ -340,9 +339,9 @@ function renderInner() {
       h('h3', null, L + ' moves' + (L === UI.dopt ? ', optimal' : L === UI.dopt + 1 ? ', optimal +1' : ''),
         h('span', { class: 'counttag' }, items.length + (items.length === 1 ? ' solution' : ' solutions'))));
     if (!items.length) sec.appendChild(h('p', { class: 'empty' }, 'No method solutions at this length.'));
-    items.slice(0, UI['showAll' + L] ? items.length : 10).forEach(it => sec.appendChild(solutionRow(it)));
-    if (items.length > 10 && !UI['showAll' + L])
-      sec.appendChild(h('button', { class: 'ghost sm', onclick: () => { UI['showAll' + L] = true; render(); } }, 'show all ' + items.length));
+    items.slice(0, UI.showAll.has(L) ? items.length : 10).forEach(it => sec.appendChild(solutionRow(it)));
+    if (items.length > 10 && !UI.showAll.has(L))
+      sec.appendChild(h('button', { class: 'ghost sm', onclick: () => { UI.showAll.add(L); render(); } }, 'show all ' + items.length));
     main.appendChild(sec);
   }
   if (UI.state && UI.dopt === 0) main.appendChild(h('p', { class: 'empty' }, 'Nothing to solve. That scramble leaves the puzzle solved.'));
@@ -351,6 +350,7 @@ function renderInner() {
 function render() {
   try { renderInner(); }
   catch (err) {
+    console.error(err);
     const root = $('#app'); root.innerHTML = '';
     const card = h('div', { class: 'card solcard', style: 'margin:48px auto;max-width:680px;border-color:rgba(232,71,61,.5)' },
       'Something went wrong loading this page. Try reloading.');

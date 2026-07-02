@@ -13,7 +13,6 @@
 function makeSolverCore(E, dist) {
   const MOVES = E.MOVES; // ['U',"U'",'L',"L'",'R',"R'",'B',"B'"]
   const sigOf = s => (E.idx(s) - (E.idx(s) % 3)) / 3; // no-u signature
-  const NOU = 720 * 64 * 27;
 
   /* ---------- sequence reduction (cancellation) ---------- */
   // tokens: ints 0..7; same corner merges mod 3 with cascade

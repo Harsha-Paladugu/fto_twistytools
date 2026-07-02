@@ -145,7 +145,6 @@ function iso3dSVG(state, width, yawOrM, pitch, opts) {
     const len = Math.hypot(n3[0], n3[1], n3[2]) || 1;
     return { f, z: (pts[0][2]+pts[1][2]+pts[2][2])/3, nz: n3[2]/len };
   });
-  const byFace = {}; for (const fc of faces) byFace[fc.f] = fc;
   const drawn = faces.filter(fc => fc.nz > 0.02).sort((a, b) => a.z - b.z);
   const polys = [];
   for (const fc of drawn) {

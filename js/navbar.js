@@ -24,6 +24,8 @@
     { id: 'algs',    label: 'Algorithms', href: 'algs.html' },
   ];
 
+  // Deliberately self-contained mini-hyperscript (subset of js/dom.js `h`): the
+  // navbar is loaded on pages that don't ship dom.js, and needs no html/events.
   function el(tag, attrs) {
     const node = document.createElement(tag);
     for (const k in (attrs || {})) {
