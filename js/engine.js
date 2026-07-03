@@ -202,14 +202,15 @@ function applyMoveIdx(s, m) { return move(s, MOVE_AXIS[m], (m & 1) === 1); }
 // ---------------- indexing ----------------
 // idx = (evenRank6(ctr)*12 + evenRank4(fp)) * 2187 + twist(3^7: fx0..fx3, fo0..fo2)
 // 9,447,840 slots; exactly 1/3 reachable (fixed-twist-sum ≡ free-perm class).
+// Mixed-radix rank of the first four Lehmer digits (bases 6,5,4,3). Those four
+// digits identify an even permutation of 6 uniquely — the last two elements'
+// order is forced by parity — so even perms map 1:1 onto 0..359.
 function evenRank6(p) {
   let r = 0;
   for (let i = 0; i < 4; i++) { let m = 0; for (let j = i+1; j < 6; j++) if (p[j] < p[i]) m++;
-    r = r * (6 - i) + m; } // d0*60? no: progressive base (6-i): d0..d3 bases 6,5,4,3 -> capped below
+    r = r * (6 - i) + m; }
   return r;
 }
-// NOTE: evenRank6 above yields d0*(5*4*3) + d1*(4*3) + d2*3 + d3 in 0..359 because
-// the first digit m for i=0 is 0..5 but even perms hit each (d0..d3) exactly once.
 function evenUnrank6(r) {
   const d = [0,0,0,0];
   d[3] = r % 3; r = (r - d[3]) / 3;
@@ -697,10 +698,10 @@ module.exports = {
   FACES, S4, G4, OPP, MOVES, NSLOTS,
   solved, copy, eq, move, applyMoveIdx, idx, unidx,
   buildSyms, symFromFacePerm, applySym, composeSym, makeCanon, makeMirrorCanon, makeFullCanon,
-  parseAlg, countMoves, applyParsed, makeFrames, mirrorAlg, mirrorToken,
+  parseAlg, countMoves, applyParsed, makeFrames, mirrorAlg,
   optimalSolution, optimalScramble, invertAlg, faceCompose, FACE_ID,
   // notation systems: WCA (default) and NS ("Rubik'skewb", the Sarah/NS sheets)
-  NS_CORNER, wcaToNS, nsToWCA, convertAlg, parsedToNative,
+  wcaToNS, nsToWCA, convertAlg,
   // keying + alg→case (single source of truth)
   stateKey, realCanonKey, keyToState, permsOf, permParity, enumFreeSlots,
   preprocessAlg, inverseState, caseStateOf, algSolvesKey, normAlg, prependAUF,

@@ -1,5 +1,5 @@
 /* Skewbiks.com — Diagram renderer: 2D dual-view net + draggable 3D view. */
-(function(){
+(function(){const module={exports:{}};
 // Skewb OO — renderer.
 // 2D: two fixed orthographic corner views side by side — "front" (U/F/L, the
 //     WCA scrambling hold: white top, green left, red right, UFL corner toward
@@ -133,8 +133,6 @@ function iso3dSVG(state, width, yawOrM, pitch, opts) {
 
 const DEFAULT_VIEW = { yaw: 0.6, pitch: 0.45 }; // shows U, L and F from a little above (WCA-hold side)
 
-const api = { netSVG, iso3dSVG, viewMatrix, rotateView, COLORS, STICKERS, DEFAULT_VIEW };
-if (typeof module !== 'undefined') module.exports = api;
-else window.OORender = api;
-
-})();
+// COLORS stays exported as the site's puzzle palette (M6 trainer candidate).
+module.exports = { netSVG, iso3dSVG, viewMatrix, rotateView, COLORS, DEFAULT_VIEW };
+window.OORender = module.exports;})();

@@ -74,6 +74,9 @@ function ordinalOf(classId) { // binary search in reps
 }
 const canonOf = s => T.canonOf(s);      // 24-sym class id (a position and its mirror share it)
 const mirrorOf = s => T.mirrorOf(s);    // rotation-canonical id of the mirror image
+// done-bitmap accessors: one bit per class ordinal
+const testBit = (bm, o) => !!(bm[o >> 3] & (1 << (o & 7)));
+const setBit = (bm, o) => { bm[o >> 3] |= 1 << (o & 7); };
 // decode a base64 done-bitmap into a fresh Uint8Array sized to the class count
 // (a missing/empty string yields the all-zero bitmap).
 function decodeBitmap(b64) {
@@ -124,9 +127,11 @@ function verifySolution(text, pair, notation) {
 // still shows the two mirror "sides" separately: `a` is the class rep (which is
 // also the smaller rotation-canonical id), `b` its mirror image — null for the
 // 108 self-mirror classes. Both sides share the class ordinal and done-bit.
-// Accepts either side's id (or the pairId) and normalizes.
+// Accepts ANY in-range state index and normalizes by full 24-sym
+// canonicalization — total even for forged non-canonical ids (min(id, mirror)
+// alone would mis-normalize those and strand ord/done-bit lookups at -1).
 function pairOf(anyClassId) {
-  const pairId = Math.min(anyClassId, mirrorOf(E.unidx(anyClassId)));
+  const pairId = canonOf(E.unidx(anyClassId));
   const lowState = E.unidx(pairId);
   const hiId = mirrorOf(lowState);
   const ord = ordinalOf(pairId);
@@ -172,7 +177,7 @@ function demoDB() {
     async doneMap() {
       const d = load(); const bm = new Uint8Array(Math.ceil(T.reps.length / 8));
       for (const s of d.solutions) if (s.status === 'approved') {
-        const o = ordinalOf(s.pairId); if (o >= 0) bm[o >> 3] |= 1 << (o & 7);
+        const o = ordinalOf(s.pairId); if (o >= 0) setBit(bm, o);
       }
       return bm;
     },
@@ -303,17 +308,13 @@ function liveDB() {
         const mapRef = F.doc(fs, 'meta', 'doneMap'), statRef = F.doc(fs, 'meta', 'stats');
         const mapDoc = await tx.get(mapRef), statDoc = await tx.get(statRef);
         const bm = decodeBitmap(mapDoc.exists() ? mapDoc.data().b64 : '');
+        // Re-derive the class rep from classId (full 24-sym canon, matching
+        // pairOf) rather than trusting the submitter-supplied partnerId/pairId,
+        // so a forged value can't flip an unrelated position's done-bit or
+        // strand the approval. One class, one ordinal, one bit.
+        const o = ordinalOf(canonOf(E.unidx(data.classId)));
         let added = 0;
-        // Re-derive the partner from classId (matching pairOf's mirrorOf) rather
-        // than trusting the submitter-supplied partnerId, so a forged value can't
-        // flip an unrelated position's done-bit. Classes fold mirrors, so only
-        // the class rep (the smaller id) has an ordinal — the loop sets that
-        // one bit; the other side's ordinalOf comes back -1 and is skipped.
-        const partnerId = mirrorOf(E.unidx(data.classId));
-        for (const cid of [data.classId, partnerId]) {
-          const o = ordinalOf(cid);
-          if (o >= 0 && !(bm[o >> 3] & (1 << (o & 7)))) { bm[o >> 3] |= 1 << (o & 7); added++; }
-        }
+        if (o >= 0 && !testBit(bm, o)) { setBit(bm, o); added = 1; }
         let b64 = ''; const CH = 8192;
         for (let i = 0; i < bm.length; i += CH) b64 += String.fromCharCode.apply(null, bm.subarray(i, i + CH));
         b64 = btoa(b64);
@@ -427,7 +428,8 @@ async function pageHome(main) {
       const bm = await DB.doneMap();
       for (let tries = 0; tries < 4000; tries++) {
         const o = Math.floor(Math.random() * T.reps.length);
-        if (!(bm[o >> 3] & (1 << (o & 7)))) { location.hash = '#/c/' + T.reps[o]; return; }
+        // isTrivial: depth-0 counts as solved by definition but has no bit set
+        if (!isTrivial(o) && !testBit(bm, o)) { location.hash = '#/c/' + T.reps[o]; return; }
       }
       toast('We couldn\u2019t find an unsolved position. Looks like they\u2019re all done!');
     } }, 'Take me to an unsolved position'),
@@ -660,7 +662,7 @@ async function pageBrowse(main, route) {
   const depth = m && m[1] !== undefined ? +m[1] : 8;
   const page = m && m[2] ? +m[2] : 0;
   const bm = await DB.doneMap();
-  const isDone = o => isTrivial(o) || !!(bm[o >> 3] & (1 << (o & 7)));
+  const isDone = o => isTrivial(o) || testBit(bm, o);
 
   const chips = h('div', { class: 'depthchips' });
   for (let d = 0; d <= 11; d++) {

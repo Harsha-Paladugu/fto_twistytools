@@ -111,13 +111,20 @@
       if (report) report('cache', 1, 1);
       return { reps: new Uint32Array(cached.reps), depths: new Uint8Array(cached.depths) };
     }
-    const canon = E.makeFullCanon(E.buildSyms());
+    // Ascending orbit sweep: the first unvisited reachable index is its
+    // 24-orbit's minimum, i.e. the class rep. Identical reps/depths to
+    // canonicalizing every state (verified in Node against makeFullCanon),
+    // at ~1/24 the symmetry applications: 131,391 reps x 24 instead of
+    // 3,149,280 states x 24.
+    const syms = E.buildSyms().all;
+    const visited = new Uint8Array(E.NSLOTS);
     const reps = [], depths = [];
     for (let i = 0; i < E.NSLOTS; i++) {
-      if (dist[i] < 0) continue;
-      const s = E.unidx(i);
-      if (canon(s) === i) { reps.push(i); depths.push(dist[i]); }
       if ((i & 65535) === 65535) { if (report) report('classes', i, E.NSLOTS); if (tick) await tick(); }
+      if (dist[i] < 0 || visited[i]) continue;
+      const s = E.unidx(i);
+      for (const sym of syms) visited[E.idx(sym.apply(s))] = 1;
+      reps.push(i); depths.push(dist[i]);
     }
     const repsArr = Uint32Array.from(reps), depthsArr = Uint8Array.from(depths);
     if (report) report('classes', E.NSLOTS, E.NSLOTS);

@@ -19,7 +19,8 @@ new Firebase project; domain skewbiks.com (GitHub Pages, CNAME).
   data level via the sheet `direction` field). Dense index NSLOTS = 360×12×2187 = 9,447,840.
   Dropped from the contract: `applyMoveK`, `rotateFrame`, `openOfEkey`, `barOfEkey`, `XO`.
   Added: facelet model (`toFacelets`/`fromFacelets`/`WCA_FACELET_MOVES`), `enumFreeSlots`
-  spec-object signature, `CLASS` (free-perm A4/V4 classes). `tools/test-engine.mjs` 32/32;
+  spec-object signature, `CLASS` (free-perm A4/V4 classes). `tools/test-engine.mjs` 32/32
+  (44 after the M3 notation/display additions);
   `npm run test:space` matches OEIS A079745 + class oracles.
 - [x] **M2/M3 — Census slice** (`4f3d057`): `js/render.js` rebuilt on the facelet model
   (net = front/back orthographic corner views; 3D cube; same 5-member contract);
@@ -46,6 +47,18 @@ new Firebase project; domain skewbiks.com (GitHub Pages, CNAME).
     see ground-truth §"Two frame rules"). Census dist/class tables unaffected (native
     moves only). Old demo-mode solutions verified under the inverted frame may fail
     re-verification — expected.
+  - **2026-07-03 Phase-0 cleanup (post-review, commit after `12c5483`):** full OO
+    code review found no structural problems; landed fixes: home "random unsolved"
+    no longer lands on the solved position (skips depth-0); `pairOf` + the approval
+    transaction re-derive the class rep by FULL 24-sym canonicalization (a forged
+    non-canonical `classId` could previously verify+approve but never set the
+    done-bit); class-table build switched to an ascending orbit sweep — first
+    unvisited reachable index is the rep — 1.0s vs 22.6s in Node, reps/depths
+    verified byte-identical, cache key unchanged; bitmap bit-twiddling extracted to
+    `testBit`/`setBit`; dead exports pruned (engine `mirrorToken`/`parsedToNative`/
+    `NS_CORNER`, render `STICKERS`); `render.js` now uses the same shadowed-module
+    IIFE as engine.js/tables.js (the old `typeof module` branch silently skipped
+    `window.OORender` under the documented Node window-stub recipe).
 - [ ] **M4 — Firebase.** Create project + web app + Firestore (Firebase MCP can do this);
   creds into `js/config.js`; ~~rules bound `3732480 → 9447840`~~ (DONE 2026-07-03, plus the
   `notation` field + fixtures — still needs the emulator run + deploy);
@@ -86,6 +99,48 @@ new Firebase project; domain skewbiks.com (GitHub Pages, CNAME).
   (headless-Edge render recipe), robots/sitemap already point at skewbiks.com, SETUP/README
   final, pre-announce checklist (deployed-rules diff, Firebase authorized domains incl.
   skewbiks.com, OG cards).
+
+## Remaining plan + review carry-items (2026-07-03 — read before starting M4)
+
+Standing goals for the rest of the port: (1) main is always committed and green at
+its own milestone's bar; (2) each milestone deletes its own Pyraminx leftovers
+rather than deferring to a big-bang cleanup; (3) data formats that hold live user
+data (done-bitmap, solution docs) are frozen and documented before M4 goes live;
+(4) first boot stays fast enough to not need an apology in the boot hint.
+
+Items the 2026-07-03 OO code review adds to the milestones above:
+
+- **M4 (next):** as specced, PLUS —
+  (a) decide the delete-approved-solution story: rules allow `delete: if isAdmin()`
+  on solutions but nothing clears the done-bit or decrements `meta/stats.done`, so
+  deleting the only approved solution leaves a position marked solved with no
+  visible solutions. Either forbid deletes or add an admin recompute action.
+  (b) FREEZE the done-bitmap format: ordinals index into the `oo-classes-v2` reps
+  array; any future change to class enumeration reorders ordinals and silently
+  corrupts the Firestore doneMap. If the class key ever changes, bump `KEY_CLASSES`
+  AND migrate the stored bitmap together.
+  (c) optional: pageMod shows stored scramble/solution verbatim — consider
+  converting through the active WCA/NS switch for display consistency.
+- **M5:** as specced. Also kills the known-dead algs.js destructuring of dropped
+  contract members (`applyMoveK`/`openOfEkey`/`barOfEkey`) and turns
+  `npm run build`/`check:fresh` green — after M5, run `check:fresh` before every
+  commit (stamps are manual discipline until then; `npm run stamp` before commits).
+- **M6:** as specced. Decide whether the trainer imports `R.COLORS` (kept exported
+  for exactly this) or inlines its own palette — un-export if unused.
+- **M7:** as specced. Engine exports `composeSym`/`FACE_ID`/`faceCompose`/
+  `optimalSolution` exist for Pyraminx-era solver-core + tests only — if the M7
+  rewrite doesn't use them, un-export.
+- **M8:** as specced.
+
+Known-acceptable, deliberately NOT fixed (don't re-litigate without new evidence):
+the BFS builder exists twice on purpose (js/tables.js browser + tools/lib/
+bfs-dist.mjs Node — documented in the latter's header; if you optimize one, do
+both); the BFS allocates a fresh state per move probe (~25M short-lived objects on
+first boot — a scratch-state `applyMoveIdx` variant is the fix if boot time ever
+matters again); `enumFreeSlots` recomputes `twistDigits` in its inner loops
+(trivial cost); pageBrowse re-fetches doneMap per navigation (candidate for a
+session cache); render.js re-declares FACES/FIDX/FNORM locally; the moderator
+approval cap check is best-effort/racy by design (documented at the call site).
 
 ## Recorded numbers (from M1 verification — use these, don't recompute by hand)
 
