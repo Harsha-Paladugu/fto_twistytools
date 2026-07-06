@@ -119,7 +119,11 @@ const M_FRONT = viewMatrix(Math.PI / 4, ISO);       // shows U, F, L (UFL toward
 const M_BACK  = viewMatrix(Math.PI + Math.PI / 4, -ISO); // antipode: D, B, R
 function netSVG(state, width, opts) {
   const o = opts || {};
-  const fl = E.toFixedFacelets(state);
+  // opts.pinned: render the engine's pinned frame instead of the WCA-hold
+  // re-anchor — a whole-cube rotation of the same physical cube. Use it where
+  // a state-level face must stay put on screen (e.g. a solved-layer-down case
+  // reveal); the tradeoff is that the fixed UFL corner may read twisted.
+  const fl = o.pinned ? E.toFacelets(state) : E.toFixedFacelets(state);
   const mask = o.mask ? (o.mask instanceof Set ? o.mask : new Set(o.mask)) : null;
   const caps = o.thumb ? '' :
     `<text x="0" y="2.05" class="dcap" font-size="0.24" fill="#9fadc4" text-anchor="middle">front</text>` +

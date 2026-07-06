@@ -43,8 +43,8 @@ const knownKey = statKey;
 // diagram through the shared renderer (default `oonet` class keeps the site's
 // polygon stroke CSS — an overridden class would drop it). `mask` = display
 // facelet indices to hide (partial recognition).
-function Net({ state, w, mask }) {
-  const html = R && state ? R.netSVG(state, w || 240, { thumb: true, mask }) : "";
+function Net({ state, w, mask, pinned }) {
+  const html = R && state ? R.netSVG(state, w || 240, { thumb: true, mask, pinned }) : "";
   return <div className="skewbnet" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -1130,7 +1130,9 @@ export default function SkewbTrainer() {
                   <>
                     <div className="hint" style={{ marginTop: 14 }}>after your layer:</div>
                     <div className="stagegrid recogstage">
-                      <Net state={last.end} w={240} />
+                      {/* pinned frame keeps the solved layer visually on the bottom
+                          (the WCA-hold re-anchor rotates it away when UFL is twisted) */}
+                      <Net state={last.end} w={240} pinned />
                     </div>
                     <div className="reveal">
                       {last.match && last.match.solved ? (

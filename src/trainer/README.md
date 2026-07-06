@@ -14,7 +14,8 @@ production. Edit here, rebuild, commit the regenerated `js/trainer.js`.
   case prediction in inspection: Random — scrambles whose nearest layer is
   exactly N moves away, reveal lists the optimal layer lines; My solution —
   enter a fixed layer solution and get scrambles it solves the bottom layer
-  on, reveal shows the exact post-layer state + best-effort case name).
+  on, reveal shows the exact post-layer state — rendered layer-down via
+  netSVG's `pinned` option — + best-effort case name).
 - `skewb-core.mjs` — the substrate, no React/DOM: case model over
   `data/skewb_algs.json` (fetched at runtime — NOT bundled), presentation
   geometry (`prependAUF` direction synthesis), masked scrambles, the

@@ -251,7 +251,12 @@ new Firebase project; domain skewbiks.com (GitHub Pages, CNAME).
     sequence from X lands EXACTLY on Y (test-asserted incl. B/rotation/NS
     sequences); reveal shows Y's diagram + a best-effort case name via a lazy
     stateKey index over every sheet case's 4 presentation states ("not in your
-    sheets" on a miss — grading stays the user's). New core exports
+    sheets" on a miss — grading stays the user's). Same-day follow-up (USER
+    request): the reveal diagram renders with the solved layer visually on the
+    bottom — `netSVG` gained `opts.pinned` (raw `toFacelets`, a whole-cube
+    rotation of the same physical picture; the default WCA-hold re-anchor
+    moved the layer off D in exactly the 360/540 Y states with a twisted UFL —
+    machine-checked; the tradeoff is the fixed corner may read twisted). New core exports
     `randomAtFLDist` / `randomDLayerState` / `preimageOfLayer`; substrate tests
     29 → 33; storage blob gains `onelookView`/`onelookLen`/`onelookSol`/
     `onelookStats` (mode whitelist + hydration + reset extended).
