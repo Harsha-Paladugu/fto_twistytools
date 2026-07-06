@@ -42,10 +42,12 @@
   // ---------- engine keying / canonicalization (single source: js/engine.js) ----------
   const { stateKey, realCanonKey, caseStateOf, prependAUF } = E;
 
-  // ---------- notation (WCA default, NS switch — same preference as oo.html) ----------
+  // ---------- notation (NS default here — the method sheets are NS-native and
+  // their authored form, rotations included, is the executable one; shared
+  // preference key with oo.html, so an explicit choice anywhere sticks) ----------
   const NOTA_KEY = 'skewbiks-notation';
-  let NOTA = 'wca';
-  try { if (localStorage.getItem(NOTA_KEY) === 'ns') NOTA = 'ns'; } catch (e) {}
+  let NOTA = 'ns';
+  try { const v = localStorage.getItem(NOTA_KEY); if (v === 'wca' || v === 'ns') NOTA = v; } catch (e) {}
   function setNota(v) {
     NOTA = v === 'ns' ? 'ns' : 'wca';
     try { localStorage.setItem(NOTA_KEY, NOTA); } catch (e) {}
@@ -81,10 +83,54 @@
     SECTIONS = [];
     for (const cont of [DATA.subsets, DATA.other_subsets || {}]) {
       for (const key of Object.keys(cont)) {
-        SUBSETMAP[key] = { key, name: cont[key].name || key, cases: cont[key].cases.map(c => ({ name: c.name, algs: c.algs.slice() })) };
+        // keep every authored case field (corner/sign/id/center/caseId/…) —
+        // the subset's `nav` block groups, filters and sorts by them.
+        SUBSETMAP[key] = { key, name: cont[key].name || key, nav: cont[key].nav || null,
+          cases: cont[key].cases.map(c => Object.assign({}, c, { algs: c.algs.slice() })) };
         SECTIONS.push({ id: key, label: cont[key].name || key });
       }
     }
+  }
+
+  // ---------- subset navigation (authored `nav`: group tabs + filter + sort) ----------
+  const groupSel = {};   // subset key -> selected group value
+  const filterSel = {};  // subset key + '::' + group -> selected dropdown value ('' = all)
+  function activeGroup(sub) {
+    if (!sub.nav || !sub.nav.group || !sub.nav.group.values.length) return null;
+    const vals = sub.nav.group.values.map(v => v.value);
+    return vals.indexOf(groupSel[sub.key]) >= 0 ? groupSel[sub.key] : vals[0];
+  }
+  function activeFilter(sub) {
+    const g = activeGroup(sub);
+    return (g !== null && filterSel[sub.key + '::' + g]) || '';
+  }
+  // comparator from the subset's sort spec: explicit `order` list, or
+  // `natural` (numeric prefix + suffix, so 2a < 10a); authored order breaks ties.
+  function navCmp(sub) {
+    const ix = new Map(sub.cases.map((c, i) => [c, i]));
+    const spec = sub.nav && sub.nav.sort;
+    if (!spec) return (a, b) => ix.get(a) - ix.get(b);
+    const rank = (c) => {
+      const v = c[spec.field];
+      if (spec.order) { const i = spec.order.indexOf(v); return [i < 0 ? 1e9 : i, '']; }
+      const m = spec.natural && String(v == null ? '' : v).match(/^(\d+)(.*)$/);
+      return m ? [parseInt(m[1], 10), m[2]] : [1e9, String(v == null ? '' : v)];
+    };
+    return (a, b) => {
+      const ra = rank(a), rb = rank(b);
+      return (ra[0] - rb[0]) || (ra[1] < rb[1] ? -1 : ra[1] > rb[1] ? 1 : 0) || (ix.get(a) - ix.get(b));
+    };
+  }
+  // the browsing view: the active group, narrowed by the dropdown, in nav order
+  function visibleCases(sub) {
+    let list = sub.cases;
+    const g = activeGroup(sub);
+    if (g !== null) {
+      list = list.filter(c => c[sub.nav.group.field] === g);
+      const f = activeFilter(sub);
+      if (f) list = list.filter(c => c[sub.nav.filter.field] === f);
+    }
+    return list.slice().sort(navCmp(sub));
   }
 
   // per-case presentation geometry, derived from the anchor = the first
@@ -128,13 +174,46 @@
   }
 
   // one display row from a stored alg: trailing rotations stripped, plus the
-  // exact case state the core solves.
+  // exact case state the core solves. `meta` is the authored item (ns original,
+  // rating, firstMove, …) so display can show the sheet's executable form.
   const ordIx = (ord, alg) => { const i = ord.indexOf(alg); return i < 0 ? 1e9 : i; };
-  function makeRow(alg, source) {
-    const core = stripPostRot(E.normAlg(alg));
+  function makeRow(a, source) {
+    const core = stripPostRot(E.normAlg(a.alg));
     const cs = caseStateOf(core);
-    return { alg, source, core, state: cs, display: core, solves: !!cs };
+    return { alg: a.alg, meta: a, source, core, state: cs, display: core, solves: !!cs };
   }
+  // Sheet algs always display their authored notation verbatim — rotations
+  // included, they're part of how the alg is executed. (WCA's four letters
+  // can't name the free-corner moves, so no rotation-preserving WCA form
+  // exists; the rotationless conversion is kept for keying and for the WCA
+  // input mode only.) Algs without an authored form (admin-added) follow the
+  // notation toggle.
+  const rowText = (r) => (r.meta && r.meta.ns) ? r.meta.ns : dispAlg(r.display);
+  // alg text as evenly-spaced tokens, rotations tinted so the regrips pop
+  const isRotTok2 = (t) => /^[xyz](2'|2|')?$/.test(t);
+  function algText(r) {
+    return h('span', { class: 'mono alg' },
+      String(rowText(r)).split(/\s+/).filter(Boolean).map(t =>
+        h('span', { class: isRotTok2(t) ? 'tok rot' : 'tok' }, t)));
+  }
+
+  // ---------- first moves ----------
+  // Every case lists the 8 possible first moves (the sheets' convention); each
+  // alg files under the first move it makes FROM THE ANGLE ITS DIAGRAM SHOWS —
+  // so you can pick the alg that cancels your last first-layer move. Imported
+  // algs carry the value; for admin-added ones we compute it: the WCA→NS→WCA
+  // round trip absorbs any typed rotations, so the first token is the physical
+  // first move in the diagram's frame, then the sheets' letter map names it.
+  const FM_ORDER = ['r', "r'", 'R', "R'", 'B', "B'", 'b', "b'"];
+  const SHEET_FM = { R: 'B', U: 'b', L: 'r', B: 'R' };
+  function firstMoveOf(r) {
+    if (r.meta && r.meta.firstMove) return r.meta.firstMove;
+    const flat = E.nsToWCA(E.wcaToNS(r.core)) || r.core;
+    const m = String(flat).trim().split(/\s+/)[0].match(/^([ULRB])(2'|2|')?$/);
+    return m ? SHEET_FM[m[1]] + ((m[2] === "'" || m[2] === '2') ? "'" : '') : '';
+  }
+  const RATING_RANK = { best: 0, neutral: 1, poor: 3 };
+  const rateRank = (r) => (r.meta && RATING_RANK[r.meta.rating] !== undefined) ? RATING_RANK[r.meta.rating] : 2;
 
   // merged, display-ready algs for a case: baseline (minus removed) + added,
   // grouped by the exact presentation each alg solves (every alg in a group
@@ -146,8 +225,8 @@
     const id = caseId(subsetKey, c.name);
     const ov = overrides.get(id) || { added: [], removed: new Set(), order: [] };
     const rows = [];
-    for (const a of c.algs) { if (ov.removed.has(a.alg)) continue; rows.push(makeRow(a.alg, 'base')); }
-    for (const a of ov.added) rows.push(makeRow(a.alg, 'add'));
+    for (const a of c.algs) { if (ov.removed.has(a.alg)) continue; rows.push(makeRow(a, 'base')); }
+    for (const a of ov.added) rows.push(makeRow(a, 'add'));
 
     const groups = new Map(); // presentation render key ('' = unparseable) -> rows
     for (const r of rows) { const k = r.state ? stateKey(r.state) : ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
@@ -288,20 +367,20 @@
   // ---------- rendering ----------
   let query = '';
   let section = null;              // current subset key
-  let main, sideNav, statusEl, notaBox;
+  let main, sideNav, statusEl, notaBox, subNav;
 
   const matchCase = (subsetKey, c) => {
     if (!query) return true;
     const q = query.toLowerCase();
     if (c.name.toLowerCase().includes(q) || subsetKey.toLowerCase().includes(q)) return true;
-    // search baseline (minus tombstoned) + admin-added algs, in raw, normalized
-    // and active-notation form (so an alg typed as seen on screen still matches).
+    // search baseline (minus tombstoned) + admin-added algs, in raw, normalized,
+    // active-notation and authored-sheet form (so an alg typed as seen on
+    // screen still matches).
     const ov = overrides.get(caseId(subsetKey, c.name)) || { added: [], removed: new Set() };
-    const algs = [
-      ...c.algs.filter(a => !ov.removed.has(a.alg)).map(a => a.alg),
-      ...ov.added.map(a => a.alg),
-    ];
-    return algs.some(a => a.toLowerCase().includes(q) || E.normAlg(a).toLowerCase().includes(q)
+    const texts = [];
+    for (const a of c.algs) if (!ov.removed.has(a.alg)) { texts.push(a.alg); if (a.ns) texts.push(a.ns); }
+    for (const a of ov.added) texts.push(a.alg);
+    return texts.some(a => a.toLowerCase().includes(q) || E.normAlg(a).toLowerCase().includes(q)
       || (NOTA === 'ns' && E.wcaToNS(E.normAlg(a)).toLowerCase().includes(q)));
   };
 
@@ -316,20 +395,48 @@
       admin ? h('span', { class: 'ord' },
         h('button', { class: 'mv', title: 'Move up', 'aria-label': 'Move alg up', disabled: i <= 0 ? 'disabled' : null, onclick: async (ev) => { ev.target.disabled = true; await moveAlg(subKey, c, rows, r, -1); rerender(); } }, '↑'),
         h('button', { class: 'mv', title: 'Move down', 'aria-label': 'Move alg down', disabled: i >= rows.length - 1 ? 'disabled' : null, onclick: async (ev) => { ev.target.disabled = true; await moveAlg(subKey, c, rows, r, 1); rerender(); } }, '↓')) : null,
-      h('span', { class: 'mono alg' }, dispAlg(r.display)),
+      algText(r),
+      r.meta && r.meta.rating === 'best' ? h('span', { class: 'ratetag best' }, 'best') : null,
+      r.meta && r.meta.rating === 'poor' ? h('span', { class: 'ratetag poor' }, 'poor') : null,
       r.source === 'add' ? h('span', { class: 'addedtag' }, 'added') : null,
       !r.solves ? h('span', { class: 'warntag', role: 'img', 'aria-label': 'Warning: this stored alg does not parse to a clean case state.', title: 'This stored alg does not parse to a clean case state.' }, '⚠') : null,
       admin ? h('button', { class: 'rm', title: 'Remove', 'aria-label': 'Remove alg', onclick: async (ev) => { ev.target.disabled = true; await removeAlg(subKey, c, r); rerender(); } }, '×') : null);
   }
 
-  // one labelled row: diagram + heading + alg list. The diagram shows the
-  // group's exact position; every alg in the list solves it as written.
+  // first-move table for one presentation group: all 8 possible first moves in
+  // sheet order, each with the alg(s) whose first move (from the diagram's
+  // angle) is that move — best-rated first unless the admin reordered.
+  function fmTable(subKey, c, rows, rerender) {
+    const ord = (overrides.get(caseId(subKey, c.name)) || {}).order || [];
+    const byFm = new Map(FM_ORDER.map(k => [k, []]));
+    const extra = [];
+    for (const r of rows) {
+      const fm = firstMoveOf(r);
+      if (byFm.has(fm)) byFm.get(fm).push(r); else extra.push(r);
+    }
+    const out = [];
+    for (const [fm, list] of byFm) {
+      list.sort((x, y) => (ordIx(ord, x.alg) - ordIx(ord, y.alg)) || (rateRank(x) - rateRank(y)));
+      out.push(h('div', { class: 'fmrow' + (list.length ? '' : ' empty') },
+        h('span', { class: 'fmkey' }, fm),
+        list.length
+          ? h('div', { class: 'fmalgs' }, list.map(r => algRow(subKey, c, r, list, rerender)))
+          : h('span', { class: 'fmnone' }, '—')));
+    }
+    if (extra.length) out.push(h('div', { class: 'fmrow' },
+      h('span', { class: 'fmkey' }, '·'),
+      h('div', { class: 'fmalgs' }, extra.map(r => algRow(subKey, c, r, extra, rerender)))));
+    return h('div', { class: 'fmtable' }, out);
+  }
+
+  // one labelled row: diagram + heading + first-move table. The diagram shows
+  // the group's exact position; every alg in the table solves it as written.
   function sideRow(subKey, c, labelText, rows, image, rerender) {
     return h('div', { class: 'sidegrp' },
       caseDiagram(image),
       h('div', { class: 'sidebody' },
         h('div', { class: 'sidehd' }, labelText),
-        h('div', { class: 'alglist' }, rows.map(r => algRow(subKey, c, r, rows, rerender)))));
+        fmTable(subKey, c, rows, rerender)));
   }
 
   const anchorIdOf = (name) => 'case-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -382,8 +489,11 @@
     const sub = SUBSETMAP[section];
     if (!sub) return;
     if (!sub.cases.length) { main.appendChild(h('div', { class: 'nomatch big' }, 'No cases in this subset yet.')); return; }
-    const cases = sub.cases.filter(c => matchCase(sub.key, c));
-    if (!cases.length) { main.appendChild(h('div', { class: 'nomatch big' }, 'No cases match “' + query + '”.')); return; }
+    // a search looks across the WHOLE subset (ignoring group/filter) so any
+    // case stays findable; plain browsing shows the group + dropdown view.
+    const pool = query ? sub.cases.slice().sort(navCmp(sub)) : visibleCases(sub);
+    const cases = pool.filter(c => matchCase(sub.key, c));
+    if (!cases.length) { main.appendChild(h('div', { class: 'nomatch big' }, query ? 'No cases match “' + query + '”.' : 'No cases here yet.')); return; }
     main.appendChild(h('section', { class: 'subset' },
       h('div', { class: 'casegrid' }, cases.map(c => renderCase(sub.key, c)))));
   }
@@ -392,10 +502,44 @@
     sideNav.innerHTML = '';
     const sub = SUBSETMAP[section];
     if (!sub) return;
-    for (const c of sub.cases) {
+    for (const c of visibleCases(sub)) {
       sideNav.appendChild(h('a', {
         class: 'navcase', href: '#' + anchorIdOf(c.name),
       }, h('span', null, c.name), h('span', { class: 'navct' }, c.algs.length)));
+    }
+  }
+
+  // second-level nav: group pills (e.g. Pi / Peanut, TCLL+ / TCLL-) and the
+  // per-group dropdown (center pattern / corner set), from the authored nav.
+  function renderSubNav() {
+    if (!subNav) return;
+    subNav.innerHTML = '';
+    const sub = SUBSETMAP[section];
+    if (!sub || !sub.nav || !sub.nav.group || !sub.nav.group.values.length) { subNav.style.display = 'none'; return; }
+    subNav.style.display = '';
+    const g = activeGroup(sub);
+    subNav.appendChild(h('div', { class: 'subtabs', role: 'group', 'aria-label': 'case group' },
+      sub.nav.group.values.map(v =>
+        h('button', {
+          class: 'subtab' + (v.value === g ? ' on' : ''), 'aria-pressed': v.value === g ? 'true' : 'false',
+          onclick: () => { groupSel[sub.key] = v.value; renderSubNav(); renderSidebar(); renderMain(); },
+        }, v.label))));
+    const nf = sub.nav.filter;
+    if (nf) {
+      const opts = [];
+      for (const c of sub.cases) {
+        if (c[sub.nav.group.field] !== g) continue;
+        const v = c[nf.field];
+        if (v != null && opts.indexOf(v) < 0) opts.push(v);
+      }
+      if (opts.length) {
+        const cur = activeFilter(sub);
+        const sel = h('select', { 'aria-label': nf.label },
+          h('option', { value: '' }, 'All'),
+          opts.map(v => { const o = h('option', { value: v }, v); if (v === cur) o.selected = true; return o; }));
+        sel.addEventListener('change', () => { filterSel[sub.key + '::' + g] = sel.value; renderSidebar(); renderMain(); });
+        subNav.appendChild(h('label', { class: 'navfilter' }, nf.label + ':', sel));
+      }
     }
   }
 
@@ -406,6 +550,7 @@
       t.className = 'sectab' + (on ? ' on' : '');
       t.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    renderSubNav();
     renderSidebar();
     renderMain();
   }
@@ -467,13 +612,14 @@
 
     const tabs = h('div', { class: 'sectabs' }, SECTIONS.map(s =>
       h('button', { class: 'sectab' + (s.id === section ? ' on' : ''), 'data-sec': s.id, 'aria-pressed': s.id === section ? 'true' : 'false', onclick: () => switchSection(s.id) }, s.label)));
+    subNav = h('div', { class: 'subnav' });
     const toolbar = h('div', { class: 'algtoolbar' }, search, statusEl, notaBox, exportBtn);
     sideNav = h('nav', { class: 'algside', 'aria-label': 'cases' });
     main = h('div', { class: 'algmain' });
     app.appendChild(h('div', { class: 'algwrap' },
       h('div', { class: 'alghead' }, h('h1', null, 'Algorithms'),
         h('p', { class: 'sub' }, 'Pick a subset, then browse its cases — each shown from every angle it’s solved at. Use search to find a case fast.')),
-      tabs, toolbar,
+      tabs, subNav, toolbar,
       h('div', { class: 'algcols' }, h('aside', { class: 'algsidewrap' }, sideNav), main)));
 
     switchSection(section);

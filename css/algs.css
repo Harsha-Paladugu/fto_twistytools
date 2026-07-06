@@ -10,6 +10,17 @@
 .sectab:hover { color: var(--txt); }
 .sectab.on { color: var(--actink); background: var(--act); }
 
+/* second-level nav: group pills + per-group dropdown (authored `nav`) */
+.subnav { display: flex; align-items: center; gap: 14px; margin: -4px 0 14px; flex-wrap: wrap; }
+.subtabs { display: inline-flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+.subtab { background: none; border: 0; color: var(--mut); font: 600 13px var(--body); padding: .4em 1.1em; border-radius: 7px; cursor: pointer; }
+.subtab:hover { color: var(--txt); }
+.subtab.on { color: var(--actink); background: var(--act); }
+.navfilter { display: inline-flex; align-items: center; gap: 8px; color: var(--mut); font: 600 12px var(--body); }
+.navfilter select { background: var(--panel); color: var(--txt); border: 1px solid var(--line); border-radius: 8px;
+  font: 500 13px var(--body); padding: .4em .6em; max-width: 240px; }
+.navfilter select:focus { outline: none; border-color: var(--mut); }
+
 /* toolbar */
 .algtoolbar { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; flex-wrap: wrap; }
 .algsearch { flex: 1; min-width: 220px; background: var(--panel); border: 1px solid var(--line2);
@@ -49,6 +60,24 @@
 .sidehd { font: 600 12px var(--mono); color: var(--mut); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
 /* alg lists flow into as many ~250px columns as fit, so they use the full width */
 .alglist { columns: 250px; column-gap: 28px; }
+/* first-move table: the 8 possible first moves, each with its alg(s).
+   The first-move keys are a fixed-width highlighted chip column so they line
+   up; rotations inside the alg text are tinted blue (regrips at a glance). */
+.fmtable { display: flex; flex-direction: column; gap: 3px; }
+.fmrow { display: flex; align-items: first baseline; gap: 14px; }
+.fmrow.empty { opacity: .45; }
+.fmkey { flex: 0 0 2.4em; text-align: center; font: 700 13px var(--mono);
+  border-radius: 6px; padding: 2px 0; line-height: 1.4; }
+.fmrow:not(.empty) .fmkey { color: var(--actink); background: var(--act); }
+.fmrow.empty .fmkey { color: var(--dim); border: 1px dashed var(--line2); padding: 1px 0; }
+.fmnone { color: var(--dim); font: 500 13px var(--mono); }
+.fmalgs { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.alg .tok { margin-right: .5em; display: inline-block; }
+.alg .tok:last-child { margin-right: 0; }
+.alg .tok.rot { color: #7fb0ff; } /* lightened var(--blue) for dark panels */
+.ratetag { font: 500 10px var(--mono); border: 1px solid var(--line2); border-radius: 5px; padding: 0 4px; color: var(--mut); }
+.ratetag.best { color: var(--green); border-color: var(--green); opacity: .85; }
+.ratetag.poor { color: var(--dim); }
 .algrow { display: flex; align-items: center; gap: 8px; padding: 3px 0; break-inside: avoid; }
 .algrow .alg { font: 500 16px var(--mono); color: var(--txt); }
 .algrow.warn .alg { color: var(--mut); }

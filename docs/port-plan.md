@@ -133,6 +133,49 @@ new Firebase project; domain skewbiks.com (GitHub Pages, CNAME).
     duplicate rows after export → commit → redeploy); check-fresh now also covers
     data/classmap.json; README data-flow + the seed's center section labels
     corrected ("Last layer centers"). Engine tests 48/48.
+  - **Alg data v1 — real method sheets imported (2026-07-06).** USER supplied the
+    advanced-method sheets as JSON (TCLL "Full TCLL - Max Parris", EG2.xlsx, NS
+    2026_ns_sheet.xlsx); committed verbatim under `data/sources/` and imported by the
+    new re-runnable `tools/import-method-sheets.mjs` (NS→WCA conversion, state-verified;
+    duplicate-name merge; per-alg provenance `ns`/`rating`/`firstMove`). The
+    machine-generated Sarah-Intermediate v0 seed cases were REMOVED (subset shells kept;
+    Sarah's sheets to come — extend the importer's ADAPTERS). Result: subsets NS 135 /
+    EG2 136 / TCLL 1078 cases = **1,349 cases / 3,114 algs**, compile + check-sheet +
+    check:fresh green, engine tests 48/48, algs.html verified in headless Edge
+    (playwright-core, channel msedge — plain --screenshot still virtual-time-starves).
+    **Notation finding (machine-derived, dual-oracle verified — see importer header +
+    data/sources/README.md): the sheets' rotation letters are NOT WCA — sheet x/y/z =
+    engine z'/y'/x** (move letters are standard fc2 NS). Only mid-alg rotations
+    distinguish the conventions (leading rotations conjugate the case), which is why
+    959 mid-rot algs scattered under the identity reading. Sheet cases are
+    orientation-free (alternates solve from arbitrary holds → one authored case may
+    span several canons; each alg keys to the exact state it solves). ~1% of algs
+    flagged `"suspect": true` (off their case's plurality rotation class = sheet
+    typos; suspects sort last so they never anchor a case card); 2 identity algs
+    dropped (NS 137a, sheet-rated "poor"). Same-day follow-up (USER request): the
+    Algorithms page gained a data-driven second-level nav — the importer emits each
+    case's structured sheet fields (corner/sign/id/center/caseId/centerPattern) plus a
+    per-subset `nav` block ({group, filter, sort}); algs.js renders group pills
+    (NS/EG2: Pi/Peanut/…; TCLL: TCLL+/TCLL−) + a per-group dropdown (center pattern /
+    center case / corner set) and sorts cases by ID (natural sort for NS caseIds,
+    U-FL-FR-BR-BL order for EG2/TCLL). Search deliberately spans the whole subset,
+    ignoring group/filter. Subsets without `nav` (FL, Sarah-*) keep the flat view.
+    Second follow-up (USER): case cards now show a **first-move table** — all 8
+    possible first moves (r r' R R' B B' b b', the sheets' convention) with each
+    group's algs filed under the first move they make FROM THE ANGLE THE DIAGRAM
+    SHOWS (so a solver can pick the alg that cancels their last first-layer move),
+    and the alg text is the **authored sheet notation verbatim, rotations included**
+    (the `ns` field, shown in BOTH toggle modes — WCA's 4 letters can't express the
+    free-corner moves, so no rotation-preserving WCA form exists; the rotationless
+    conversion stays for keying + the WCA input mode; algs.html defaults to NS). The
+    first-move keys render as a fixed-width highlighted chip column (accent; empty =
+    dim dashed chip), rotation tokens inside alg text are tinted blue — two distinct
+    highlights by design. Per-alg `firstMove` is computed at import — the WCA
+    conversion's first token IS the physical first move in the diagram frame; the
+    sheets' letter convention for it is the fixed map {WCA R→B, U→b, L→r, B→R}
+    (validated 1320 agree / 42 differ vs the sheets' own columns; disagreements are
+    kept per-alg as `firstMoveSheet`, mostly the suspect algs). Rating chips
+    (best/poor) shown; best sorts first within a first-move row.
 - [ ] **M6 — Trainer.** Fork `src/trainer/l5e-trainer.jsx` → `skewb-trainer.jsx` (new
   build.mjs entry). Keep the chassis (timer, storage bridge under new key
   `skewb-trainer-v1` with legacy migrations deleted, session/recap, stats, case-picker);
