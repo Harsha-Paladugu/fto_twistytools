@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import * as FIX from './fixtures/xyzzy-fto.mjs';
+import KPF from './fixtures/cubingjs-fto-kpuzzle.json' with { type: 'json' };
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 globalThis.window = {};
@@ -345,6 +346,170 @@ t('randomScramble: 30 parsable turns, suppression rules, deterministic seed', ()
     }
     assert(!E.eq(E.applyParsed(parse(scr.join(' ')), E.solved()), E.solved()), 'scramble solves');
   }
+});
+
+/* ---------- 11. second oracle: cubing.js runtime KPuzzle def ---------- */
+// tools/fixtures/cubingjs-fto-kpuzzle.json is the PuzzleGeometry-generated def
+// dumped from cubing.js — fully independent of the xyzzy tables. Slot
+// correspondence is DERIVED from face signatures (which face moves touch each
+// slot), then every move, rotation, and probe pattern must agree.
+const kpSig = (perms, n) => {
+  const out = Array.from({length:n}, () => []);
+  for (const f of E.FACES){
+    const p = perms(f);
+    for (let i=0;i<n;i++) if (p[i] !== i) out[i].push(f);
+  }
+  return out.map(a => a.sort().join(','));
+};
+function kpMatch(th, our){
+  return th.map((s, i) => {
+    const js = our.map((t,j)=>t===s?j:-1).filter(j=>j>=0);
+    assert(js.length === 1, 'signature not unique for their slot ' + i + ': ' + s);
+    return js[0];
+  });
+}
+let mapC, mapE, mapX;
+t('cubing.js def: slot correspondence derivable from face signatures alone', () => {
+  mapC = kpMatch(kpSig(f => KPF.moves[f].C4RNER.permutation, 6),
+                 kpSig(f => E.moveTables[2*E.FIDX[f]].cperm, 6));
+  mapE = kpMatch(kpSig(f => KPF.moves[f].EDGES.permutation, 12),
+                 kpSig(f => E.moveTables[2*E.FIDX[f]].eperm, 12));
+  mapX = kpMatch(kpSig(f => KPF.moves[f].CENTERS.permutation, 24),
+                 kpSig(f => E.moveTables[2*E.FIDX[f]].xperm, 24));
+  assert(new Set(mapC).size === 6 && new Set(mapE).size === 12 && new Set(mapX).size === 24, 'bijections');
+});
+function kpCmp(name, tbl){
+  const th = KPF.moves[name];
+  assert(th && typeof th !== 'string', name + ' missing from fixture');
+  for (let i=0;i<6;i++)  assert(tbl.cperm[mapC[i]] === mapC[th.C4RNER.permutation[i]], name + ' corner ' + i);
+  for (let i=0;i<12;i++) assert(tbl.eperm[mapE[i]] === mapE[th.EDGES.permutation[i]], name + ' edge ' + i);
+  for (let i=0;i<24;i++) assert(tbl.xperm[mapX[i]] === mapX[th.CENTERS.permutation[i]], name + ' centre ' + i);
+}
+function rotSlots(M){
+  const c = new Array(6), e = new Array(12), x = new Array(24);
+  for (let v=0;v<6;v++) c[E.vertImg(M,v)] = v;
+  for (let i=0;i<12;i++){
+    const [v,w] = E.EDGES[i];
+    const a = E.vertImg(M,v), b = E.vertImg(M,w);
+    e[E.EDGES.findIndex(d => d[0]===Math.min(a,b) && d[1]===Math.max(a,b))] = i;
+  }
+  for (let f=0;f<8;f++) for (let k=0;k<3;k++){
+    const vId = E.FSIGN[f][k] > 0 ? k : k+3;
+    x[3*E.faceImg(M,f) + (E.vertImg(M,vId) % 3)] = 3*f+k;
+  }
+  return { cperm:c, cflip:[0,0,0,0,0,0], eperm:e, xperm:x };
+}
+const seqSlots = (a, b) => ({    // apply a then b, pull convention
+  cperm: a.cperm.map((_,i)=>a.cperm[b.cperm[i]]),
+  cflip: [0,0,0,0,0,0],
+  eperm: a.eperm.map((_,i)=>a.eperm[b.eperm[i]]),
+  xperm: a.xperm.map((_,i)=>a.xperm[b.xperm[i]]),
+});
+t('cubing.js def: all 8 face moves + U\' agree under the correspondence', () => {
+  for (const f of E.FACES) kpCmp(f, E.moveTables[2*E.FIDX[f]]);
+  kpCmp("U'", E.moveTables[2*E.FIDX.U+1]);
+});
+t("cubing.js def: T/T2 equal our clockwise T — the M1 direction residue is closed", () => {
+  kpCmp('T',  rotSlots(E.tokenRotMat('T', 1)));
+  kpCmp('T2', rotSlots(E.tokenRotMat('T', 2)));
+});
+t("cubing.js def: Uv/Rv/Lv equal our Uo/Ro/Lo (Streeter o ≡ Twizzle v, same direction)", () => {
+  kpCmp('Uv', rotSlots(E.tokenRotMat('U', 1)));
+  kpCmp('Rv', rotSlots(E.tokenRotMat('R', 1)));
+  kpCmp('Lv', rotSlots(E.tokenRotMat('L', 1)));
+});
+t('cubing.js def: SiGN 2U equals our Us; Rw equals our BL-then-Ro composite', () => {
+  // slice slot tables derived from the engine's slice facelet perm
+  const cf = {}, xf = {}, ef = {};
+  E.FEAT.forEach((ft, i) => {
+    if (ft.t === 'c') cf[ft.f + '|' + ft.v] = i;
+    else if (ft.t === 'x') xf[ft.f + '|' + ft.v] = i;
+    else ef[ft.f + '|' + ft.v + '|' + ft.v2] = i;
+  });
+  function slotsFromFaceletPerm(P){
+    const c = new Array(6), e = new Array(12), x = new Array(24), fl = [0,0,0,0,0,0];
+    for (let v=0;v<6;v++){
+      const src = E.FEAT[P[cf[E.CYC[v][0] + '|' + v]]];
+      c[v] = src.v; fl[v] = E.CYC[src.v].indexOf(src.f) === 0 ? 0 : 1;
+    }
+    for (let i=0;i<12;i++){
+      const [v,w,fa] = E.EDGES[i];
+      const src = E.FEAT[P[ef[fa + '|' + v + '|' + w]]];
+      e[i] = E.EDGES.findIndex(d => d[0]===Math.min(src.v,src.v2) && d[1]===Math.max(src.v,src.v2));
+    }
+    for (let f=0;f<8;f++) for (let k=0;k<3;k++){
+      const src = E.FEAT[P[xf[f + '|' + (E.FSIGN[f][k] > 0 ? k : k+3)]]];
+      x[3*f+k] = 3*src.f + (src.v % 3);
+    }
+    return { cperm:c, cflip:fl, eperm:e, xperm:x };
+  }
+  kpCmp('2U', slotsFromFaceletPerm(E.sliceFaceletPerm.U));
+  // cubing.js spells wides as lowercase: their r = Streeter Rw = our BL then Ro
+  kpCmp('r', seqSlots(E.moveTables[2*E.FIDX.BL], rotSlots(E.tokenRotMat('R', 1))));
+  kpCmp('u', seqSlots(E.moveTables[2*E.FIDX.D], rotSlots(E.tokenRotMat('U', 1))));
+});
+t('cubing.js def: corner orientation deltas consistent with our flips (Z4 reference solve)', () => {
+  // theory: their delta d(i) = R(i) - R(p[i]) + 2*ourflip (mod 4) for per-slot
+  // references R; propagate R from slot 0 across all move edges and check
+  // global consistency (their corners have 4 orientation states; physical
+  // flips are the 2-quarter twists).
+  const R = new Array(6).fill(null); R[0] = 0;
+  let changed = true, guard = 0;
+  while (changed && guard++ < 20){
+    changed = false;
+    for (const f of E.FACES){
+      const th = KPF.moves[f], ours = E.moveTables[2*E.FIDX[f]];
+      for (let i=0;i<6;i++){
+        const j = th.C4RNER.permutation[i];
+        if (j === i) continue;
+        const flip = ours.cflip[mapC[i]];   // our delta for the piece landing in mapped slot i
+        const d = th.C4RNER.orientationDelta[i];
+        if (R[j] !== null && R[i] === null){ R[i] = (d - 2*flip + R[j] + 8) % 4; changed = true; }
+        else if (R[i] !== null && R[j] === null){ R[j] = (R[i] - d + 2*flip + 8) % 4; changed = true; }
+        else if (R[i] !== null && R[j] !== null){
+          assert(((R[i] - R[j] + 8) % 4) === ((d - 2*flip + 8) % 4), 'inconsistent refs at ' + f + ' slot ' + i);
+        }
+      }
+    }
+  }
+  assert(R.every(v => v !== null), 'reference propagation incomplete');
+});
+t('cubing.js def: edge orientation deltas are pure reference bookkeeping (Z2 solve, no physical flips)', () => {
+  const R = new Array(12).fill(null); R[0] = 0;
+  let changed = true, guard = 0;
+  while (changed && guard++ < 30){
+    changed = false;
+    for (const f of E.FACES){
+      const th = KPF.moves[f];
+      for (let i=0;i<12;i++){
+        const j = th.EDGES.permutation[i];
+        if (j === i) continue;
+        const d = th.EDGES.orientationDelta[i] % 2;
+        if (R[j] !== null && R[i] === null){ R[i] = (d + R[j]) % 2; changed = true; }
+        else if (R[i] !== null && R[j] === null){ R[j] = (R[i] - d + 2) % 2; changed = true; }
+        else if (R[i] !== null && R[j] !== null){
+          assert(((R[i] - R[j] + 2) % 2) === d, 'inconsistent edge refs at ' + f + ' slot ' + i);
+        }
+      }
+    }
+  }
+  assert(R.every(v => v !== null), 'edge reference propagation incomplete');
+});
+t('cubing.js def: probe patterns (U, T, Rv, 12-move scramble) agree piece-for-piece', () => {
+  const KPP = KPF.patterns;
+  function cmpPattern(name, tbl){
+    const th = KPP[name];
+    assert(th && typeof th !== 'string', name + ' pattern missing');
+    // their pattern: pieces[i] = piece at slot i; ours via pull tables from solved
+    for (let i=0;i<6;i++)  assert(tbl.cperm[mapC[i]] === mapC[th.C4RNER.pieces[i]], name + ' corner ' + i);
+    for (let i=0;i<12;i++) assert(tbl.eperm[mapE[i]] === mapE[th.EDGES.pieces[i]], name + ' edge ' + i);
+    for (let i=0;i<24;i++) assert(tbl.xperm[mapX[i]] === mapX[th.CENTERS.pieces[i]], name + ' centre ' + i);
+  }
+  cmpPattern('U', E.moveTables[2*E.FIDX.U]);
+  cmpPattern('T', rotSlots(E.tokenRotMat('T', 1)));
+  cmpPattern('Rv', rotSlots(E.tokenRotMat('R', 1)));
+  const scr = "U R' F BL D' B BR' L U' F R BL'";
+  cmpPattern(scr, E.effectTable(E.parseAlg(scr)));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

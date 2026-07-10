@@ -142,17 +142,25 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   §Test vectors); **rotation-letter directions pinned against Twizzle BEFORE
   any alg data is authored** (the Skewb x/y/z-inversion lesson); every
   dropped/added contract member documented in ground-truth.
-- [ ] **M2 — Renderer.** `js/render.js` rebuilt on the FTO facelet model: the
-  community-standard 2D view is two vertex-centered diamond views, front
-  (U/L/R/F) + back (B/BR/BL/D) — the same front/back two-view shape as the
-  Skewb port's net, and what csTimer and cubing.js both draw (ground-truth
-  §Rendering); partial case diagrams for the alg sheet come later with M3
-  masking needs. Color scheme: no single hardware standard exists — ship a
-  configurable palette, DianSheng-era default (cubing.js/csTimer defaults
-  match it), white-U/green-F scrambling hold. Same small exported contract.
-  Exit gate: solved + known-scramble diagrams visually verified against an
-  external simulator (headless-Edge screenshot recipe from the Skewbiks
-  memory); renderer consumes only the facelet model.
+- [x] **M2 — Renderer** (2026-07-10). `js/render.js` rebuilt on the FTO facelet
+  model: the community-standard two vertex-centered diamond views (front
+  U/L/R/F, back B/BR/BL/D — what csTimer and cubing.js draw) from EXACT
+  barycentric facelet triangles projected orthographically, plus a rotatable
+  3D octahedron view; configurable palette (DianSheng default, LanLan
+  variant, per-call override), mask support for future partial diagrams,
+  accepts states or raw 72-color facelet arrays. Contract: { netSVG,
+  iso3dSVG, viewMatrix, rotateView, DEFAULT_VIEW, PALETTES }. NEW
+  `npm run test:render` (7 tests: polygon counts, solved layout quadrants,
+  chirality-pinning exact centroids, palettes, mask, color conservation).
+  **The exit gate was exceeded:** beyond side-by-side headless-Edge
+  screenshots vs cubing.js twisty-player 2D (solved, 4 single moves, a
+  12-move scramble, T, Rv — all agree), M2 added a SECOND machine oracle:
+  cubing.js's runtime-generated KPuzzle def dumped as a fixture
+  (`tools/fixtures/cubingjs-fto-kpuzzle.json`) and pinned in test-engine
+  (slot correspondence derived from face signatures; all 16 moves, T/T2 —
+  **closing the M1 single-T direction residue machine-exactly** —, Uv/Rv/Lv ≡
+  our o-rotations, SiGN 2U ≡ Us, their lowercase wides ≡ our w tokens,
+  orientation-reference solves, probe patterns). test:engine now 45 tests.
 - [ ] **M3 — Sheet pipeline + Algorithms page.** BLOCKED ON USER INPUT: the
   algorithm sheets. Port `tools/compile-sheet.mjs` + `tools/import-method-sheets.mjs`
   (new ADAPTERS per source format — the Skewb importer's provenance/suspect/
@@ -177,7 +185,9 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   buildable from the M3 data alone (setup-scramble = randomized inverse of the
   case state + masking decisions per the user's spec); further modes (full-solve
   timer/analysis, recognition variants, one-look) are scoped when the user
-  specs them. Any mode needing "N moves from a solved step" uses the M5 pruning
+  specs them. Carry-item from the M2 review: the inherited trainer's mask sets
+  are SKEWB facelet indices (0..29) — every mask must be reauthored for the
+  FTO's 0..71 indexing when the trainer is rewritten. Any mode needing "N moves from a solved step" uses the M5 pruning
   tables, so sequence trainer-analysis features AFTER M5 if they're wanted.
   Exit gate: `npm run test:trainer` green over the new substrate; headless-Edge
   E2E drives every shipped mode.

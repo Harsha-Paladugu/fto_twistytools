@@ -8,12 +8,14 @@ shared-layer fixes stay cherry-pickable). Four pages share one engine and one
 set of UI layers; the only build step compiles the algorithm data and bundles
 the trainer.
 
-> **Port status: M1 (engine) done.** `js/engine.js` is the FTO engine —
-> geometry-derived, pinned against xyzzy's ftosolver.js move tables, 37 tests
-> green. The renderer/data layers above it are still inherited Skewb code, so
-> the algs/trainer/solver pages are non-functional until their milestones
-> (M2 renderer → M3 sheet/algs → M4 trainer → M5 solver); their banners say
-> so. The plan with live status is
+> **Port status: M2 (renderer) done.** `js/engine.js` is the FTO engine —
+> geometry-derived, pinned against BOTH xyzzy's ftosolver.js tables and
+> cubing.js's runtime KPuzzle def (45 tests green) — and `js/render.js` draws
+> the community-standard two-diamond FTO views (7 tests, verified
+> side-by-side against cubing.js). The data/tool layers above are still
+> inherited Skewb code, so the algs/trainer/solver pages are non-functional
+> until their milestones (M3 sheet/algs → M4 trainer → M5 solver); their
+> banners say so. The plan with live status is
 > [docs/port-plan.md](docs/port-plan.md); FTO domain facts (piece model, state
 > space, notation, methods, sources) are
 > [docs/fto-ground-truth.md](docs/fto-ground-truth.md). The Skewb parent's OO
@@ -36,7 +38,10 @@ the trainer.
   of the keying + alg→case helpers (`stateKey`, `realCanonKey`,
   `caseStateOf`, `algSolvesKey`, `normAlg`, …). No global optimal solver —
   per-step search arrives at M5.
-- **`render.js`** (`window.OORender`) — SVG puzzle diagrams.
+- **`render.js`** (`window.OORender`) — SVG puzzle diagrams (M2): the two
+  vertex-centered diamond views (front U/L/R/F, back B/BR/BL/D) + a rotatable
+  3D view, exact facelet-triangle projection, configurable palette
+  (DianSheng default), mask support.
 - **`account.js`** (`window.OOAccount`) — Firebase Auth + per-user cloud data,
   with a localStorage demo fallback when no Firebase is configured (the
   current state: `config.js` has `firebase: null`; see [SETUP.md](SETUP.md)).

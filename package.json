@@ -13,6 +13,7 @@
     "check:fresh": "node tools/check-fresh.mjs",
     "test": "node tools/check-sheet.mjs",
     "test:engine": "node tools/test-engine.mjs",
+    "test:render": "node tools/test-render.mjs",
     "test:trainer": "node tools/test-trainer.mjs",
     "test:solver": "node tools/test-solver.mjs"
   },

@@ -124,10 +124,12 @@ Skewb engine and stays until M1 deletes the code it documents).
     not often used since it is redundant" (the doc's wording; T2 is a valid
     distinct rotation, just rare — M1 should still implement it).
   This is the engine's canonical INTERNAL spelling and the display dialect.
-  Other community spellings (below) are parse-level aliases at most. M1 must
-  still pin the DIRECTION encodings against a physical oracle (Twizzle) —
-  the doc defines directions in prose, and mis-encoding direction is exactly
-  the Skewb x/y/z scar. Note the doc's color scheme is Ben's personal
+  Other community spellings (below) are parse-level aliases at most.
+  **Direction encodings are MACHINE-PINNED (M1+M2)** against both xyzzy's
+  tables and cubing.js's runtime KPuzzle def; cross-dialect equivalences for
+  the M3 importer, all machine-verified: Streeter `Xo` ≡ cubing.js `Xv`
+  (same direction), Streeter `T` ≡ cubing.js `T`, Streeter `Xw` ≡ cubing.js
+  lowercase `x`, Streeter `Xs` ≡ SiGN `2X`. Note the doc's color scheme is Ben's personal
   additive-mixing one (white/yellow, red/cyan, green/magenta, blue/gray) —
   the notation decision does NOT change the renderer's DianSheng default.
 - Community variant landscape (context for importing OTHER people's algs;
@@ -249,6 +251,11 @@ The USER supplies the actual sheets; this section is context, not authority.
   front/back two-view net. Alg sheets additionally use partial case diagrams
   (zwegner's LBT sheet: inline SVG, irrelevant stickers dark; "left face in
   front for recognition") and crystalcuber's CIF fan generator. 🔶
+  **Our js/render.js implements exactly this convention (M2)** — verified
+  side-by-side against cubing.js twisty-player 2D in headless Edge, and the
+  layout/chirality are pinned by tests (test-render: quadrant map + exact
+  projected centroids). Masking hook (`opts.mask`) ships for M3/M4 partial
+  diagrams.
 - **No single hardware color standard — two schemes, red/green placement
   swapped.** DianSheng (2024+, now dominant; cubing.js AND current csTimer
   default): U white, F green, R red, L purple, B blue, BR gray, D yellow,
@@ -286,10 +293,17 @@ The USER supplies the actual sheets; this section is context, not authority.
       move sequences.
 - [x] Per-turn structure as engine tests: 15 pieces / 27 facelets, five
       disjoint 3-cycles; slice = 12 pieces / 18 facelets.
-- [ ] STILL OPEN: a visual pin of a published scramble picture (cubing.js /
-      csTimer preview) against our renderer — do at M2; this also closes the
-      last conceivable sign ambiguity (a global reflection consistent across
-      all tables would pass permutation pins but flip the picture).
+- [x] CLOSED at M2, two ways: (a) side-by-side headless-Edge screenshots of
+      our netSVG vs cubing.js twisty-player 2D (solved, U, R′, BL, D, a
+      12-move scramble, T, Rv) all agree; (b) cubing.js's runtime-generated
+      KPuzzle def dumped to `tools/fixtures/cubingjs-fto-kpuzzle.json` and
+      pinned in test-engine §11 — slot correspondence derived from face
+      signatures alone, then all 16 face moves, T/T2 (the single-T direction
+      residue is CLOSED: **cubing.js T ≡ our clockwise T**), Uv/Rv/Lv ≡ our
+      Uo/Ro/Lo (same direction), SiGN `2U` ≡ our Us, their lowercase wides
+      (`r`,`u`) ≡ our `Rw`,`Uw`, Z4/Z2 orientation-reference solves, and
+      piece-exact probe patterns. Renderer chirality is pinned by exact
+      projected centroids in test-render (a mirrored drawing flips them).
 
 ## OOEngine contract delta (M1 — vs the inherited Skewb engine)
 

@@ -1,32 +1,30 @@
-/* Skewbiks.com — Diagram renderer: 2D dual-view net + draggable 3D view. */
+/* fto.twistytools.com — Diagram renderer: 2D dual diamond net + 3D view. */
 (function(){const module={exports:{}};
-// Skewb OO — renderer.
-// 2D: two fixed orthographic corner views side by side — "front" (U/F/L, the
-//     WCA scrambling hold: white top, green left, red right, UFL corner toward
-//     you) and "back" (D/B/R) — every one of the 30 stickers visible exactly
-//     once. Matching the scrambling hold means a scramble executed in
-//     competition orientation looks exactly like the front view, and a
-//     position and its LR mirror render as visual mirror images.
-// 3D: orthographic render of the real cube with the skewb cut (4 corner
-//     triangles + center diamond per face), rotatable (yaw/pitch).
-// All sticker colors come from the engine's facelet model via
-// E.toFixedFacelets — the WCA-scrambling-frame presentation, in which the
-// white/red/green (UFL) corner always reads solved, exactly like a real cube
-// scrambled in the WCA hold. (Raw E.toFacelets is the engine's internal
-// pinned frame, which after any written B is the real cube rotated about the
-// UFL–DBR diagonal — rendering that made B look like a UFL twist.) The
-// renderer carries no move/twist logic of its own.
-// Browser loads engine.js first (window.OOEngine). Node tools stub
-// globalThis.window before requiring engine.js for its side effect.
+// FTO renderer (M2).
+// 2D: the community-standard two vertex-centered "diamond" views side by side
+//     (csTimer and cubing.js draw exactly this — ground-truth §Rendering):
+//     front = the CIF hold looking at the front vertex (+x): U top, L left,
+//     R right, F bottom; back = the puzzle rotated 180° about the view-vertical
+//     (the +y/+z edge axis): B top, BR left, BL right, D bottom. Every one of
+//     the 72 stickers is visible exactly once, and a scramble executed in the
+//     scrambling hold (white U, green F) looks exactly like the front view.
+// 3D: orthographic render of the real octahedron, rotatable (yaw/pitch on top
+//     of the CIF base view).
+// All sticker triangles are EXACT barycentric facelet regions projected from
+// 3D — the renderer carries no move logic and consumes only the engine's
+// facelet model (E.toFacelets / raw 72-color arrays).
+// Colors: no single hardware standard exists; default = the DianSheng-era
+// scheme (what cubing.js/csTimer default to), LanLan = red/green placement
+// swapped. Pass opts.colors to override per call.
 const E = (typeof window !== 'undefined' && window.OOEngine) ? window.OOEngine
   : (typeof globalThis !== 'undefined' && globalThis.window && globalThis.window.OOEngine) ? globalThis.window.OOEngine
   : (typeof require !== 'undefined' ? require('./engine.js') : null);
 
-// WCA scheme (TNoodle default), dark-theme adjusted to the site palette
-const COLORS = { U:'#e8edf6', R:'#3a7fe8', F:'#e8473d', D:'#f2cf3c', L:'#3fbf52', B:'#f28c3c' };
-const FACES = ['U','R','F','D','L','B'];
-const FIDX = { U:0, R:1, F:2, D:3, L:4, B:5 };
-const FNORM = { U:[0,1,0], R:[1,0,0], F:[0,0,1], D:[0,-1,0], L:[-1,0,0], B:[0,0,-1] };
+// face order [U,F,BR,BL,L,R,D,B] (engine/facelet order), dark-theme adjusted
+const PALETTES = {
+  diansheng: ['#e8edf6', '#3fbf52', '#9aa4b5', '#f28c3c', '#a05ae8', '#e8473d', '#f2cf3c', '#3a7fe8'],
+  lanlan:    ['#e8edf6', '#e8473d', '#9aa4b5', '#f28c3c', '#a05ae8', '#3fbf52', '#f2cf3c', '#3a7fe8'],
+};
 
 function shade(hex, f) {
   if (f >= 1) return hex;
@@ -34,41 +32,44 @@ function shade(hex, f) {
   const ch = sh => Math.round(((v >> sh) & 255) * f).toString(16).padStart(2, '0');
   return '#' + ch(16) + ch(8) + ch(0);
 }
-const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-const mid = (a,b) => [(a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2];
 
-/* ---- geometry: per face, 4 corner triangles + center diamond ---- */
-// corners of each face ordered cyclically, counter-clockwise seen from outside
-function faceQuad(f) {
-  const n = FNORM[f];
-  const cs = Object.keys(E.CPOS).filter(c => dot(E.CPOS[c], n) > 0);
-  // basis in the face plane
-  const u = n[0] ? [0,1,0] : [1,0,0];
-  const v = [n[1]*u[2]-n[2]*u[1], n[2]*u[0]-n[0]*u[2], n[0]*u[1]-n[1]*u[0]];
-  return cs.sort((a, b) => {
-    const ang = c => Math.atan2(dot(E.CPOS[c], v), dot(E.CPOS[c], u));
-    return ang(a) - ang(b);
-  });
-}
-// stickers: { fi: facelet index, face, pts: [3d...] }
-const STICKERS = (() => {
-  const out = [];
-  for (const f of FACES) {
-    const quad = faceQuad(f).map(c => ({ name: c, p: E.CPOS[c] }));
-    const mids = quad.map((c, i) => mid(c.p, quad[(i + 1) % 4].p));
-    out.push({ fi: FIDX[f]*5, face: f, pts: mids });   // center diamond
-    quad.forEach((c, i) => {
-      out.push({ fi: FIDX[f]*5 + 1 + E.STICKER_POS[f].indexOf(c.name), face: f,
-                 pts: [c.p, mids[i], mids[(i + 3) % 4]] });
-    });
+/* ---- geometry: exact facelet triangles from the barycentric subdivision ---- */
+const add = (a,b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
+const sc = (a,k) => [a[0]*k, a[1]*k, a[2]*k];
+const bary = (pts) => sc(pts.reduce(add), 1/3);
+
+// FACELET_TRIS[i] = [p1,p2,p3] in 3D for facelet i (0..71)
+const FACELET_TRIS = (() => {
+  const tris = new Array(72);
+  for (let i = 0; i < 72; i++) {
+    const ft = E.FEAT[i], s = E.FSIGN[ft.f];
+    const verts = [0,1,2].map(k => sc([k===0?1:0, k===1?1:0, k===2?1:0], s[k])); // face vertices ±e_k
+    const P = k => verts[k];
+    if (ft.t === 'c') {
+      const V = P(ft.v % 3), others = [0,1,2].filter(k => k !== ft.v % 3).map(P);
+      tris[i] = [V, sc(add(sc(V,2), others[0]), 1/3), sc(add(sc(V,2), others[1]), 1/3)];
+    } else if (ft.t === 'x') {
+      const V = P(ft.v % 3), others = [0,1,2].filter(k => k !== ft.v % 3).map(P);
+      tris[i] = [sc(add(others[0], sc(V,2)), 1/3), sc(add(others[1], sc(V,2)), 1/3), bary(verts)];
+    } else {
+      const V = P(ft.v % 3), W = P(ft.v2 % 3);
+      tris[i] = [sc(add(sc(V,2), W), 1/3), sc(add(V, sc(W,2)), 1/3), bary(verts)];
+    }
   }
-  return out;
+  return tris;
 })();
 
 /* ---- projection ---- */
+const R2 = Math.SQRT1_2;
+// CIF base: right = (0,1,-1)/√2, up = (0,1,1)/√2, toward viewer = +x
+const M_FRONT = [[0, R2, -R2], [0, R2, R2], [1, 0, 0]];
+// back view: puzzle turned 180° about the view-vertical (+y/+z edge axis)
+const M_BACK  = [[0, -R2, R2], [0, R2, R2], [-1, 0, 0]];
+
 function viewMatrix(yaw, pitch) {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-  return [[cy, 0, sy], [sp * sy, cp, -sp * cy], [-cp * sy, sp, cp * cy]];
+  const R = [[cy, 0, sy], [sp * sy, cp, -sp * cy], [-cp * sy, sp, cp * cy]];
+  return mulM(R, M_FRONT);          // yaw/pitch on top of the CIF hold
 }
 function mulM(A, B) {
   const C = [[0,0,0],[0,0,0],[0,0,0]];
@@ -88,59 +89,66 @@ function rotateView(M, dx, dy) {
   return mulM(Rx, mulM(Ry, M));
 }
 
-// render all visible faces of one view; cull + depth-sort whole faces (the cube
-// is convex, so faces never interleave). Returns svg polygon markup.
-// `mask` (optional Set of DISPLAY facelet indices) hides those stickers behind a
-// neutral fill — used by the trainer's partial-recognition diagrams.
+// render one view of the octahedron: cull + depth-sort whole faces (convex,
+// so faces never interleave). `mask`: Set of facelet indices → neutral fill.
 const MASKED_FILL = '#252c39';
-function renderView(fl, M, ox, oy, mask) {
+const S3 = Math.sqrt(3);
+function renderView(fl, M, ox, oy, mask, colors, flat) {
   const vis = [];
-  for (const f of FACES) {
-    const n = applyM(M, FNORM[f]);
-    if (n[2] > 0.02) vis.push({ f, nz: n[2] });
+  for (let f = 0; f < 8; f++) {
+    const n = applyM(M, E.FSIGN[f]);
+    if (n[2] > 0.02) vis.push({ f, nz: n[2] / S3 });
   }
-  vis.sort((a, b) => a.nz - b.nz);
+  vis.sort((a, b) => a.nz - b.nz || a.f - b.f);   // explicit tie-break: 2D views have 4 equal-nz faces
   const polys = [];
   for (const fc of vis) {
-    const bright = 0.62 + 0.38 * fc.nz;
-    for (const s of STICKERS) {
-      if (s.face !== fc.f) continue;
-      const pp = s.pts.map(p => { const r = applyM(M, p); return [(r[0] + ox), (-r[1] + oy)]; });
-      const fill = mask && mask.has(s.fi) ? MASKED_FILL : shade(COLORS[FACES[fl[s.fi]]], bright);
+    const bright = flat ? 1 : 0.62 + 0.38 * fc.nz;
+    for (let i = 9 * fc.f; i < 9 * fc.f + 9; i++) {
+      const pp = FACELET_TRIS[i].map(p => { const r = applyM(M, p); return [r[0] + ox, -r[1] + oy]; });
+      const fill = mask && mask.has(i) ? MASKED_FILL : shade(colors[fl[i]], bright);
       polys.push(`<polygon points="${pp.map(p => p[0].toFixed(3) + ',' + p[1].toFixed(3)).join(' ')}" fill="${fill}"/>`);
     }
   }
   return polys.join('');
 }
 
-/* ---- 2D net: front (U/F/L, the WCA hold) + back (D/B/R) corner views ---- */
-const ISO = Math.atan(1 / Math.sqrt(2));            // 35.26°
-const M_FRONT = viewMatrix(Math.PI / 4, ISO);       // shows U, F, L (UFL toward viewer)
-const M_BACK  = viewMatrix(Math.PI + Math.PI / 4, -ISO); // antipode: D, B, R
-function netSVG(state, width, opts) {
-  const o = opts || {};
-  // opts.pinned: render the engine's pinned frame instead of the WCA-hold
-  // re-anchor — a whole-cube rotation of the same physical cube. Use it where
-  // a state-level face must stay put on screen (e.g. a solved-layer-down case
-  // reveal); the tradeoff is that the fixed UFL corner may read twisted.
-  const fl = o.pinned ? E.toFacelets(state) : E.toFixedFacelets(state);
-  const mask = o.mask ? (o.mask instanceof Set ? o.mask : new Set(o.mask)) : null;
-  const caps = o.thumb ? '' :
-    `<text x="0" y="2.05" class="dcap" font-size="0.24" fill="#9fadc4" text-anchor="middle">front</text>` +
-    `<text x="3.7" y="2.05" class="dcap" font-size="0.24" fill="#9fadc4" text-anchor="middle">back</text>`;
-  return `<svg viewBox="-1.8 -1.8 7.3 4" width="${width}" height="${Math.round(width * 4 / 7.3)}" class="${o.cls || 'oonet'}" role="img" aria-label="puzzle state, front and back views">` +
-    renderView(fl, M_FRONT, 0, 0, mask) + renderView(fl, M_BACK, 3.7, 0, mask) + caps + '</svg>';
+function faceletsOf(x) {
+  return (Array.isArray(x) && x.length === 72) ? x : E.toFacelets(x);
+}
+function colorsOf(o) {
+  const c = o && o.colors;
+  if (!c) return PALETTES.diansheng;
+  if (Array.isArray(c)) return c;
+  if (typeof c === 'string') return PALETTES[c] || PALETTES.diansheng;
+  return E.FACES.map((f, i) => c[f] || PALETTES.diansheng[i]);   // {U:'#…',…} form
 }
 
-/* ---- 3D view: one orbitable cube ---- */
+/* ---- 2D net: front (U/L/R/F) + back (B/BR/BL/D) diamond views ---- */
+function netSVG(state, width, opts) {
+  const o = opts || {};
+  const fl = faceletsOf(state);
+  const colors = colorsOf(o);
+  const mask = o.mask ? (o.mask instanceof Set ? o.mask : new Set(o.mask)) : null;
+  const caps = o.thumb ? '' :
+    `<text x="0" y="0.93" class="dcap" font-size="0.13" fill="#9fadc4" text-anchor="middle">front</text>` +
+    `<text x="1.75" y="0.93" class="dcap" font-size="0.13" fill="#9fadc4" text-anchor="middle">back</text>`;
+  return `<svg viewBox="-0.78 -0.78 3.31 1.85" width="${width}" height="${Math.round(width * 1.85 / 3.31)}" class="${o.cls || 'oonet'}" role="img" aria-label="puzzle state, front and back views">` +
+    `<g stroke="#10151f" stroke-width="0.012" stroke-linejoin="round">` +
+    renderView(fl, M_FRONT, 0, 0, mask, colors, true) + renderView(fl, M_BACK, 1.75, 0, mask, colors, true) +
+    '</g>' + caps + '</svg>';
+}
+
+/* ---- 3D view: one orbitable octahedron ---- */
 function iso3dSVG(state, width, yawOrM, pitch, opts) {
   const o = opts || {};
   const M = Array.isArray(yawOrM) ? yawOrM : viewMatrix(yawOrM, pitch);
-  const fl = E.toFixedFacelets(state);
-  return `<svg viewBox="-2 -2 4 4" width="${width}" height="${width}" class="${o.cls || 'oonet oo3d'}" role="img" aria-label="puzzle state, 3D view">${renderView(fl, M, 0, 0)}</svg>`;
+  const fl = faceletsOf(state);
+  return `<svg viewBox="-1.1 -1.1 2.2 2.2" width="${width}" height="${width}" class="${o.cls || 'oonet oo3d'}" role="img" aria-label="puzzle state, 3D view">` +
+    `<g stroke="#10151f" stroke-width="0.012" stroke-linejoin="round">` +
+    renderView(fl, M, 0, 0, o.mask ? new Set(o.mask) : null, colorsOf(o)) + '</g></svg>';
 }
 
-const DEFAULT_VIEW = { yaw: 0.6, pitch: 0.45 }; // shows U, L and F from a little above (WCA-hold side)
+const DEFAULT_VIEW = { yaw: 0.55, pitch: 0.35 };  // front vertex + U readable
 
-module.exports = { netSVG, iso3dSVG, viewMatrix, rotateView, DEFAULT_VIEW };
+module.exports = { netSVG, iso3dSVG, viewMatrix, rotateView, DEFAULT_VIEW, PALETTES };
 window.OORender = module.exports;})();
