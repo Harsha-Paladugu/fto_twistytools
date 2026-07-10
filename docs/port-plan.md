@@ -24,8 +24,15 @@ User-facing decisions already made (2026-07-10 session):
   finishing with the user's sheet algorithms — the Skewb M7 architecture, but
   multi-step and pruning-table-driven instead of full-BFS-driven.
 - Repo: `github.com/Harsha-Paladugu/fto_twistytools` (origin), upstream =
-  `skewb_twistytools`. Domain/hosting: **user decision pending** (sister sites use
-  GitHub Pages + CNAME).
+  `skewb_twistytools`.
+- **Site name + domain DECIDED (user, 2026-07-10): the umbrella brand is
+  TwistyTools.com and this site is `fto.twistytools.com`.** The pyraminx and
+  skewb sites will become subdomains of twistytools.com later (out of scope for
+  this repo). CNAME/robots/sitemap point at fto.twistytools.com as of M0;
+  hosting go-live (GitHub Pages enable + DNS for the subdomain) stays an M7
+  step. Also user-confirmed 2026-07-10: algorithm sheets come later (M3 stays
+  blocked as planned) and the notation dialect is confirmed later (the M1
+  checkpoint stands).
 - **Firebase: deferred** (demo-mode localStorage from day one; see M6). Without the
   census, Firebase only buys account-synced trainer/solver prefs.
 
@@ -53,24 +60,24 @@ their consumers with them milestone by milestone (see M1/M4/M5).
 
 ## Status
 
-- [ ] **M0 — Bootstrap (identity fork).** Repo cloned + remotes set + CLAUDE.md
-  fork-status stamped + this plan and the ground-truth doc committed (done
-  2026-07-10). Remaining: identity pass (titles/OG/wordmark/package.json name/
-  build.mjs banner — PARTIALLY BLOCKED on the site-name decision, placeholder
-  acceptable if the user says so; CNAME + robots + sitemap parked until the
-  domain decision), config.js to demo-mode (no Firebase creds), **delete census
-  surfaces** (oo.html, js/oo.js, the index.html census hash-redirect
-  `location.replace('oo.html'…)` AND the OO toolcard, census sections of
-  firestore.rules/SETUP.md, nav entry, test/firestore.rules.test.mjs census
-  cases — park or delete the `test:rules` script until M6; note js/tables.js's
-  census class-table half is dead code from M0 on and is deleted with the M5
-  tables.js rewrite), README rewrite, LF-normalization verified
-  (`core.autocrlf=false` pinned).
-  Exit gate: `npm install && npm run build` FULLY green including the check
-  step (nothing engine-side changes at M0 — the sheet is still Skewb data over
-  the Skewb engine); site serves locally, Home renders with FTO identity,
-  algs/trainer/solver pages visibly parked ("coming at M3/M4/M5"), git history
-  clean.
+- [x] **M0 — Bootstrap (identity fork)** (2026-07-10). Repo cloned with full
+  Skewbiks history, remotes set (origin fto_twistytools / upstream
+  skewb_twistytools), CLAUDE.md fork-status stamped, plan + ground-truth docs
+  committed (`3a7a95b`). Identity pass landed: fto.twistytools.com across
+  titles/OG/canonical/wordmarks (navbar + home hero), package.json
+  `fto-twistytools`, build.mjs banner, CNAME/robots/sitemap on the decided
+  domain, home toolcards + factline rewritten for FTO (state-space count +
+  WCA-2027 line), config.js to demo mode (`firebase: null`). Census DELETED:
+  oo.html, js/oo.js, css/oo.css, the index.html hash-redirect + OO toolcard,
+  the navbar OO tab, solver.js's "open this position" census link,
+  test/firestore.rules.test.mjs + the `test:rules` script; firestore.rules
+  shrunk to the dormant per-user `users/{uid}` rule; SETUP.md + README
+  rewritten (census walkthrough retrievable from git history). js/tables.js's
+  census class-table half stays as documented dead code until the M5 rewrite.
+  algs/trainer/solver pages carry a "FTO port in progress, inherited Skewb
+  tool below" banner and their milestone number. Exit gate met: `npm install
+  && npm run build` fully green including the check step, `check:fresh` green,
+  pages serve locally with FTO identity.
 - [ ] **M1 — Engine.** FTO `js/engine.js` behind the same `window.OOEngine`
   surface. State model (piece arrays for 6 corners with flip / 12 edges, no
   orientation / 24 centers in two never-mixing orbits of 12 with identical
@@ -204,9 +211,8 @@ their consumers with them milestone by milestone (see M1/M4/M5).
 
 ## Open user decisions (tracked here, decide when reached)
 
-- **Site name/wordmark — needed at M0** for the identity pass (a placeholder
-  is acceptable if the user says so; retitle at M7 with the domain).
-- Domain name + hosting go-live (M0 parks CNAME/robots/sitemap; M7 needs it).
+- Hosting go-live: enable GitHub Pages on this repo + create the
+  fto.twistytools.com DNS record (M7; name + domain themselves are decided).
 - **Internal rotation/slice spelling — confirm with the user at M1**, before
   any test vectors or alg text are recorded in it (rotation `o` vs `v` vs
   `[X]`, slice `s` vs `2U` vs lowercase; ground-truth §Notation).

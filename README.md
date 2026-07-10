@@ -1,58 +1,64 @@
-# Skewbiks.com
+# fto.twistytools.com
 
-A static site for Skewb solving and learning — a sister project of
-[pyraminx.net](https://pyraminx.net) (forked from
-[pyraminx-oo](https://github.com/Harsha-Paladugu/pyraminx-oo), kept as the
-`upstream` remote so shared-layer fixes stay cherry-pickable). Five pages share
-one engine and one set of UI layers; the only build step compiles the algorithm
-data and bundles the trainer.
+A static site for solving and learning the **Face-Turning Octahedron (FTO)**,
+the third site in the TwistyTools family after
+[pyraminx.net](https://pyraminx.net) and [skewbiks.com](https://skewbiks.com).
+Forked with full history from the Skewb site (kept as the `upstream` remote so
+shared-layer fixes stay cherry-pickable). Four pages share one engine and one
+set of UI layers; the only build step compiles the algorithm data and bundles
+the trainer.
 
-> **Port status:** the site identity is Skewbiks, but the engine/renderer/data
-> underneath are still the Pyraminx originals — they are replaced milestone by
-> milestone (engine → census → Firebase → sheet/algs → trainer → solver).
-> Until then the pages function as a Pyraminx clone.
+> **Port status: M0 (identity) only.** The site identity is FTO, but the
+> engine/renderer/data underneath are still the Skewb originals — they are
+> replaced milestone by milestone (M1 engine → M2 renderer → M3 sheet/algs →
+> M4 trainer → M5 solver). Until then the tool pages function as a
+> clearly-labelled Skewb clone. The plan with live status is
+> [docs/port-plan.md](docs/port-plan.md); FTO domain facts (piece model, state
+> space, notation, methods, sources) are
+> [docs/fto-ground-truth.md](docs/fto-ground-truth.md). The Skewb parent's OO
+> census does not exist here: the FTO's ~3.1 × 10²² positions rule the concept
+> out, and the census code was deleted at M0 (git history retains it).
 
 | Page | File | What it is |
 | --- | --- | --- |
 | Home | `index.html` | landing page |
-| OO | `oo.html` + `js/oo.js` | "objectively optimal" census — one best human solution for every position |
-| Solver | `solver.html` + `js/solver.js`, `js/solver-core.js` | method solver (L4E / ML4E / L5E / TL4E / pseudo-V) |
-| Trainer | `trainer.html` + `js/trainer.js` | V-First trainer (drills, timer, recap), bundled from `src/trainer/` |
-| Algorithms | `algs.html` + `js/algs.js` | browse/search every subset & case; admin add/remove with auto-validation |
+| Solver | `solver.html` + `js/solver.js`, `js/solver-core.js` | step-by-step method solver (FTO version at M5) |
+| Trainer | `trainer.html` + `js/trainer.js` | case trainer (drills, timer, recap), bundled from `src/trainer/` (FTO version at M4) |
+| Algorithms | `algs.html` + `js/algs.js` | browse/search every subset & case; admin add/remove with auto-validation (FTO version at M3) |
 
 ## Shared layers (`js/`)
 
-- **`engine.js`** (`window.OOEngine`) — the Pyraminx engine: state model, moves,
-  alg parsing, symmetry/canonicalization, optimal solving, **and the single
-  source of the keying + alg→case helpers** (`stateKey`, `realCanonKey`,
-  `caseStateOf`, `algSolvesKey`, `normAlg`, …). Everything else builds on these.
-- **`render.js`** (`window.OORender`) — SVG puzzle diagrams (net + 3D).
+- **`engine.js`** (`window.OOEngine`) — currently the Skewb engine: state
+  model, moves, alg parsing, symmetry/canonicalization, optimal solving, and
+  the single source of the keying + alg→case helpers (`stateKey`,
+  `realCanonKey`, `caseStateOf`, `algSolvesKey`, `normAlg`, …). The FTO engine
+  lands at M1 behind the same `window.OOEngine` surface (minus the
+  full-state-space members — see the plan).
+- **`render.js`** (`window.OORender`) — SVG puzzle diagrams.
 - **`account.js`** (`window.OOAccount`) — Firebase Auth + per-user cloud data,
-  with a localStorage demo fallback when no Firebase is configured.
+  with a localStorage demo fallback when no Firebase is configured (the
+  current state: `config.js` has `firebase: null`; see [SETUP.md](SETUP.md)).
 - **`navbar.js`** (`window.SiteNavbar`) — the shared top navigation.
-- **`config.js`** (`window.OO_CONFIG`) — Firebase config + `adminEmails`. The
-  `apiKey` is a public client identifier, not a secret; access is enforced by
-  Firestore rules. See [SETUP.md](SETUP.md).
+- **`tables.js`** (`window.OOTables`) — IndexedDB-cached BFS distance tables.
+  Skewb-only machinery: replaced by the pattern-database layer at M5.
+- **`config.js`** (`window.OO_CONFIG`) — site config (currently demo mode).
 
 ## Data flow & source of truth
 
 ```
-data/skewb_algs.json           ← single source of truth (version-controlled)
+data/skewb_algs.json           ← authored authority (Skewb data until M3 replaces it with fto_algs.json)
         │  npm run build:sheet  (tools/compile-sheet.mjs)
         ▼
-js/sheet.js  (generated: SHEET.ALG / NAME / CNAME / PRES)  +  data/classmap.json (generated)
-        │  npm run build:trainer  (esbuild bundles sheet.js + classmap into the trainer)
-        ▼
-js/trainer.js (generated)      → trainer & solver read the compiled sheet
+js/sheet.js + data/classmap.json   (generated build-gate artifacts; no page consumes them at runtime)
+
+algs.html, trainer.html, solver.html fetch the algs JSON directly at runtime.
 ```
 
-- **`data/skewb_algs.json`** is the authored authority (currently a
-  machine-generated v0 seed pending hand authoring).
-- **`js/sheet.js`, `data/classmap.json` and `js/trainer.js` are generated — do not hand-edit them.**
-- The **Algorithms** page reads `skewb_algs.json` directly; the trainer and
-  solver read the compiled `js/sheet.js`. Alg display notation is normalized by
-  the shared `engine.normAlg` (the same function the compiler uses), so every
-  surface shows identical algorithms.
+- **`js/sheet.js`, `data/classmap.json` and `js/trainer.js` are generated — do
+  not hand-edit them.** They are committed so the site works on the host
+  without a build.
+- Internal names (`OOEngine`, `OO_CONFIG`, `oo-*` cache keys) are deliberately
+  NOT renamed, to keep `upstream` cherry-picks clean.
 
 ## Build & deploy
 
@@ -68,37 +74,23 @@ npm run watch:trainer   # esbuild watch (note: does NOT recompile the sheet)
 Deploy is just the static files (no server). Cache-busting is automatic: every
 local `js/`/`css/`/`img` asset is loaded with a content-hash `?v=` query that
 `npm run stamp` (part of `npm run build`) rewrites from the file's bytes — there
-is no manual version to bump. The generated `js/sheet.js`/`js/trainer.js` are
-committed so the site works without a build on the host, and `npm run check:fresh`
-guards against committing a stale build.
-
-### Editing the algorithm sheet
-
-Edit `data/skewb_algs.json` directly, **or** use the Algorithms page as an
-admin: add/remove algs (each is auto-checked that it actually solves the case),
-then **Export JSON** to download the updated file, commit it, and `npm run build`.
-Admin edits are a per-browser draft until exported — there is no live shared
-store.
+is no manual version to bump. To preview locally, serve over HTTP (e.g.
+`npx serve`), not `file://`.
 
 ## Tooling
 
-- **`tools/compile-sheet.mjs`** — compiles the JSON into `js/sheet.js`. Self-checks
-  every emitted alg and refuses to write a sheet that fails; a new unparseable alg
-  fails the build. Carries forward a small set of cases the JSON doesn't reproduce
-  from a committed baseline, **`data/prior-sheet.json`** (not its own output), so a
-  from-scratch rebuild is reproducible from version-controlled inputs.
-- **`tools/check-sheet.mjs`** — verifier of the shipped `js/sheet.js`, run via
-  `npm run check` (also wired into `npm run build`). It shares the engine's keying
-  helpers, so it catches data/structural problems but not engine-level keying bugs.
-  The known-broken setup algs it tolerates are an explicit allowlist,
-  **`data/broken-algs.json`** (read by the compiler and the checker), not a count.
-- **`tools/stamp-assets.mjs`** — rewrites each asset's `?v=` query to an 8-hex
-  content hash (`npm run stamp`, part of `npm run build`).
-- **`tools/check-fresh.mjs`** — re-runs the pipeline and asserts the committed
-  generated files + HTML stamps match a clean build (`npm run check:fresh`).
-- **`tools/test-engine.mjs`** — focused engine unit tests (`npm run test:engine`).
-  Firestore-rules tests live in `test/` (`npm run test:rules`, opt-in: needs the
-  Firebase emulator + dev deps).
+- **`tools/compile-sheet.mjs`** — compiles the algs JSON into `js/sheet.js` +
+  `data/classmap.json`; self-checks every emitted alg and refuses to write on
+  failure.
+- **`tools/check-sheet.mjs`** — verifier of the shipped `js/sheet.js`
+  (`npm run check`, wired into `npm run build`).
+- **`tools/import-method-sheets.mjs`** — re-runnable importer of authored
+  method sheets from `data/sources/` (gains FTO adapters at M3).
+- **`tools/stamp-assets.mjs`** / **`tools/check-fresh.mjs`** — cache stamping
+  and freshness gate.
+- **`tools/test-engine.mjs`**, **`tools/test-trainer.mjs`**,
+  **`tools/test-solver.mjs`**, **`tools/solver-lab.mjs`** — test runners
+  (Skewb oracles until their milestones rewrite them).
 - **`build.mjs`** — esbuild config for the React trainer.
 
 ### Module strategy (why no `"type": "module"`)

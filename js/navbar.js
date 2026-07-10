@@ -1,12 +1,12 @@
-/* Pyraminx.net — shared navigation bar.
+/* fto.twistytools.com — shared navigation bar.
  *
- * The primary row is the same on every page: wordmark + the four site
- * sections. A page can supply sub-options that render in a second row
- * underneath, and an optional element (e.g. an auth box) for the right side.
+ * The primary row is the same on every page: wordmark + the site sections.
+ * A page can supply sub-options that render in a second row underneath, and
+ * an optional element (e.g. an auth box) for the right side.
  *
  * Usage:
  *   const bar = new SiteNavbar({
- *     active: 'oo',                                   // 'home' | 'oo' | 'solver' | 'trainer' | 'algs'
+ *     active: 'solver',                               // 'home' | 'solver' | 'trainer' | 'algs'
  *     sub: [{ label: 'Solutions', href: '#/', on: true }], // optional second row
  *     right: someElement,                             // optional right-side slot
  *   });
@@ -18,7 +18,6 @@
 
   const SECTIONS = [
     { id: 'home',    label: 'Home',    href: 'index.html' },
-    { id: 'oo',      label: 'OO',      href: 'oo.html' },
     { id: 'solver',  label: 'Solver',  href: 'solver.html' },
     { id: 'trainer', label: 'Trainer', href: 'trainer.html' },
     { id: 'algs',    label: 'Algorithms', href: 'algs.html' },
@@ -58,7 +57,7 @@
         || (window.OOAccount && window.OOAccount.authBox ? window.OOAccount.authBox() : null);
       const main = el('div', { class: 'topbar-main' },
         el('a', { href: 'index.html', class: 'wordmark' },
-          el('span', { class: 'tri', 'aria-hidden': 'true' }), 'SKEWBIKS ', el('b', null, '.com')),
+          el('span', { class: 'tri', 'aria-hidden': 'true' }), 'FTO', el('b', null, '.twistytools.com')),
         el.apply(null, ['nav', { class: 'navtabs', 'aria-label': 'site' }].concat(tabs)),
         right);
       const header = el('header', { class: 'topbar' }, main);

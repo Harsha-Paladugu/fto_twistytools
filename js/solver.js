@@ -239,8 +239,7 @@ function renderInner() {
       h('div', { class: 'sidepanel' },
         h('div', { class: 'sidehead' },
           h('span', { class: 'sidelabel' }, 'scramble'),
-          h('span', { class: 'depthchip' }, UI.dopt === 0 ? 'already solved' : 'optimal: ' + UI.dopt + ' moves'),
-          h('a', { class: 'ordinal', href: 'oo.html#/c/' + E.idx(UI.state) }, 'open this position →')),
+          h('span', { class: 'depthchip' }, UI.dopt === 0 ? 'already solved' : 'optimal: ' + UI.dopt + ' moves')),
         h('div', { class: 'netwrap', html: R.netSVG(UI.state, 300) }))));
   }
 

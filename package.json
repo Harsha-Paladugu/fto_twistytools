@@ -1,8 +1,8 @@
 {
-  "name": "skewbiks",
+  "name": "fto-twistytools",
   "private": true,
   "version": "0.0.0",
-  "description": "Skewbiks.com — static site (OO census, solver, Skewb trainer, algorithm reference) plus its build. Sources compile to js/sheet.js and js/trainer.js.",
+  "description": "fto.twistytools.com — static site (method solver, FTO trainer, algorithm reference) plus its build. Sources compile to js/sheet.js and js/trainer.js.",
   "scripts": {
     "build:sheet": "node tools/compile-sheet.mjs",
     "build:trainer": "npm run build:sheet && node build.mjs",
@@ -15,8 +15,7 @@
     "test:engine": "node tools/test-engine.mjs",
     "test:trainer": "node tools/test-trainer.mjs",
     "test:solver": "node tools/test-solver.mjs",
-    "test:space": "node tools/verify-space.mjs",
-    "test:rules": "node test/firestore.rules.test.mjs"
+    "test:space": "node tools/verify-space.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

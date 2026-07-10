@@ -16,7 +16,7 @@ const options = {
   target: 'es2018',
   jsx: 'transform',               // classic runtime: source imports React and uses JSX
   outfile: 'js/trainer.js',
-  banner: { js: '/* Skewbiks.com — Skewb trainer (bundled React app). Styles: css/trainer.css */' },
+  banner: { js: '/* fto.twistytools.com trainer bundle (inherited Skewb trainer until M4). Styles: css/trainer.css */' },
   logLevel: 'info',
 };
 

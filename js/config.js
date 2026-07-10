@@ -1,22 +1,13 @@
-/* Skewbiks.com — shared site config.
+/* fto.twistytools.com — shared site config.
    This single block is loaded by every page so login + per-user data work
-   site-wide. Leave firebase:null to run in demo mode (data stays in this
-   browser). The apiKey here is a public client identifier, not a secret —
-   access is controlled by the Firestore security rules. */
+   site-wide. firebase is null: the site runs in demo mode (per-user data stays
+   in this browser's localStorage). A Firebase project is an M6 decision; when
+   one exists, paste its web-app config here. The apiKey would be a public
+   client identifier, not a secret — access is controlled by Firestore rules. */
 window.OO_CONFIG = {
-  firebase: {
-    apiKey: "AIzaSyBmOQGH9toKetXn4qmy1Gtire52mhOPmh8",
-    authDomain: "skewbiks.firebaseapp.com",
-    projectId: "skewbiks",
-    storageBucket: "skewbiks.firebasestorage.app",
-    messagingSenderId: "276959790417",
-    appId: "1:276959790417:web:c902eb3b39c60d81a4bf70"
-  },
+  firebase: null,
 
-  adminEmails: ["harsha.paladugu2@gmail.com"],   // your Google account email
+  adminEmails: [],   // gates admin UI client-side only; rules are the boundary
 
-  // Public Google Form where visitors can apply to become a moderator. Paste
-  // the form's share URL here; the OO page links it wherever it invites people
-  // to request access. Leave "" to show a "not open yet" note instead of a link.
   moderatorFormUrl: ""
 };
