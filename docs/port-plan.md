@@ -80,16 +80,43 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   tool below" banner and their milestone number. Exit gate met: `npm install
   && npm run build` fully green including the check step, `check:fresh` green,
   pages serve locally with FTO identity.
-- [ ] **M1 — Engine.** FTO `js/engine.js` behind the same `window.OOEngine`
+- [x] **M1 — Engine** (2026-07-10). FTO `js/engine.js` landed, geometry-derived
+  (sign-vector faces, cut planes at 1/3, clockwise = right-hand −θ about the
+  outward axis), facelet scheme IDENTICAL to xyzzy's ftosolver.js by
+  construction. All 16 face-move tables pinned byte-exactly against the
+  oracle fixtures (`tools/fixtures/xyzzy-fto.mjs`, extracted with
+  attribution); T² ≡ oracle X, mirror ≡ oracle Z, slice/wide desugar pinned
+  (Us = Uo∘U′∘D, Uw = Uo∘D); Streeter parser incl. smart-quote
+  normalization; frame-only rotations; invertible slot-table effect layer
+  (`effectTable`/`invertTable`/`applyTable`) so `caseStateOf` works for
+  rotation-containing algs despite identical centre triplets;
+  `randomScramble` (random-move, 30, suppression rules). `npm run
+  test:engine`: **37 tests green** (oracle pins, sub-space BFS 11,520 +
+  369,600, published count, parity/orbit invariants, keying edge cases,
+  parallel-path equivalence). A 4-lens adversarial review (independent
+  physical simulator, exhaustive sign algebra, chirality counterfactuals,
+  from-scratch float re-derivation of all 20 perms) REFUTED every attack on
+  the math; its confirmed findings (algSolvesKey malformed-key throw, test
+  gaps, doc staleness) are fixed. **DEVIATION from the planned known-red
+  window: M1 also shipped the empty seed `data/fto_algs.json` + repointed
+  compile-sheet, so the WHOLE build incl. check/check:fresh is GREEN at M1**
+  (data/skewb_algs.json + data/sources deleted; M3 populates the seed).
+  Deleted as planned: tools/lib/bfs-dist.mjs, tools/verify-space.mjs, the
+  test:space script; test-trainer/test-solver/solver-lab stay known-red until
+  M4/M5. M1 residue for M2: the single-T 90° direction rests on the geometric
+  derivation + the doc's "clockwise" reading (T²/faces are oracle-pinned) —
+  close it with the M2 visual pin of a published scramble picture.
+  ORIGINAL SPEC (retained): behind the same `window.OOEngine`
   surface. State model (piece arrays for 6 corners with flip / 12 edges, no
   orientation / 24 centers in two never-mixing orbits of 12 with identical
   triplets — ground-truth §State space), native move set = 8 face turns
   (U, F, R, L, D, B, BR, BL ± direction; every generator has order 3 — no
   half-turns exist), whole-puzzle rotations, with slice and wide
   moves handled at PARSE level — the three layers on an axis compose to the
-  whole-puzzle rotation, so slice = rotation ∘ own-face′ ∘ opposite-face′ and
-  wide = rotation ∘ opposite-face′: two-face-turns-plus-rotation sugar, not
-  new generators. Alg parse/notation/normalize (community notation per ground-truth
+  whole-puzzle rotation, so Xs = Xo ∘ X′ ∘ OPP(X) and Xw = Xo ∘ OPP(X) (the
+  opposite face's letter is unprimed — its own clockwise is already the
+  reversed sense about the shared axis; machine-verified, see ground-truth
+  §Notation): face-turn-plus-rotation sugar, not new generators. Alg parse/notation/normalize (community notation per ground-truth
   §Notation), facelet model (72 facelets) as the renderer/tools substrate,
   keying helpers (`stateKey`, `caseStateOf`, `algSolvesKey`, `normAlg`; the
   case-symmetry fold is a design task — only the order-12 tetrahedral rotation
@@ -106,9 +133,9 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   and `idx`/`unidx`/`NSLOTS` leave the OOEngine contract — their consumers
   (js/tables.js, js/solver.js, the trainer jsx/core, tools/test-trainer.mjs,
   tools/test-solver.mjs, tools/solver-lab.mjs) stay known-red until their
-  owning milestones rewrite them. From M1 until M3's sheet lands, `npm run
-  check`/`check:fresh` are known-red (the accepted Skewb-port breakage
-  pattern); `build:trainer` + `stamp` must stay green.
+  owning milestones rewrite them. Build health: superseded by the empty-seed
+  mechanism recorded in the landed summary above — check/check:fresh are
+  GREEN from M1 on, not known-red.
   Exit gate: `npm run test:engine` green with FTO oracles (move tables pinned
   against cubing.js's FTO def — `src/cubing/puzzles/implementations/fto/` —
   and a published scramble picture; test vectors recorded in ground-truth
@@ -131,12 +158,15 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   (new ADAPTERS per source format — the Skewb importer's provenance/suspect/
   firstMove machinery carries over), re-key through engine helpers, empty
   carry-forward baselines (`prior-sheet.json` = `{}`, `broken-algs.json` = `[]`),
-  `data/fto_algs.json` as the single authoring source fetched at runtime by
-  algs.html/trainer/solver (the established pattern). Algorithms page keeps the
+  populate the existing empty-seed `data/fto_algs.json` (created at M1) as the
+  single authoring source fetched at runtime by algs.html/trainer/solver (the
+  established pattern; the pages' fetch paths still reference the deleted
+  Skewb file until this milestone repoints them). Algorithms page keeps the
   editor chassis; taxonomy/nav blocks data-driven from the user's subsets.
-  Exit gate: `npm run build` + `check:fresh` fully green (check step included,
-  first time since fork), every imported alg machine-verified to solve its case,
-  algs.html verified in headless Edge.
+  Also decided here: the case-symmetry fold (M1 shipped realCanonKey =
+  identity fold; widening re-keys the sheet). Exit gate: `npm run build` +
+  `check:fresh` fully green with REAL data, every imported alg
+  machine-verified to solve its case, algs.html verified in headless Edge.
 - [ ] **M4 — Trainer.** BLOCKED ON USER INPUT: which training tools. The chassis
   ports (rAF timer, storage blob under a NEW key `fto-trainer-v1`, session
   pills, per-case stats, recap queue, runtime JSON fetch) — but NOT as-is: the

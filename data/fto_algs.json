@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "source": "fto.twistytools.com — authored FTO algorithm data (awaiting the user's method sheets; see docs/port-plan.md M3)",
+    "description": "FTO algorithms grouped by subset, then by case name. Notation is Ben Streeter's FTO Notes system (see docs/fto-ground-truth.md §Notation).",
+    "notation": "streeter",
+    "apostrophe": "normalized to ASCII '",
+    "status": "empty seed — subsets and cases arrive with the M3 sheet import",
+    "counts": {
+      "cases": 0,
+      "algs": 0
+    }
+  },
+  "subsets": {}
+}

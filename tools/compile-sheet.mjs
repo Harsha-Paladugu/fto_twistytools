@@ -1,18 +1,18 @@
-/* Skewbiks.com — sheet compiler.
+/* Skewbiks.com â€” sheet compiler.
  *
- * Single source of truth: data/skewb_algs.json (the authored algorithm list).
+ * Single source of truth: data/fto_algs.json (the authored algorithm list).
  * This regenerates the data block of js/sheet.js (SHEET = {ALG,NAME,CNAME,PRES})
  * so case names, recognition and algorithms all derive from the JSON, and
  * GENERATES data/classmap.json (canonical case key -> subset id) from subset
- * membership — the class map is build output, never hand-maintained.
+ * membership â€” the class map is build output, never hand-maintained.
  *
  * How a case is keyed (same coordinate system as js/engine.js):
  *   - parse the alg, apply it forward to solved, take the inverse permutation ->
  *     the exact state the alg solves (the "case state"). Self-validated: applying
  *     the alg to that state must return to solved.
- *   - render key  = stateKey(caseState)      (the full state — nothing is
+ *   - render key  = stateKey(caseState)      (the full state â€” nothing is
  *     tip-fixable on a Skewb, so nothing is excluded)
- *   - canonical   = realCanonKey (folds the y² view, the only tetrad-preserving
+ *   - canonical   = realCanonKey (folds the yÂ² view, the only tetrad-preserving
  *     U-face rotation; the four Front/Right/Back/Left presentations of a case
  *     pair at the DATA level via the JSON's `direction` field)
  *
@@ -33,12 +33,12 @@ const E = globalThis.window.OOEngine;
 // Carry-forward baseline. Read from a COMMITTED snapshot (data/prior-sheet.json),
 // not the compiler's own output (js/sheet.js), so the build is reproducible from
 // version-controlled inputs alone. The Skewb sheet starts with an empty baseline
-// ({} — the JSON is the sole authority from day one); re-baseline by overwriting
+// ({} â€” the JSON is the sole authority from day one); re-baseline by overwriting
 // prior-sheet.json with a freshly built sheet if the JSON ever stops reproducing
 // shipped cases you want kept.
 const OLD = Object.assign({ ALG: {}, NAME: {}, CNAME: {}, PRES: {} },
   require(path.join(ROOT, 'data', 'prior-sheet.json')));
-const J = require(path.join(ROOT, 'data', 'skewb_algs.json'));
+const J = require(path.join(ROOT, 'data', 'fto_algs.json'));
 // Explicit allowlist of known-broken algs (parse fine but don't solve their
 // render key) carried forward only to avoid empty panels. Named manifest, not a
 // count: a NEW broken alg that isn't listed here fails the build. Keys are
@@ -46,13 +46,13 @@ const J = require(path.join(ROOT, 'data', 'skewb_algs.json'));
 const BROKEN = require(path.join(ROOT, 'data', 'broken-algs.json'));
 const BROKEN_KEYS = new Set(BROKEN.map(b => b.renderKey + ' :: ' + b.algorithm));
 
-// keying + alg→case helpers are the engine's single source of truth.
+// keying + algâ†’case helpers are the engine's single source of truth.
 const { stateKey, realCanonKey, caseStateOf, algSolvesKey } = E;
 
 // ---- naming ----
 const labelOf = (subsetKey, caseName) =>
-  subsetKey === caseName ? caseName : subsetKey + ' · ' + caseName;
-const casePart = (name) => String(name).split(' · ').slice(-1)[0];
+  subsetKey === caseName ? caseName : subsetKey + ' Â· ' + caseName;
+const casePart = (name) => String(name).split(' Â· ').slice(-1)[0];
 
 // ---- pass 1: group every alg by the canonical key it actually solves ----
 const byKey = {}; // canon -> { items:[{alg, renderKey, label, subset}] }
@@ -64,10 +64,10 @@ function collect(subsetKey, caseName, alg) {
   if (!cs) { report.skipped.push(subsetKey + ' / ' + caseName + ': ' + alg.alg); return; }
   const renderKey = stateKey(cs);
   // An alg whose net effect is the identity (e.g. an empty/whitespace string, or
-  // "R R'") would register a bogus case AT THE SOLVED STATE — and every
+  // "R R'") would register a bogus case AT THE SOLVED STATE â€” and every
   // downstream check would pass (the identity trivially "solves" solved). Treat
   // it as a skip, which fails the build below.
-  if (renderKey === SOLVED_KEY) { report.skipped.push(subsetKey + ' / ' + caseName + ': ' + JSON.stringify(alg.alg) + '  (identity — solves nothing)'); return; }
+  if (renderKey === SOLVED_KEY) { report.skipped.push(subsetKey + ' / ' + caseName + ': ' + JSON.stringify(alg.alg) + '  (identity â€” solves nothing)'); return; }
   const canon = realCanonKey(cs);
   const label = labelOf(subsetKey, caseName);
   (byKey[canon] = byKey[canon] || { items: [] }).items.push({ alg: alg.alg, renderKey, label, subset: subsetKey });
@@ -107,11 +107,11 @@ for (const [canon, rec] of Object.entries(byKey)) {
   if (!OLD.CNAME[canon]) report.primaryNew++;
   else if (OLD.CNAME[canon] !== name) report.renames.push(canon + ' :: ' + OLD.CNAME[canon] + ' -> ' + name);
   // A real (non-tautological) check: an alg authored under one case but grouped
-  // under a different CASE is a genuine mis-file — surface it. Advisory only;
+  // under a different CASE is a genuine mis-file â€” surface it. Advisory only;
   // it does not fail the build (the alg still ships under the case it solves).
   for (const it of rec.items) if (it.label !== name) {
     report.mislabels++;
-    if (casePart(it.label) !== casePart(name)) report.misfiled.push(casePart(it.label) + ' → ' + casePart(name) + '   [' + it.alg + ']');
+    if (casePart(it.label) !== casePart(name)) report.misfiled.push(casePart(it.label) + ' â†’ ' + casePart(name) + '   [' + it.alg + ']');
   }
 }
 
@@ -174,7 +174,7 @@ if (!selfCheckOk) {
   process.exitCode = 1;
 }
 if (staleBroken.length) {
-  console.warn('NOTE: ' + staleBroken.length + ' allowlisted broken alg(s) no longer fail — data/broken-algs.json may be stale:');
+  console.warn('NOTE: ' + staleBroken.length + ' allowlisted broken alg(s) no longer fail â€” data/broken-algs.json may be stale:');
   staleBroken.forEach(k => console.warn('   STALE ' + k));
 }
 
@@ -190,7 +190,7 @@ const gaps = Object.keys(OLD.CNAME).filter(k => !MAIN.CNAME[k]);
 const compileOk = selfCheckOk && !unexpectedSkips.length && !gaps.length;
 
 // ---- write js/sheet.js (replace only the SHEET data line) + data/classmap.json.
-// Never overwrite the live data files on a failed compile — only write output
+// Never overwrite the live data files on a failed compile â€” only write output
 // that passed EVERY check above. (--check is a dry run and never writes.)
 const SHEET_PATH = path.join(ROOT, 'js', 'sheet.js');
 const CLASSMAP_PATH = path.join(ROOT, 'data', 'classmap.json');
@@ -210,7 +210,7 @@ if (!check && compileOk) {
   fs.writeFileSync(SHEET_PATH, lines.join('\n'));
   fs.writeFileSync(CLASSMAP_PATH, sortedStringify(CLASSMAP, 2) + '\n');
 } else if (!check) {
-  console.error('NOT writing js/sheet.js or data/classmap.json — compile failed a check (see report below).');
+  console.error('NOT writing js/sheet.js or data/classmap.json â€” compile failed a check (see report below).');
 }
 
 // ---- report ----
@@ -220,7 +220,7 @@ console.log('algs read:', report.algs, '| skipped (unparseable/identity):', repo
 report.skipped.forEach(s => console.log('   SKIP', s));
 if (unexpectedSkips.length) {
   process.exitCode = 1;
-  console.error('*** ' + unexpectedSkips.length + ' UNEXPECTED skipped alg(s) — failing build (fix the JSON or extend parseAlg):');
+  console.error('*** ' + unexpectedSkips.length + ' UNEXPECTED skipped alg(s) â€” failing build (fix the JSON or extend parseAlg):');
   unexpectedSkips.forEach(s => console.error('   SKIP ' + s));
 }
 console.log('MAIN keys  ALG:', Object.keys(MAIN.ALG).length, 'NAME:', Object.keys(MAIN.NAME).length,

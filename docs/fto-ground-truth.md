@@ -149,13 +149,14 @@ Skewb engine and stays until M1 deletes the code it documents).
   cubing.js, csTimer, cubingcontests — is CIF. Practical note: alg authors
   avoid D moves (awkward on hardware); scrambles use all 8 letters. ✅
 - Engine consequence: native generators = 16 (8 faces × 2 directions); slices
-  and wides resolve at parse level. Desugaring (all three layers of an axis
-  turned together = the whole-puzzle rotation about it): **slice =
-  axis-rotation ∘ own-face′ ∘ opposite-face′** (both flanking layers
-  un-turned; mind that the opposite face's letter direction is reversed
-  w.r.t. the shared axis) and **wide = axis-rotation ∘ opposite-face′**.
-  (NOT "own-face′ ∘ rotation" — that composite drags the far layer along and
-  is actually the far side's wide move.) Rotations enter the frame machinery
+  and wides resolve at parse level. Desugaring — MACHINE-VERIFIED against the
+  xyzzy oracle (test-engine.mjs), with every letter meaning clockwise viewed
+  from its OWN face's outside: **Xs = Xo ∘ X′ ∘ OPP(X)** and
+  **Xw = Xo ∘ OPP(X)** (equivalently Xo = X ∘ Xs ∘ OPP(X)′). The opposite
+  face's factor is UNPRIMED: clockwise-from-its-own-side is already the
+  reversed sense about the shared axis, which is exactly what cancels the
+  rotation's drag on that layer. Concretely: Us = Uo ∘ U′ ∘ D and
+  Uw = Uo ∘ D, pinned facelet-exactly against ftosolver.js's move_Us/move_Uw. Rotations enter the frame machinery
   like Skewb x/y/z did. The canonical INTERNAL spelling and display dialect
   are DECIDED (user, 2026-07-10): the Streeter system above; other spellings
   are parse-level aliases if a data source needs them (M3 importer concern).
@@ -263,20 +264,53 @@ The USER supplies the actual sheets; this section is context, not authority.
   (opposite faces same color) is solvable identically — a possible simplified
   diagram mode, not a default. ✅ [SSwiki]
 
-## Test vectors (fill at M1)
+## Test vectors (M1 status — `npm run test:engine`, 34 tests)
 
-- [ ] Pin each native move's piece cycles against fto-solver.js's move tables
-      (`move_U` + symmetry conjugates — the static form of cubing.js's FTO;
-      the KPuzzle def itself is runtime-generated). `move_U` facelet cycles,
-      0-indexed over 72: [0,4,8],[1,6,3],[2,5,7],[9,22,35],[45,67,44],
-      [47,68,43],[46,69,39],[50,70,38],[49,71,36].
-- [ ] Pin one published scramble + resulting facelet picture (source: a
-      cubingcontests/csTimer preview or ftosim screenshot).
-- [ ] Derive and pin the state-space count from the engine's own orbit/parity
-      verifiers (must reproduce 31,408,133,379,194,880,000,000 symbolically).
-- [ ] Pin rotation-letter directions (o/T) against Twizzle before ANY alg data
-      is authored (Skewb x/y/z lesson).
-- [ ] Record the per-turn 15-piece/27-sticker breakdown as an engine test.
+- [x] Every native move's facelet table pinned EXACTLY against ftosolver.js
+      (`move_U` cycles + the X/Y/Z symmetry derivations, reproduced in
+      `tools/fixtures/xyzzy-fto.mjs` with attribution; our engine derives its
+      tables from 3D geometry and matches byte-for-byte, both directions).
+      `move_U` facelet cycles, 0-indexed over 72: [0,4,8],[1,6,3],[2,5,7],
+      [9,22,35],[45,67,44],[47,68,43],[46,69,39],[50,70,38],[49,71,36].
+      Convention: perms are PULL (new[i] = old[P[i]]); xyzzy's U is clockwise
+      = right-hand −120° about the outward face axis (content at the +x corner
+      of U moves to the +z corner).
+- [x] Rotation directions: T² ≡ oracle X symmetry; mirror ≡ oracle Z; 180°
+      vertex rotation ≡ oracle Y; T(U)=R, T(R)=F (CW about the front vertex,
+      matching the doc's "clockwise" under the CIF hold); o-rotations share
+      the oracle-pinned face-turn convention. Slice/wide desugar identities
+      pinned facelet-exactly (Us = Uo∘U′∘D, Uw = Uo∘D).
+- [x] State-space count reproduced symbolically (BigInt) =
+      31,408,133,379,194,880,000,000; corner sub-space BFS = 11,520; centre
+      orbit BFS = 369,600; parity/flip/orbit/triplet invariants over random
+      move sequences.
+- [x] Per-turn structure as engine tests: 15 pieces / 27 facelets, five
+      disjoint 3-cycles; slice = 12 pieces / 18 facelets.
+- [ ] STILL OPEN: a visual pin of a published scramble picture (cubing.js /
+      csTimer preview) against our renderer — do at M2; this also closes the
+      last conceivable sign ambiguity (a global reflection consistent across
+      all tables would pass permutation pins but flip the picture).
+
+## OOEngine contract delta (M1 — vs the inherited Skewb engine)
+
+DROPPED (consumers stay known-red until their milestones rewrite them):
+`idx`/`unidx`/`NSLOTS` (no dense full-space indexing at 3.1 × 10²²),
+`optimalSolution`/`optimalScramble` (per-step search returns at M5),
+`buildSyms`/`makeCanon`/`makeMirrorCanon`/`makeFullCanon`, `enumFreeSlots`,
+`prependAUF`, `inverseState` (identical centre triplets make color-level state
+inversion ill-defined — use `invertTable`), `wcaToNS`/`nsToWCA`/`convertAlg`
+(one notation now), `nativeToWCA`, and the Skewb geometry tables.
+
+ADDED: the facelet layer (`toFacelets`/`fromFacelets`/`solvedFacelets`/
+`applyFaceletPerm`/`moveFaceletPerm`/`sliceFaceletPerm`/`rotFaceletPerm`/
+`FEAT`), state-level `moveTables`, the invertible alg-effect layer
+(`effectTable`/`invertTable`/`applyTable`/`idTable` — backs `caseStateOf` for
+rotation-containing algs), rotation machinery (`ROT24`, `MID`/`ROT_T`/
+`MIRROR`, `mul`/`mInv`/`mApply`, `tokenRotMat`, `faceImg`/`vertImg`),
+`mirrorAlg` (U↔L/F↔R/BR↔D/BL↔B reflection), `randomScramble(len, rng)`
+(random-move; seedable), `stateSpaceCount()` (BigInt), and geometry exports
+(`FSIGN`/`OPPF`/`TETRAD`/`VAX`/`EDGES`/`CYC`). `realCanonKey` = identity fold
+at M1 (fold decision deferred to M3 — widening re-keys the compiled sheet).
 
 ## Sources
 

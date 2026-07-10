@@ -8,11 +8,12 @@ shared-layer fixes stay cherry-pickable). Four pages share one engine and one
 set of UI layers; the only build step compiles the algorithm data and bundles
 the trainer.
 
-> **Port status: M0 (identity) only.** The site identity is FTO, but the
-> engine/renderer/data underneath are still the Skewb originals — they are
-> replaced milestone by milestone (M1 engine → M2 renderer → M3 sheet/algs →
-> M4 trainer → M5 solver). Until then the tool pages function as a
-> clearly-labelled Skewb clone. The plan with live status is
+> **Port status: M1 (engine) done.** `js/engine.js` is the FTO engine —
+> geometry-derived, pinned against xyzzy's ftosolver.js move tables, 37 tests
+> green. The renderer/data layers above it are still inherited Skewb code, so
+> the algs/trainer/solver pages are non-functional until their milestones
+> (M2 renderer → M3 sheet/algs → M4 trainer → M5 solver); their banners say
+> so. The plan with live status is
 > [docs/port-plan.md](docs/port-plan.md); FTO domain facts (piece model, state
 > space, notation, methods, sources) are
 > [docs/fto-ground-truth.md](docs/fto-ground-truth.md). The Skewb parent's OO
@@ -28,12 +29,13 @@ the trainer.
 
 ## Shared layers (`js/`)
 
-- **`engine.js`** (`window.OOEngine`) — currently the Skewb engine: state
-  model, moves, alg parsing, symmetry/canonicalization, optimal solving, and
-  the single source of the keying + alg→case helpers (`stateKey`,
-  `realCanonKey`, `caseStateOf`, `algSolvesKey`, `normAlg`, …). The FTO engine
-  lands at M1 behind the same `window.OOEngine` surface (minus the
-  full-state-space members — see the plan).
+- **`engine.js`** (`window.OOEngine`) — the FTO engine (M1): state model,
+  the 16 face moves and 24 whole-puzzle rotations derived from 3D geometry,
+  Streeter-notation alg parsing, the facelet model (identical scheme to
+  xyzzy's ftosolver.js and pinned against it in tests), and the single source
+  of the keying + alg→case helpers (`stateKey`, `realCanonKey`,
+  `caseStateOf`, `algSolvesKey`, `normAlg`, …). No global optimal solver —
+  per-step search arrives at M5.
 - **`render.js`** (`window.OORender`) — SVG puzzle diagrams.
 - **`account.js`** (`window.OOAccount`) — Firebase Auth + per-user cloud data,
   with a localStorage demo fallback when no Firebase is configured (the
@@ -46,12 +48,13 @@ the trainer.
 ## Data flow & source of truth
 
 ```
-data/skewb_algs.json           ← authored authority (Skewb data until M3 replaces it with fto_algs.json)
+data/fto_algs.json             ← authored authority (empty M1 seed; populated by the M3 sheet import)
         │  npm run build:sheet  (tools/compile-sheet.mjs)
         ▼
 js/sheet.js + data/classmap.json   (generated build-gate artifacts; no page consumes them at runtime)
 
-algs.html, trainer.html, solver.html fetch the algs JSON directly at runtime.
+algs.html, trainer.html, solver.html will fetch the algs JSON at runtime once
+their milestones repoint them (they still reference the deleted Skewb file).
 ```
 
 - **`js/sheet.js`, `data/classmap.json` and `js/trainer.js` are generated — do
@@ -88,9 +91,11 @@ is no manual version to bump. To preview locally, serve over HTTP (e.g.
   method sheets from `data/sources/` (gains FTO adapters at M3).
 - **`tools/stamp-assets.mjs`** / **`tools/check-fresh.mjs`** — cache stamping
   and freshness gate.
-- **`tools/test-engine.mjs`**, **`tools/test-trainer.mjs`**,
-  **`tools/test-solver.mjs`**, **`tools/solver-lab.mjs`** — test runners
-  (Skewb oracles until their milestones rewrite them).
+- **`tools/test-engine.mjs`** — the FTO engine suite (37 tests), pinned
+  against **`tools/fixtures/xyzzy-fto.mjs`** (oracle tables from xyzzy's
+  ftosolver.js, MIT, reproduced with attribution as test fixtures).
+  **`tools/test-trainer.mjs`**, **`tools/test-solver.mjs`**,
+  **`tools/solver-lab.mjs`** — Skewb suites, known-red until M4/M5.
 - **`build.mjs`** — esbuild config for the React trainer.
 
 ### Module strategy (why no `"type": "module"`)

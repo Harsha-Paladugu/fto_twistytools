@@ -1,9 +1,9 @@
-/* Skewbiks.com — sheet verifier.
+﻿/* Skewbiks.com â€” sheet verifier.
  *
  * Checks the compiled js/sheet.js against js/engine.js, independent of the
  * compiler, so you can trust the data after any JSON edit + rebuild:
  *   1. every alg in SHEET.ALG actually solves the state at its render key;
- *   2. structural integrity — NAME present for every ALG key, PRES <-> ALG and
+ *   2. structural integrity â€” NAME present for every ALG key, PRES <-> ALG and
  *      CNAME consistent, render keys canonicalize to their CNAME entry.
  *
  * Run: node tools/check-sheet.mjs   (exit 0 = OK, 1 = problems)
@@ -18,9 +18,9 @@ globalThis.window = {};
 require(path.join(ROOT, 'js', 'engine.js'));
 const E = globalThis.window.OOEngine;
 const { SHEET } = require(path.join(ROOT, 'js', 'sheet.js'));
-// keying + alg→case helpers come from the engine (single source of truth); this
+// keying + algâ†’case helpers come from the engine (single source of truth); this
 // verifier checks the shipped js/sheet.js data against them. NOTE: it therefore
-// shares any engine-level keying bug — it is independent of the COMPILER only.
+// shares any engine-level keying bug â€” it is independent of the COMPILER only.
 const { keyToState, realCanonKey, algSolvesKey } = E;
 // Explicit allowlist of known-broken algs (parse fine but don't solve their
 // render key), kept only to avoid empty panels. The shipped SHEET.ALG may
@@ -55,7 +55,7 @@ console.log(`\n${Object.keys(SHEET.CNAME).length} cases / ${new Set(Object.value
 // SHEET may keep the explicitly-allowlisted broken presentations
 // (data/broken-algs.json) and NOTHING else that fails to solve. A non-solving
 // alg not on the allowlist is a real problem; an allowlist entry that no longer
-// ships is just a stale-manifest note (harmless — fewer broken algs).
+// ships is just a stale-manifest note (harmless â€” fewer broken algs).
 const unexpectedBroken = nosolveKeys.filter(k => !BROKEN_KEYS.has(k));
 const staleBroken = [...BROKEN_KEYS].filter(k => !nosolveKeys.includes(k));
 unexpectedBroken.forEach(k => console.error('    UNEXPECTED BROKEN ' + k));
