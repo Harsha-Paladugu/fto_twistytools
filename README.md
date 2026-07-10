@@ -8,14 +8,15 @@ shared-layer fixes stay cherry-pickable). Four pages share one engine and one
 set of UI layers; the only build step compiles the algorithm data and bundles
 the trainer.
 
-> **Port status: M2 (renderer) done.** `js/engine.js` is the FTO engine —
-> geometry-derived, pinned against BOTH xyzzy's ftosolver.js tables and
-> cubing.js's runtime KPuzzle def (45 tests green) — and `js/render.js` draws
-> the community-standard two-diamond FTO views (7 tests, verified
-> side-by-side against cubing.js). The data/tool layers above are still
-> inherited Skewb code, so the algs/trainer/solver pages are non-functional
-> until their milestones (M3 sheet/algs → M4 trainer → M5 solver); their
-> banners say so. The plan with live status is
+> **Port status: M3 phase 1 — the Algorithms page is live** with the TCP
+> last-layer set (18 cases, every alg machine-verified). Underneath:
+> `js/engine.js` is the FTO engine — geometry-derived, pinned against BOTH
+> xyzzy's ftosolver.js tables and cubing.js's runtime KPuzzle def, speaking
+> the full community notation ({X,Y} bracket rotations, CIF/EIF hold
+> dialects, doubles, wides; 55 tests) — and `js/render.js` draws the
+> community-standard two-diamond views (7 tests, verified side-by-side
+> against cubing.js). The trainer/solver pages are still parked until
+> M4/M5; their banners say so. The plan with live status is
 > [docs/port-plan.md](docs/port-plan.md); FTO domain facts (piece model, state
 > space, notation, methods, sources) are
 > [docs/fto-ground-truth.md](docs/fto-ground-truth.md). The Skewb parent's OO
@@ -27,7 +28,7 @@ the trainer.
 | Home | `index.html` | landing page |
 | Solver | `solver.html` + `js/solver.js`, `js/solver-core.js` | step-by-step method solver (FTO version at M5) |
 | Trainer | `trainer.html` + `js/trainer.js` | case trainer (drills, timer, recap), bundled from `src/trainer/` (FTO version at M4) |
-| Algorithms | `algs.html` + `js/algs.js` | browse/search every subset & case; admin add/remove with auto-validation (FTO version at M3) |
+| Algorithms | `algs.html` + `js/algs.js` | LIVE: browse/search the FTO sheet (TCP last layer), diagrams + machine-verified algs; editing = JSON + rebuild |
 
 ## Shared layers (`js/`)
 
@@ -58,8 +59,9 @@ data/fto_algs.json             ← authored authority (empty M1 seed; populated 
         ▼
 js/sheet.js + data/classmap.json   (generated build-gate artifacts; no page consumes them at runtime)
 
-algs.html, trainer.html, solver.html will fetch the algs JSON at runtime once
-their milestones repoint them (they still reference the deleted Skewb file).
+algs.html fetches the algs JSON at runtime (live since M3 phase 1);
+trainer.html and solver.html follow at M4/M5 (their inherited code still
+references the deleted Skewb file until then).
 ```
 
 - **`js/sheet.js`, `data/classmap.json` and `js/trainer.js` are generated — do

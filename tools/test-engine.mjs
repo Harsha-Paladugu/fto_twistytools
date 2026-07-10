@@ -168,9 +168,45 @@ t('parser accepts the Streeter token set', () => {
   assert(parse("(R B' R' B)").length === 4, 'parens');
 });
 t('parser rejects invalid tokens', () => {
-  for (const bad of ['U2', "U2'", 'Ds', 'Bs', 'BRs', 'BLs', 'X', 'R2', 'Tw', 'To', 'u', 'r']){
+  for (const bad of ['U3', 'Ds', 'Bs', 'BRs', 'BLs', 'X', 'Tw', 'To', '{U}', '{U,X}', '{U,BR', 'xo', 'RR']){
     assert(parse('R ' + bad) === null, 'should reject: ' + bad);
   }
+});
+t('parser accepts community-doc extensions: brackets, doubles, lowercase wides', () => {
+  assert(parse('{U,BR} R {B, BL} F').length === 4, 'brackets (with and without inner space)');
+  assert(parse("R2 F2 U2'").length === 3, 'ergonomic doubles');
+  assert(parse("r u' d2 br bl'").length === 5, 'lowercase wides');
+  // R2 ≡ R' and doubles count as ONE move (the sheets count them that way)
+  assert(E.eq(E.applyParsed(parse('R2'), E.solved()), E.applyParsed(parse("R'"), E.solved())), "R2 = R'");
+  assert(E.countMoves(parse('U R2 {U,BR} T')) === 2, 'countMoves');
+  // lowercase r ≡ Rw
+  assert(E.eq(E.applyParsed(parse('r'), E.solved()), E.applyParsed(parse('Rw'), E.solved())), 'r = Rw');
+  assert(E.normAlg("r u2'") === "Rw Uw2'", 'lowercase normalizes to w-suffix');
+});
+t('bracket rotations: pure rotations are identity; table matches the matrix world', () => {
+  for (const a of ['{U,BR}', '{B,U}', '{F,BL} {B,R}', "Uo {U,BL}"]){
+    assert(E.eq(E.applyParsed(parse(a), E.solved()), E.solved()), a);
+  }
+  // o/T tokens now resolve through position brackets — must equal the OLD
+  // matrix-frame semantics: the hold after token X from identity is p -> ρ_X⁻¹(p)
+  for (const [tok, axis, amt] of [['Uo','U',1], ["Ro'",'R',2], ['T','T',1], ['T2','T',2], ["Do'",'D',2], ['BLo','BL',1]]){
+    const hold = E.walkParsed(parse(tok), () => {});
+    const Minv = E.mInv(E.tokenRotMat(axis, amt));
+    for (let p=0;p<8;p++) assert(hold[p] === E.faceImg(Minv, p), tok + ' pos ' + p);
+  }
+});
+t('impossible brackets are graceful: caseStateOf null, algSolvesKey false', () => {
+  assert(E.caseStateOf('{U,D} R') === null, '{U,D}');
+  assert(E.algSolvesKey('{U,D} R', E.stateKey(E.solved())) === false, 'algSolvesKey');
+});
+t('EIF dialect: base hold map pinned; letters resolve through it', () => {
+  // positions [U,F,BR,BL,L,R,D,B] hold faces [U,L,R,B,BL,F,D,BR]
+  eqArr(E.EIF0, [0,4,5,7,3,1,6,2], 'EIF base map');
+  // an EIF-written "F" turns the physical L face
+  assert(E.eq(E.applyParsed(parse('F'), E.solved(), 'eif'), E.move(E.solved(), 2*F.L)), 'EIF F = physical L');
+  assert(E.eq(E.applyParsed(parse('U'), E.solved(), 'eif'), E.move(E.solved(), 2*F.U)), 'EIF U = physical U');
+  // opposite-pair consistency of the base map
+  for (let p=0;p<8;p++) assert(E.EIF0[E.OPPF[p]] === E.OPPF[E.EIF0[p]], 'opp consistency at ' + p);
 });
 t('normAlg canonicalizes spelling and preserves effect', () => {
   const a = "  (R  B') R'   B  T2'  Ro ";
@@ -510,6 +546,81 @@ t('cubing.js def: probe patterns (U, T, Rv, 12-move scramble) agree piece-for-pi
   cmpPattern('Rv', rotSlots(E.tokenRotMat('R', 1)));
   const scr = "U R' F BL D' B BR' L U' F R BL'";
   cmpPattern(scr, E.effectTable(E.parseAlg(scr)));
+});
+
+/* ---------- 12. TCP sheet data (M3): machine pins for the authored algs ---------- */
+const ALGDATA = require(path.join(ROOT, 'data', 'fto_algs.json'));
+const TCPS = ALGDATA.subsets.TCP;
+// the TCP puzzle region: the U face's three triples + the filled slot —
+// corners +x/+y/+z and centre slots U(+y), U(+z), F(+x), BR(+y), BL(+z)
+const TCP_CORNERS = new Set([0, 1, 2]);
+const TCP_CENTRES = new Set([1, 2, 3, 7, 11]);
+const U_EDGES = new Set(E.EDGES.map((d, i) => (d[0] <= 2 && d[1] <= 2) ? i : -1).filter(i => i >= 0));
+const U_CENTRES = new Set();
+for (let x = 0; x < 24; x++){
+  const f = (x/3)|0, k = x%3, vax = E.VAX[E.FSIGN[f][k] > 0 ? k : k+3];
+  const d = 2*(E.FSIGN[0][0]*E.FSIGN[f][0] + E.FSIGN[0][1]*E.FSIGN[f][1] + E.FSIGN[0][2]*E.FSIGN[f][2])
+          + 3*(vax[0] + vax[1] + vax[2]);
+  if (d > 3) U_CENTRES.add(x);
+}
+t('TCP data: all 18 algs parse, solve distinct cases, in the CIF hold', () => {
+  assert(TCPS.notation === 'cif', 'subset dialect');
+  const keys = new Set();
+  for (const c of TCPS.cases){
+    const cs = E.caseStateOf(c.algs[0].alg, 'cif');
+    assert(cs, c.name + ' caseStateOf');
+    keys.add(E.stateKey(cs));
+  }
+  assert(keys.size === 18, 'distinct cases: ' + keys.size);
+});
+t('TCP data: every case lives on the three U triples + filled slot (odd group: + the AUF layer)', () => {
+  for (const c of TCPS.cases){
+    const cs = E.caseStateOf(c.algs[0].alg, 'cif');
+    const odd = c.group === 'Odd';
+    for (let v=0;v<6;v++) if (cs.cp[v]!==v || cs.co[v]!==0)
+      assert(TCP_CORNERS.has(v), c.name + ' corner outside region: ' + v);
+    for (let e=0;e<12;e++) if (cs.ep[e]!==e)
+      assert(odd && U_EDGES.has(e), c.name + ' edge moved: ' + e);
+    for (let x=0;x<24;x++) if (cs.ctr[x] !== ((x/3)|0))
+      assert(TCP_CENTRES.has(x) || (odd && U_CENTRES.has(x)), c.name + ' centre outside region: ' + x);
+  }
+});
+t('TCP data: three-way state classification matches the groups (11/12 post-AUF noted)', () => {
+  // From the state: 2-Flip ⇔ filled slot solved; Odd-with-AUF ⇔ U-layer edges
+  // moved (cases 7-10 include the AUF); 11/12 are authored POST-AUF so their
+  // states are structurally even-shaped — the sheet's known convention break,
+  // annotated in the JSON (moves_note).
+  const POST_AUF = new Set(['TCP 11', 'TCP 12']);
+  for (const c of TCPS.cases){
+    const cs = E.caseStateOf(c.algs[0].alg, 'cif');
+    const filledSolved = cs.ctr[3] === 1;          // F(+x) holds the F colour
+    const aufEdges = cs.ep.some((p,i)=>p!==i);
+    assert(filledSolved === (c.group === '2-Flip'), c.name + ': filled slot vs group');
+    if (c.group === 'Odd' && !POST_AUF.has(c.name)) assert(aufEdges, c.name + ': AUF layer expected');
+    if (c.group !== 'Odd' || POST_AUF.has(c.name)) assert(!aufEdges, c.name + ': no AUF layer expected');
+    if (POST_AUF.has(c.name)) assert(/does NOT include the starting AUF/.test(c.moves_note || ''), c.name + ': post-AUF note required');
+  }
+});
+t('TCP 13 pinned: two triples flipped in place (corners +y/+z, triangle pair swaps)', () => {
+  const cs = E.caseStateOf("(R B' R' B) (R' L R L')", 'cif');
+  assert(cs.cp.every((p,i)=>p===i), 'corner perm solved');
+  eqArr(cs.co, [0,1,1,0,0,0], 'corners +y,+z flipped');
+  assert(cs.ctr[1] === 2 && cs.ctr[7] === 0, 'U(+y) <-> BR(+y) swapped');
+  assert(cs.ctr[2] === 3 && cs.ctr[11] === 0, 'U(+z) <-> BL(+z) swapped');
+  assert(cs.ep.every((p,i)=>p===i), 'edges solved');
+});
+t('TCP data: dialect matters (the same text reads differently in EIF)', () => {
+  const a = TCPS.cases[2].algs[0].alg;              // TCP 3
+  const cif = E.caseStateOf(a, 'cif'), eif = E.caseStateOf(a, 'eif');
+  assert(cif && eif && E.stateKey(cif) !== E.stateKey(eif), 'readings should differ');
+});
+t('TCP data: token counts match the sheet movecounts (AUF conventions noted)', () => {
+  for (const c of TCPS.cases){
+    const n = E.countMoves(E.parseAlg(c.algs[0].alg));
+    const id = Number(c.name.replace('TCP ', ''));
+    const expected = (id >= 7 && id <= 10) ? c.moves + 1 : c.moves;   // 7-10 include the AUF
+    assert(n === expected, `${c.name}: tokens ${n} vs sheet ${c.moves}`);
+  }
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

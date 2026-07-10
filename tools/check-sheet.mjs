@@ -33,9 +33,9 @@ let tot = 0, noname = 0, badcanon = 0, solvedCase = 0; const samples = [], nosol
 for (const [rk, algs] of Object.entries(SHEET.ALG)) {
   if (SHEET.NAME[rk] == null) noname++;
   if (rk === SOLVED_KEY) solvedCase++; // a "case" at the solved state is always bogus
-  for (const [alg] of algs) {
+  for (const [alg, , dial] of algs) {
     tot++;
-    if (!algSolvesKey(alg, rk)) { nosolveKeys.push(rk + ' :: ' + alg); if (samples.length < 8) samples.push(rk + ' :: ' + alg); }
+    if (!algSolvesKey(alg, rk, dial || undefined)) { nosolveKeys.push(rk + ' :: ' + alg); if (samples.length < 8) samples.push(rk + ' :: ' + alg); }
   }
   if (!SHEET.CNAME[realCanonKey(keyToState(rk))]) badcanon++;
 }

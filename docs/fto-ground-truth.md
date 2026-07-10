@@ -132,6 +132,41 @@ Skewb engine and stays until M1 deletes the code it documents).
   lowercase `x`, Streeter `Xs` ≡ SiGN `2X`. Note the doc's color scheme is Ben's personal
   additive-mixing one (white/yellow, red/cyan, green/magenta, blue/gray) —
   the notation decision does NOT change the renderer's DianSheng default.
+- **ENGINE NOTATION EXTENSIONS (M3, machine-verified)** — added for the
+  community "FTO Notation" doc (Sonja Black) and the TCP sheet:
+  - **`{X,Y}` bracket rotations**: face at position X → the U position, face
+    at position Y → the F position. The (X,Y) faces' adjacency determines the
+    resulting hold: vertex-adjacent → CIF, edge-adjacent → EIF, otherwise
+    impossible (throws; `caseStateOf`/`algSolvesKey` return null/false). All
+    five worked examples in the notation doc reproduce exactly.
+  - **EIF dialect**: `applyParsed`/`effectTable`/`caseStateOf`/`algSolvesKey`
+    take a dialect ('cif' default, 'eif'). EIF base hold: positions
+    [U,F,BR,BL,L,R,D,B] hold faces [U,L,R,B,BL,F,D,BR] (derived from the
+    notation doc's paired illustrations; opposite-consistent; pinned by the
+    TCP structure tests). The engine models all 48 holds (24 CIF + 24 EIF);
+    o-rotations from EIF holds preserve the hold type (position-conjugation
+    formula π = ε⁻¹∘ρ_{ε(X)}∘ε — the doc's bracket table is the CIF special
+    case).
+  - **`X2` ergonomic doubles** (≡ X′, count as ONE move — sheet convention)
+    and **lowercase wides** (`r` ≡ `Rw`; normAlg canonicalizes to w-suffix).
+  - **Doc erratum found**: the notation doc says wide "u is equivalent to a
+    D' turn plus a 120 rotation" — machine-pinned identity is u = Uo ∘ D
+    (opposite face UNPRIMED; no rotation makes the D′ version true).
+- **TCP sheet findings (machine-verified 2026-07-10)**: the TCP sheet's
+  header claims EIF notation, but all 18 algs execute from the **CIF hold**
+  (the community notation doc's TCP description is the accurate one). The
+  TCP case space = the U face's three TRIPLES (corner + its two flanking
+  tetrad-A triangles) + the filled slot F(+x): 2-Flip group ⇔ filled slot
+  solved; "2-Flip" = two triples flipped in place (corner flip + its
+  triangle pair swapped — coupled by geometry); Odd group states compose
+  with the starting AUF (a U-layer turn) for cases 7-10, whose texts INCLUDE
+  the AUF — but cases 11/12 are authored POST-AUF (their texts solve
+  even-shaped states; the sheet's "each alg includes the starting AUF" note
+  does not hold for them — machine-verified, annotated per-case in the
+  JSON). Pinned in test-engine §12. Also: `T` from an EIF hold is defined as
+  the literal bracket {L,R} and lands in a CIF hold (a 90° front-vertex turn
+  is physically meaningless from EIF — no front vertex); any T token in a
+  future EIF-dialect sheet deserves review.
 - Community variant landscape (context for importing OTHER people's algs;
   treat every alg source's convention as per-source ✅ [community FTO
   Notation guide, Nautilus notation page, forum]):

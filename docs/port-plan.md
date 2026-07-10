@@ -161,8 +161,29 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   **closing the M1 single-T direction residue machine-exactly** —, Uv/Rv/Lv ≡
   our o-rotations, SiGN 2U ≡ Us, their lowercase wides ≡ our w tokens,
   orientation-reference solves, probe patterns). test:engine now 45 tests.
-- [ ] **M3 — Sheet pipeline + Algorithms page.** BLOCKED ON USER INPUT: the
-  algorithm sheets. Port `tools/compile-sheet.mjs` + `tools/import-method-sheets.mjs`
+- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 1 LANDED (2026-07-10):
+  the TCP last-layer set is LIVE on algs.html.** The user supplied the
+  community "FTO Notation" doc (Sonja Black) + the TCP sheet (New Notation,
+  Diansheng/DaYan). Engine grew the notation extensions they need — a
+  48-hold frame model (24 CIF + 24 EIF holds), `{X,Y}` bracket rotations
+  (adjacency decides the resulting hold; the doc's five worked examples
+  reproduce), an `eif` dialect for EIF-authored sheets, `X2` ergonomic
+  doubles, lowercase wides — all machine-verified (test:engine 55). TCP:
+  18 cases authored in `data/fto_algs.json` (verbatim texts incl. brackets),
+  every alg machine-verified to solve its case; the case space was DECODED
+  (three U-face triples + the filled slot; 2-Flip ⇔ filled slot solved; the
+  sheet's "EIF" header is wrong — the algs are CIF-held, matching the
+  notation doc's TCP description) and pinned as tests. compile-sheet/
+  check-sheet carry a per-alg dialect. `js/algs.js` REWRITTEN (data-driven,
+  read-only: subset tabs, group pills, search, case diagrams via
+  caseStateOf + netSVG, verbatim algs with move counts, sources; the Skewb
+  admin editor is DEFERRED — edit the JSON + rebuild; git history has the
+  editor if wanted). algs.html un-parked; headless-Edge E2E green (18
+  cards/diagrams, filters, search, 0 errors). REMAINING for M3: further
+  subsets as the user supplies sheets (the importer-adapter pattern),
+  revisit the case-symmetry fold with more data, decide whether the in-page
+  editor returns. ORIGINAL SPEC (retained): Port `tools/compile-sheet.mjs` +
+  `tools/import-method-sheets.mjs`
   (new ADAPTERS per source format — the Skewb importer's provenance/suspect/
   firstMove machinery carries over), re-key through engine helpers, empty
   carry-forward baselines (`prior-sheet.json` = `{}`, `broken-algs.json` = `[]`),

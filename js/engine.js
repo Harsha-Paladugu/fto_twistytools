@@ -273,29 +273,42 @@ function move(st, m){
   return o;
 }
 
-// ---------------- notation (Ben Streeter's "FTO Notes" system) ----------------
-// Tokens: face moves U F R L D B BR BL (+ '), w wides, s slices (U/R/F/L
-// spellings only), o whole-puzzle rotations, T/T'/T2 front-vertex rotations.
+// ---------------- notation ----------------
+// Base system: Ben Streeter's "FTO Notes" (face moves U F R L D B BR BL + ',
+// w wides, s slices with U/R/F/L spellings, o rotations, T/T'/T2), extended
+// per the community "FTO Notation" doc (Sonja Black) for the M3 sheet data:
+// {X,Y} bracket rotations (face at position X goes to the U position, face at
+// position Y to the F position — may shift the hold between CIF and EIF),
+// X2 ergonomic doubles (≡ X'), lowercase wide letters (r ≡ Rw), and an
+// EIF (edge-in-front) starting-hold dialect for EIF-authored sheets.
 function preprocessAlg(a){
   let s = ' ' + String(a).trim() + ' ';
   s = s.replace(/[’‘´`]/g, "'");          // normalize smart quotes to ASCII
-  s = s.replace(/[()]/g, ' ');            // Ben's doc groups with parens
+  s = s.replace(/\{\s*(BR|BL|[UFRLDB])\s*,\s*(BR|BL|[UFRLDB])\s*\}/g, ' {$1,$2} ');
+  s = s.replace(/[()]/g, ' ');            // sheets group with parens
   return s.replace(/\s+/g, ' ').trim();
 }
-const TOKRE = /^(BR|BL|[UFRLDB])(w|s|o)?(')?$/;
+const TOKRE = /^(BR|BL|[UFRLDB])(w|s|o)?(2)?(')?$/;
+const WIDERE = /^(br|bl|[ufrldb])(2)?(')?$/;
 function parseAlg(str){
   const out = [];
   const toks = preprocessAlg(str).split(' ').filter(Boolean);
   if (!toks.length) return out;
   for (const t of toks){
     let m;
+    if ((m = /^\{(BR|BL|[UFRLDB]),(BR|BL|[UFRLDB])\}$/.exec(t))){
+      out.push({ kind:'hold', x: FIDX[m[1]], y: FIDX[m[2]] }); continue;
+    }
     if ((m = /^T(2)?(')?$/.exec(t))){ out.push({ kind:'rot', axis:'T', amt: m[1] ? 2 : (m[2] ? 3 : 1) }); continue; }
     if ((m = TOKRE.exec(t))){
-      const f = m[1], suf = m[2] || '', ccw = !!m[3];
+      const f = m[1], suf = m[2] || '', dbl = !!m[3], ccw = !!m[4];
       if (suf === 's' && !(f==='U'||f==='R'||f==='F'||f==='L')) return null;  // slices are spelled with the front four
-      if (suf === 'o') out.push({ kind:'rot', axis:f, amt: ccw ? 2 : 1 });
-      else out.push({ kind:'move', f, suf, ccw });
+      if (suf === 'o') out.push({ kind:'rot', axis:f, amt: (ccw ? 2 : 1) * (dbl ? 2 : 1) % 3 || 1 });
+      else out.push({ kind:'move', f, suf, ccw, dbl });
       continue;
+    }
+    if ((m = WIDERE.exec(t))){
+      out.push({ kind:'move', f: m[1].toUpperCase(), suf: 'w', ccw: !!m[3], dbl: !!m[2] }); continue;
     }
     return null;
   }
@@ -303,32 +316,87 @@ function parseAlg(str){
 }
 function countMoves(parsed){ let n=0; for (const t of parsed) if (t.kind==='move') n++; return n; }
 
-// frame semantics: frame g = accumulated whole-puzzle rotation (original ->
-// current). A written letter names a SPATIAL position; the physical face there
-// is g^-1(letter). Rotation tokens are spatial too: g' = rot ∘ g. Clockwise is
-// rotation-invariant, so directions carry over unchanged.
-function tokenRotMat(axis, amt){
+// hold semantics: a HOLD maps the 8 written POSITIONS (same letters as faces)
+// to the physical faces currently sitting there. CIF holds have vertex-
+// adjacent U/F positions, EIF holds edge-adjacent ones — 24 of each, and the
+// {X,Y} bracket picks the unique hold with face-at-X on top and face-at-Y in
+// front (impossible pairs throw). Turn direction is hold-invariant (clockwise
+// is always viewed from outside the turned face). Rotations never touch the
+// state (family convention) — they only re-map positions.
+function tokenRotMat(axis, amt){           // matrix form (renderer/tests); CIF-anchored
   const base = axis==='T' ? ROT_T : FROT[FIDX[axis]];
   let M = MID; for (let i=0;i<amt;i++) M = mul(base, M);
   return M;
 }
-function walkParsed(parsed, onMove){       // shared frame resolution -> native move indices
-  let frame = MID;
-  for (const t of parsed){
-    if (t.kind === 'rot'){ frame = mul(tokenRotMat(t.axis, t.amt), frame); continue; }
-    const f0 = FACE_BY_S[vkey(mApply(mInv(frame), FSIGN[FIDX[t.f]]))];
-    const d = t.ccw ? 1 : 0;
-    if (t.suf === ''){ onMove(2*f0+d); continue; }
-    // Xw = Xo ∘ OPP(X);  Xs = Xo ∘ X' ∘ OPP(X)   (same-axis factors commute)
-    if (t.suf === 's') onMove(2*f0 + (d^1));
-    onMove(2*OPPF[f0] + d);
-    frame = mul(tokenRotMat(t.f, t.ccw ? 2 : 1), frame);
+// EIF base hold: positions [U,F,BR,BL,L,R,D,B] hold faces [U,L,R,B,BL,F,D,BR]
+// (derived from the community notation doc's CIF/EIF illustrations; pinned by
+// the TCP sheet's layer-locality + recognition structure in test-engine).
+const EIF0 = [0,4,5,7,3,1,6,2];
+const HOLDS = (() => {                      // 'u,f' -> position map (48 holds)
+  const out = {};
+  for (const g of ROT24){
+    const cif = [0,1,2,3,4,5,6,7].map(p => faceImg(g, p));
+    out[cif[0]+','+cif[1]] = cif;
+    const eif = EIF0.map(f => faceImg(g, f));
+    out[eif[0]+','+eif[1]] = eif;
   }
-  return frame;
+  return out;
+})();
+function holdAfterBracket(hold, x, y){
+  const h2 = HOLDS[hold[x] + ',' + hold[y]];
+  if (!h2) throw new Error('impossible rotation {' + FACES[x] + ',' + FACES[y] + '} from this hold');
+  return h2;
 }
-function applyParsed(parsed, state){
+// o-token: rotate the puzzle about the axis of POSITION X, in the direction of
+// the face there. Positions permute by π = ε⁻¹∘ρ_{ε(X)}∘ε where ε is the
+// hold-type base map (identity for CIF holds, EIF0 for EIF holds) — from a
+// CIF hold this reproduces the community doc's bracket table (Uo = {U,BR},
+// Ro = {F,BR}, …), and from an EIF hold it stays EIF, as physical rotation
+// about a position axis must. T rotates about the front VERTEX, which only
+// exists in CIF holds; per the doc it is the bracket {L,R}.
+const EIF0INV = (() => { const o = new Array(8); EIF0.forEach((f,p)=>{ o[f]=p; }); return o; })();
+function isEifHold(hold){
+  const du = FSIGN[hold[0]], df = FSIGN[hold[1]];
+  return (du[0]*df[0] + du[1]*df[1] + du[2]*df[2]) === 1;   // edge-adjacent U/F faces
+}
+function holdAfterRot(hold, axis, amt){
+  if (axis === 'T'){
+    for (let i=0;i<amt;i++) hold = holdAfterBracket(hold, 4, 5);   // {L,R}
+    return hold;
+  }
+  const eif = isEifHold(hold);
+  const eps = eif ? EIF0 : null, epsInv = eif ? EIF0INV : null;
+  const M = FROT[eps ? eps[FIDX[axis]] : FIDX[axis]];
+  const Mk = amt === 2 ? mul(M, M) : M;
+  const out = new Array(8);
+  for (let p=0;p<8;p++){
+    // new_h(p) = h(π⁻¹(p)),  π(q) = ε⁻¹( ρ(ε(q)) )  ⇒  π⁻¹(p) = ε⁻¹( ρ⁻¹(ε(p)) )
+    const q = eps ? epsInv[faceImg(mInv(Mk), eps[p])] : faceImg(mInv(Mk), p);
+    out[p] = hold[q];
+  }
+  return out;
+}
+function walkParsed(parsed, onMove, dialect){  // shared resolution -> native move indices
+  let hold = dialect === 'eif' ? EIF0 : [0,1,2,3,4,5,6,7];
+  for (const t of parsed){
+    if (t.kind === 'hold'){ hold = holdAfterBracket(hold, t.x, t.y); continue; }
+    if (t.kind === 'rot'){ hold = holdAfterRot(hold, t.axis, t.amt); continue; }
+    const d = t.ccw ? 1 : 0;
+    const reps = t.dbl ? 2 : 1;
+    for (let r=0;r<reps;r++){
+      const f0 = hold[FIDX[t.f]];            // re-resolve: w/s reps rotate the hold
+      if (t.suf === ''){ onMove(2*f0+d); continue; }
+      // Xw = Xo ∘ OPP(X);  Xs = Xo ∘ X' ∘ OPP(X)  (same-axis factors commute)
+      if (t.suf === 's') onMove(2*f0 + (d^1));
+      onMove(2*OPPF[f0] + d);
+      hold = holdAfterRot(hold, t.f, t.ccw ? 2 : 1);
+    }
+  }
+  return hold;
+}
+function applyParsed(parsed, state, dialect){
   let s = copy(state);
-  walkParsed(parsed, m => { s = move(s, m); });
+  walkParsed(parsed, m => { s = move(s, m); }, dialect);
   return s;
 }
 
@@ -360,35 +428,45 @@ function applyTable(T, s){
   for (let x=0;x<24;x++) o.ctr[x]=s.ctr[T.xperm[x]];
   return o;
 }
-function effectTable(parsed){
+function effectTable(parsed, dialect){
   let T = idTable();
-  walkParsed(parsed, m => { T = composeTable(T, TBL[m]); });
+  walkParsed(parsed, m => { T = composeTable(T, TBL[m]); }, dialect);
   return T;
 }
 
 function invertAlg(str){
   // Valid WITHIN one token stream (each inverted token re-resolves through the
-  // walked-back frame). Across separate applyParsed evaluations the frame
+  // walked-back hold). Across separate applyParsed evaluations the hold
   // restarts, so this only inverts rotation-free algs (w/s inject rotations
   // too) — caseStateOf therefore inverts at the table level, not the text.
+  // {X,Y} brackets are not textually invertible (the restoring bracket depends
+  // on the hold at that point): returns null for bracket-containing algs.
+  if (String(str).indexOf('{') >= 0) return null;
   return preprocessAlg(str).split(' ').filter(Boolean).reverse()
     .map(t => t === 'T2' || t === "T2'" ? 'T2' : (t.endsWith("'") ? t.slice(0,-1) : t + "'")).join(' ');
 }
 const MIRF = FSIGN.map(s => FACE_BY_S[vkey(mApply(MIRROR, s))]);  // U↔L F↔R BR↔D BL↔B
 function mirrorAlg(str){
+  if (String(str).indexOf('{') >= 0) return null;   // brackets: not textually mirrorable
   return preprocessAlg(str).split(' ').filter(Boolean).map(t => {
     let m;
     if ((m = /^T(2)?(')?$/.exec(t))) return m[1] ? 'T2' : (m[2] ? 'T' : "T'");
-    m = TOKRE.exec(t); if (!m) return t;
-    return FACES[MIRF[FIDX[m[1]]]] + (m[2]||'') + (m[3] ? '' : "'");
+    if ((m = TOKRE.exec(t)))
+      return FACES[MIRF[FIDX[m[1]]]] + (m[2]||'') + (m[3]||'') + (m[4] ? '' : "'");
+    if ((m = WIDERE.exec(t)))
+      return FACES[MIRF[FIDX[m[1].toUpperCase()]]].toLowerCase() + (m[2]||'') + (m[3] ? '' : "'");
+    return t;
   }).join(' ');
 }
 function normAlg(alg){
   const p = parseAlg(alg);
   if (!p) return String(alg).replace(/\s+/g,' ').trim();
-  return p.map(t => t.kind==='rot'
-    ? (t.axis==='T' ? (t.amt===2?'T2':(t.amt===3?"T'":'T')) : t.axis+'o'+(t.amt===2?"'":''))
-    : t.f + t.suf + (t.ccw?"'":'')).join(' ');
+  return p.map(t => {
+    if (t.kind==='hold') return '{' + FACES[t.x] + ',' + FACES[t.y] + '}';
+    if (t.kind==='rot')
+      return t.axis==='T' ? (t.amt===2?'T2':(t.amt===3?"T'":'T')) : t.axis+'o'+(t.amt===2?"'":'');
+    return t.f + t.suf + (t.dbl?'2':'') + (t.ccw?"'":'');   // lowercase wides normalize to Xw
+  }).join(' ');
 }
 
 // ---------------- keying ----------------
@@ -407,18 +485,21 @@ function keyToState(k){
 // (docs/port-plan.md). Widening this later must re-key the compiled sheet.
 function realCanonKey(s){ return stateKey(s); }
 
-function caseStateOf(algStr){
+function caseStateOf(algStr, dialect){
   const p = parseAlg(algStr);
   if (!p || !p.length) return null;
-  const cs = applyTable(invertTable(effectTable(p)), solved());
-  return eq(applyParsed(p, copy(cs)), solved()) ? cs : null;
+  try {
+    const cs = applyTable(invertTable(effectTable(p, dialect)), solved());
+    return eq(applyParsed(p, copy(cs), dialect), solved()) ? cs : null;
+  } catch (e) { return null; }              // impossible {X,Y} bracket en route
 }
-function algSolvesKey(algStr, key){
+function algSolvesKey(algStr, key, dialect){
   const p = parseAlg(algStr);
   if (!p) return false;
   let st;
   try { st = keyToState(key); } catch (e) { return false; }   // malformed key: no
-  return eq(applyParsed(p, st), solved());
+  try { return eq(applyParsed(p, st, dialect), solved()); }
+  catch (e) { return false; }               // impossible bracket
 }
 
 // ---------------- scrambles ----------------
@@ -449,6 +530,7 @@ module.exports = {
   toFacelets, fromFacelets, solvedFacelets, applyFaceletPerm,
   moveFaceletPerm: MOVE_FPERM, sliceFaceletPerm: SLICE_FPERM,
   rotFaceletPerm, tokenRotMat, mul, mInv, mApply, MID, ROT_T, ROT24, MIRROR, faceImg, vertImg,
+  EIF0, HOLDS, walkParsed,
   randomScramble, stateSpaceCount,
 };
 window.OOEngine=module.exports;})();

@@ -1,14 +1,67 @@
 {
   "meta": {
-    "source": "fto.twistytools.com — authored FTO algorithm data (awaiting the user's method sheets; see docs/port-plan.md M3)",
-    "description": "FTO algorithms grouped by subset, then by case name. Notation is Ben Streeter's FTO Notes system (see docs/fto-ground-truth.md §Notation).",
+    "source": "fto.twistytools.com — authored FTO algorithm data",
+    "description": "FTO algorithms grouped by subset, then by case. Face letters follow the community notation (Sonja Black's 'FTO Notation' doc + Ben Streeter's FTO Notes); {X,Y} bracket rotations, X2 ergonomic doubles and w-suffix wides are supported. Each subset declares the HOLD its algs execute from ('cif' or 'eif').",
     "notation": "streeter",
     "apostrophe": "normalized to ASCII '",
-    "status": "empty seed — subsets and cases arrive with the M3 sheet import",
+    "status": "TCP (last layer) imported 2026-07-10 from the 'Triangle + Corner Permutation (TCP) Cases and Solutions' sheet (New Notation, Diansheng/DaYan edition).",
     "counts": {
-      "cases": 0,
-      "algs": 0
+      "cases": 18,
+      "algs": 18
     }
   },
-  "subsets": {}
+  "subsets": {
+    "TCP": {
+      "name": "TCP — Triangle + Corner Permutation (Last Layer)",
+      "notation": "cif",
+      "notation_note": "The sheet's header says its algs are written in EIF notation, but machine verification (case layer-locality, the filled-slot criterion, recognition structure) shows every alg executes from the CIF hold — matching the community notation doc's description of the TCP set ('presents its algorithms in CIF orientation, then begins many algs with a puzzle rotation'). Verified 2026-07-10; see tools/test-engine.mjs.",
+      "description": "Solves the last layer's three triples (corner + two triangles each) and the filled slot in one look, after everything else is done. 18 cases in three groups: Even (even triangle permutation), Odd (odd triangle permutation, needs a starting AUF — cases 7-10's listed algs INCLUDE the AUF; cases 11-12 are written post-AUF, so do the AUF first), and 2-Flip (the filled slot's triangle already matches, i.e. two triples are flipped in place).",
+      "groups": ["Even", "Odd", "2-Flip"],
+      "sources": [
+        "Sheet: 'Triangle + Corner Permutation (TCP) Cases and Solutions' (New_Notation_TCP_Full_Diansheng_DaYan), provided by the site owner 2026-07-10",
+        "[2] Ben Streeter, '[FTO] Introduction to TCP + My Algorithms' — https://youtu.be/iyDDCHQn-T8",
+        "[3] Ben Streeter, '[FTO] My Odd TCP Algorithms!' — https://youtu.be/NLJbzBDkGzI",
+        "[4] A.B. 'Tipster Tickster', 'All of my FTO TCP algorithms and fingertricks!' — https://youtu.be/ohwcpjqFWb0",
+        "[5] A.B. 'Tipster Tickster', 'FTO Algorithms' spreadsheet, sheet 'Full l3t' — https://docs.google.com/spreadsheets/d/11N8tEu0S8aXDUHAsDVJsrh3Uyr6YGn1Asvse4zfAzus"
+      ],
+      "cases": [
+        { "name": "TCP 1", "group": "Even", "recognition": "Clockwise corners and clockwise triangles.", "moves": 4,
+          "algs": [{ "alg": "B' R B R'" }] },
+        { "name": "TCP 2", "group": "Even", "recognition": "Anticlockwise corners and anticlockwise triangles.", "moves": 4,
+          "algs": [{ "alg": "{U,BR} R B' R' B" }] },
+        { "name": "TCP 3", "group": "Even", "recognition": "Solved corners, clockwise triangles.", "moves": 8,
+          "algs": [{ "alg": "{B,U} (U' R' D R') (U R D' R)" }] },
+        { "name": "TCP 4", "group": "Even", "recognition": "Solved corners, anticlockwise triangles.", "moves": 8,
+          "algs": [{ "alg": "{B,BL} (U R D' R) (U' R' D R2)" }] },
+        { "name": "TCP 5", "group": "Even", "recognition": "Clockwise corners, anticlockwise triangles.", "moves": 12,
+          "algs": [{ "alg": "{B,BL} (U R' U') (R' D' R U R' D) (R U' R)" }] },
+        { "name": "TCP 6", "group": "Even", "recognition": "Anticlockwise corners, clockwise triangles.", "moves": 12,
+          "algs": [{ "alg": "{B,U} (U' R U) (R D R' U' R D') (R' U R')" }] },
+        { "name": "TCP 7", "group": "Odd", "recognition": "Solved corners, clockwise AUF.", "moves": 9, "moves_note": "excl. AUF; the listed alg includes it",
+          "algs": [{ "alg": "U {B,BL} (R D R' U) (R D' R U') R" }] },
+        { "name": "TCP 8", "group": "Odd", "recognition": "Solved corners, anticlockwise AUF.", "moves": 9, "moves_note": "excl. AUF; the listed alg includes it",
+          "algs": [{ "alg": "U' {B,U} (R' D' R U') (R' D R' U) R'" }] },
+        { "name": "TCP 9", "group": "Odd", "recognition": "Clockwise corners, clockwise AUF.", "moves": 11, "moves_note": "excl. AUF; the listed alg includes it",
+          "algs": [{ "alg": "U {B,BL} (R D R' U) (R D R U') (R' D R2)" }] },
+        { "name": "TCP 10", "group": "Odd", "recognition": "Anticlockwise corners, anticlockwise AUF.", "moves": 11, "moves_note": "excl. AUF; the listed alg includes it",
+          "algs": [{ "alg": "U' {B,U} (R' D' R U') (R' D' R' U) (R D' R)" }] },
+        { "name": "TCP 11", "group": "Odd", "recognition": "Anticlockwise corners, clockwise AUF.", "moves": 10, "moves_note": "unlike cases 7-10, this text does NOT include the starting AUF — apply it first (machine-verified: the text solves the post-AUF state)",
+          "algs": [{ "alg": "{L,U} U' D (R' U R) D' {L,D} (R' U R U')" }] },
+        { "name": "TCP 12", "group": "Odd", "recognition": "Clockwise corners, anticlockwise AUF.", "moves": 10, "moves_note": "unlike cases 7-10, this text does NOT include the starting AUF — apply it first (machine-verified: the text solves the post-AUF state)",
+          "algs": [{ "alg": "{R,BR} U D' (R U' R') D {BR,F} (R B' R' B)" }] },
+        { "name": "TCP 13", "group": "2-Flip", "recognition": "Solved corners, solved triangles.", "moves": 8,
+          "algs": [{ "alg": "(R B' R' B) (R' L R L')" }] },
+        { "name": "TCP 14", "group": "2-Flip", "recognition": "Clockwise corners, solved triangles.", "moves": 10,
+          "algs": [{ "alg": "{R,BR} (R' U' Rw' R U') (R U Rw R' U)" }] },
+        { "name": "TCP 15", "group": "2-Flip", "recognition": "Anticlockwise corners, solved triangles.", "moves": 10,
+          "algs": [{ "alg": "{L,U} (R U Rw R' U) (R' U' Rw' R U')" }] },
+        { "name": "TCP 16", "group": "2-Flip", "recognition": "Solved corners, 2-swap triangles.", "moves": 11,
+          "algs": [{ "alg": "{B,BR} (R' U' R D') (R U' R' D) (R' U' R)" }] },
+        { "name": "TCP 17", "group": "2-Flip", "recognition": "Clockwise corners, 2-swap triangles.", "moves": 9,
+          "algs": [{ "alg": "{R,BR} (U Rw' U' R) (U Rw R U') R" }] },
+        { "name": "TCP 18", "group": "2-Flip", "recognition": "Anticlockwise corners, 2-swap triangles.", "moves": 9,
+          "algs": [{ "alg": "{L,U} (U' Rw U R') (U' Rw' R' U) R'" }] }
+      ]
+    }
+  }
 }

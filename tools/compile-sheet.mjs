@@ -51,16 +51,17 @@ const { stateKey, realCanonKey, caseStateOf, algSolvesKey } = E;
 
 // ---- naming ----
 const labelOf = (subsetKey, caseName) =>
-  subsetKey === caseName ? caseName : subsetKey + ' Â· ' + caseName;
-const casePart = (name) => String(name).split(' Â· ').slice(-1)[0];
+  subsetKey === caseName ? caseName : subsetKey + ' · ' + caseName;
+const casePart = (name) => String(name).split(' · ').slice(-1)[0];
 
 // ---- pass 1: group every alg by the canonical key it actually solves ----
 const byKey = {}; // canon -> { items:[{alg, renderKey, label, subset}] }
 const report = { algs: 0, skipped: [], mislabels: 0, misfiled: [], renames: [], carried: 0, primaryNew: 0, keptBroken: 0 };
 const SOLVED_KEY = stateKey(E.solved());
-function collect(subsetKey, caseName, alg) {
+function collect(subsetKey, caseName, alg, dialect) {
   report.algs++;
-  const cs = caseStateOf(alg.alg);
+  const dial = alg.notation || dialect;                 // per-alg override, else subset default
+  const cs = caseStateOf(alg.alg, dial);
   if (!cs) { report.skipped.push(subsetKey + ' / ' + caseName + ': ' + alg.alg); return; }
   const renderKey = stateKey(cs);
   // An alg whose net effect is the identity (e.g. an empty/whitespace string, or
@@ -70,10 +71,10 @@ function collect(subsetKey, caseName, alg) {
   if (renderKey === SOLVED_KEY) { report.skipped.push(subsetKey + ' / ' + caseName + ': ' + JSON.stringify(alg.alg) + '  (identity â€” solves nothing)'); return; }
   const canon = realCanonKey(cs);
   const label = labelOf(subsetKey, caseName);
-  (byKey[canon] = byKey[canon] || { items: [] }).items.push({ alg: alg.alg, renderKey, label, subset: subsetKey });
+  (byKey[canon] = byKey[canon] || { items: [] }).items.push({ alg: alg.alg, renderKey, label, subset: subsetKey, dial });
 }
-for (const [sn, s] of Object.entries(J.subsets)) for (const c of s.cases) for (const a of c.algs) collect(sn, c.name, a);
-for (const [sn, s] of Object.entries(J.other_subsets || {})) for (const c of s.cases) for (const a of c.algs) collect(sn, c.name, a);
+for (const [sn, s] of Object.entries(J.subsets)) for (const c of s.cases) for (const a of c.algs) collect(sn, c.name, a, s.notation);
+for (const [sn, s] of Object.entries(J.other_subsets || {})) for (const c of s.cases) for (const a of c.algs) collect(sn, c.name, a, s.notation);
 
 // ---- pass 2: resolve names + emit ----
 const MAIN = { ALG: {}, NAME: {}, CNAME: {}, PRES: {} };
@@ -92,7 +93,7 @@ function resolveName(canon, items) {
 function emit(target, canon, items, name) {
   for (const it of items) {
     const arr = (target.ALG[it.renderKey] = target.ALG[it.renderKey] || []);
-    if (!arr.some(r => r[0] === it.alg)) arr.push([it.alg, name]);
+    if (!arr.some(r => r[0] === it.alg)) arr.push([it.alg, name, it.dial || null]);
     target.NAME[it.renderKey] = name;
   }
   target.CNAME[canon] = name;
@@ -127,14 +128,14 @@ for (const [canon, pres] of Object.entries(OLD.PRES)) {
   const presArr = (MAIN.PRES[canon] = MAIN.PRES[canon] || []);
   for (const [rk] of pres) {
     const old = OLD.ALG[rk] || [];
-    let keep = old.filter(([alg]) => algSolvesKey(alg, rk));
+    let keep = old.filter(([alg, , dial]) => algSolvesKey(alg, rk, dial || undefined));
     // If a canonical has NO JSON alg and NO valid old alg, keep OLD's entries
     // unfiltered (status quo) so the panel is never emptier than before.
     if (!keep.length && !hadPrimary && old.length) { keep = old; report.keptBroken += old.length; }
     if (!keep.length) continue;
     if (!presArr.some(q => q[0] === rk)) presArr.push([rk, name]);
     const arr = (MAIN.ALG[rk] = MAIN.ALG[rk] || []);
-    for (const [alg] of keep) if (!arr.some(r => r[0] === alg)) arr.push([alg, name]);
+    for (const [alg, , dial] of keep) if (!arr.some(r => r[0] === alg)) arr.push([alg, name, dial || null]);
     MAIN.NAME[rk] = name;
   }
 }
@@ -144,7 +145,7 @@ for (const [canon, pres] of Object.entries(OLD.PRES)) {
 // (which applies the same shared function to the JSON). Dedupe per key.
 for (const rk of Object.keys(MAIN.ALG)) {
   const seen = new Set(), out = [];
-  for (const [alg, name] of MAIN.ALG[rk]) { const n = E.normAlg(alg); if (!seen.has(n)) { seen.add(n); out.push([n, name]); } }
+  for (const [alg, name, dial] of MAIN.ALG[rk]) { const n = E.normAlg(alg); if (!seen.has(n)) { seen.add(n); out.push([n, name, dial || null]); } }
   MAIN.ALG[rk] = out;
 }
 
@@ -164,7 +165,7 @@ for (const [canon, rec] of Object.entries(byKey)) {
 // fails is just a stale-manifest note.
 const failingBroken = [];
 for (const [rk, algs] of Object.entries(MAIN.ALG))
-  for (const [alg] of algs) if (!algSolvesKey(alg, rk)) failingBroken.push(rk + ' :: ' + alg);
+  for (const [alg, , dial] of algs) if (!algSolvesKey(alg, rk, dial || undefined)) failingBroken.push(rk + ' :: ' + alg);
 const unexpectedBroken = failingBroken.filter(k => !BROKEN_KEYS.has(k));
 const staleBroken = [...BROKEN_KEYS].filter(k => !failingBroken.includes(k));
 const selfCheckOk = unexpectedBroken.length === 0;
