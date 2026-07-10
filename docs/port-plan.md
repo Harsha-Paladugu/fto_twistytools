@@ -31,8 +31,10 @@ User-facing decisions already made (2026-07-10 session):
   this repo). CNAME/robots/sitemap point at fto.twistytools.com as of M0;
   hosting go-live (GitHub Pages enable + DNS for the subdomain) stays an M7
   step. Also user-confirmed 2026-07-10: algorithm sheets come later (M3 stays
-  blocked as planned) and the notation dialect is confirmed later (the M1
-  checkpoint stands).
+  blocked as planned), and the site NOTATION is Ben Streeter's "FTO Notes"
+  system (the user supplied the doc; rules quoted in ground-truth §Notation —
+  the M1 user checkpoint is resolved, only the Twizzle direction-encoding pin
+  remains as an M1 engineering gate).
 - **Firebase: deferred** (demo-mode localStorage from day one; see M6). Without the
   census, Firebase only buys account-synced trainer/solver prefs.
 
@@ -213,9 +215,12 @@ their consumers with them milestone by milestone (see M1/M4/M5).
 
 - Hosting go-live: enable GitHub Pages on this repo + create the
   fto.twistytools.com DNS record (M7; name + domain themselves are decided).
-- **Internal rotation/slice spelling — confirm with the user at M1**, before
-  any test vectors or alg text are recorded in it (rotation `o` vs `v` vs
-  `[X]`, slice `s` vs `2U` vs lowercase; ground-truth §Notation).
+- ~~Internal rotation/slice spelling~~ **DECIDED (user, 2026-07-10): Ben
+  Streeter's "FTO Notes" notation site-wide** — bare letter = CW 120°, `'` =
+  CCW, no doubles; `w` wide; `s` slice (spelled with U/R/F/L only); `o` face
+  rotations; `T` 90° front-vertex rotation (ground-truth §Notation quotes the
+  rules). M1 still owes the direction-encoding pin against Twizzle before any
+  test vectors or alg text are recorded.
 - Pruning tables: build-in-browser vs ship precomputed binaries (M5's sizing
   task produces the numbers; checkpoint if >10 MB shipped or >30 s first
   build).

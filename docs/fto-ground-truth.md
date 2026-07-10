@@ -99,9 +99,40 @@ Skewb engine and stays until M1 deletes the code it documents).
   statically readable oracle is the vendored solver's move/piece tables
   (`move_U`, `corner_piece_facelets`, `edge_piece_facelets`,
   `centreA/B_piece_facelets` in fto-solver.js).
-- Extensions — **the community has NOT settled these; treat every alg source's
-  convention as per-source** ✅ [community FTO Notation guide, Nautilus
-  notation page, forum]:
+- **SITE NOTATION DECIDED (user, 2026-07-10): Ben Streeter's "FTO Notes"**
+  (the Bencisco doc the user supplied — the same speedy.cubing.net/fto
+  document this file already cites). The rules, quoted from the doc:
+  - Hold: "a corner/vertex directly facing forward and the four adjacent
+    corners point diagonally outwards" (CIF).
+  - "a letter by itself is a clockwise rotation, while a dash tacked on
+    indicates an anti-clockwise rotation"; "Double turns will never be used
+    since they are redundant with a three-fold symmetry."
+  - Wide: "A w suffix indicates a wide/double layer turn as usual; for
+    example Rw indicates turning the two layers parallel to the R face
+    clockwise."
+  - Slice: "given an s suffix. For example, Rs indicates a turn of the slice
+    layer parallel to the R face in the clockwise direction relative to that
+    face." AND: "Slice moves are only ever used in conjunction with U, R, F,
+    and L (but Rs is often the only one of these which is used during
+    solving)" — so each axis's slice normalizes to the front-four letter
+    (never Ds/Bs/BRs/BLs).
+  - Rotations: "denoted with an o suffix. For example, Ro indicates a 120
+    degree rotation about the R face clockwise and Do' indicates a 120 degree
+    rotation about the D face anti-clockwise."
+  - `T` ("tip"): "acts on the front facing vertex... T by itself is a 90
+    degree clockwise rotation, while T' is 90 degrees anti-clockwise. T2 is
+    not often used since it is redundant" (the doc's wording; T2 is a valid
+    distinct rotation, just rare — M1 should still implement it).
+  This is the engine's canonical INTERNAL spelling and the display dialect.
+  Other community spellings (below) are parse-level aliases at most. M1 must
+  still pin the DIRECTION encodings against a physical oracle (Twizzle) —
+  the doc defines directions in prose, and mis-encoding direction is exactly
+  the Skewb x/y/z scar. Note the doc's color scheme is Ben's personal
+  additive-mixing one (white/yellow, red/cyan, green/magenta, blue/gray) —
+  the notation decision does NOT change the renderer's DianSheng default.
+- Community variant landscape (context for importing OTHER people's algs;
+  treat every alg source's convention as per-source ✅ [community FTO
+  Notation guide, Nautilus notation page, forum]):
   - Wide (two layers): `w` suffix (`Rw`) — broadly agreed. Twizzle-style usage
     also writes lowercase letters as wides, BUT older usage (Jaap, tutorials)
     uses lowercase for the MIDDLE SLICE — a live ambiguity; never ingest
@@ -125,13 +156,12 @@ Skewb engine and stays until M1 deletes the code it documents).
   w.r.t. the shared axis) and **wide = axis-rotation ∘ opposite-face′**.
   (NOT "own-face′ ∘ rotation" — that composite drags the far layer along and
   is actually the far side's wide move.) Rotations enter the frame machinery
-  like Skewb x/y/z did. The engine picks ONE canonical INTERNAL spelling at
-  M1 (confirmed with the user, pinned against Twizzle before any test vector
-  or alg text is recorded in it) and accepts the variants at parse level; the
-  DISPLAYED dialect is chosen at M3 to match the USER's sheets. Learn from
-  the Skewb port: **pin rotation-letter direction conventions against a
-  physical oracle (Twizzle) EARLY** (the Skewb engine's x/y/z turned out
-  inverted vs WCA and it cost a rework).
+  like Skewb x/y/z did. The canonical INTERNAL spelling and display dialect
+  are DECIDED (user, 2026-07-10): the Streeter system above; other spellings
+  are parse-level aliases if a data source needs them (M3 importer concern).
+  What M1 still owes: **pin the direction ENCODINGS against a physical
+  oracle (Twizzle) before any test vector or alg text is recorded** (the
+  Skewb engine's x/y/z turned out inverted vs WCA and it cost a rework).
 - Scramble standard: random-state via cubing.js `randomScrambleForEvent("fto")`
   (event id `fto`; filtering not yet implemented upstream); community norm
   before random-state was 25–30 random face moves. Comp rule: scramble with
