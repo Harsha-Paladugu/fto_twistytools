@@ -54,6 +54,15 @@
             c.moves_note ? h('p', { class: 'sub', style: 'margin:6px 0 0;font-size:12px' }, '(' + c.moves_note + ')') : null))));
   }
 
+  // a credit line with its URLs clickable
+  function sourceLine(s) {
+    const parts = String(s).split(/(https?:\/\/[^\s)]+)/g).filter(Boolean);
+    return h('p', { class: 'sub', style: 'margin:2px 0;font-size:12px' },
+      ...parts.map(p => /^https?:\/\//.test(p)
+        ? h('a', { href: p, target: '_blank', rel: 'noopener' }, p)
+        : p));
+  }
+
   function matches(c) {
     if (UI.group !== 'All' && c.group !== UI.group) return false;
     if (!UI.q) return true;
@@ -88,8 +97,8 @@
         : null,
       subset.sources && subset.sources.length
         ? h('div', { style: 'margin-top:18px' },
-            h('div', { class: 'sidehd' }, 'Sources'),
-            ...subset.sources.map(s => h('p', { class: 'sub', style: 'margin:2px 0;font-size:12px' }, s)))
+            h('div', { class: 'sidehd' }, 'Sources & credits'),
+            ...subset.sources.map(sourceLine))
         : null));
   }
   // search-only refresh (keeps the input focused)
