@@ -8,15 +8,18 @@ shared-layer fixes stay cherry-pickable). Four pages share one engine and one
 set of UI layers; the only build step compiles the algorithm data and bundles
 the trainer.
 
-> **Port status: M3 phase 1 — the Algorithms page is live** with the TCP
-> last-layer set (18 cases, every alg machine-verified). Underneath:
+> **Port status: all four pages are live (M0–M5).** The Algorithms page
+> carries the TCP, 1L3T and LBT sets (322 cases, every alg machine-verified);
+> the trainer drills those cases with verified setup scrambles; and the
+> solver produces full step-by-step **Bencisco** solves — per-step search
+> over small pattern databases into the sheets' own algorithms, every
+> displayed line re-proved end-to-end by the engine. Underneath:
 > `js/engine.js` is the FTO engine — geometry-derived, pinned against BOTH
 > xyzzy's ftosolver.js tables and cubing.js's runtime KPuzzle def, speaking
 > the full community notation ({X,Y} bracket rotations, CIF/EIF hold
-> dialects, doubles, wides; 55 tests) — and `js/render.js` draws the
-> community-standard two-diamond views (7 tests, verified side-by-side
-> against cubing.js). The trainer/solver pages are still parked until
-> M4/M5; their banners say so. The plan with live status is
+> dialects, doubles, wides) — and `js/render.js` draws the
+> community-standard two-diamond views, verified side-by-side against
+> cubing.js. The plan with live status is
 > [docs/port-plan.md](docs/port-plan.md); FTO domain facts (piece model, state
 > space, notation, methods, sources) are
 > [docs/fto-ground-truth.md](docs/fto-ground-truth.md). The Skewb parent's OO
@@ -26,9 +29,9 @@ the trainer.
 | Page | File | What it is |
 | --- | --- | --- |
 | Home | `index.html` | landing page |
-| Solver | `solver.html` + `js/solver.js`, `js/solver-core.js` | step-by-step method solver (FTO version at M5) |
-| Trainer | `trainer.html` + `js/trainer.js` | case trainer (drills, timer, recap), bundled from `src/trainer/` (FTO version at M4) |
-| Algorithms | `algs.html` + `js/algs.js` | LIVE: browse/search the FTO sheet (TCP last layer), diagrams + machine-verified algs; editing = JSON + rebuild |
+| Solver | `solver.html` + `js/solver.js`, `js/solver-core.js` | step-by-step Bencisco method solver (M5): searched centers/triples + the sheets' LBT/L3T algorithms, every line machine-verified |
+| Trainer | `trainer.html` + `js/trainer.js` | case trainer (drills, timer, recap), bundled from `src/trainer/` (M4) |
+| Algorithms | `algs.html` + `js/algs.js` | browse/search the FTO sheets (TCP, 1L3T, LBT), diagrams + machine-verified algs; editing = JSON + rebuild |
 
 ## Shared layers (`js/`)
 
@@ -37,8 +40,9 @@ the trainer.
   Streeter-notation alg parsing, the facelet model (identical scheme to
   xyzzy's ftosolver.js and pinned against it in tests), and the single source
   of the keying + alg→case helpers (`stateKey`, `realCanonKey`,
-  `caseStateOf`, `algSolvesKey`, `normAlg`, …). No global optimal solver —
-  per-step search arrives at M5.
+  `caseStateOf`, `algSolvesKey`, `normAlg`, …). No global optimal solver
+  exists or is claimed anywhere — FTO's God's number is unknown; the M5
+  solver searches per method step.
 - **`render.js`** (`window.OORender`) — SVG puzzle diagrams (M2): the two
   vertex-centered diamond views (front U/L/R/F, back B/BR/BL/D) + a rotatable
   3D view, exact facelet-triangle projection, configurable palette
@@ -47,8 +51,9 @@ the trainer.
   with a localStorage demo fallback when no Firebase is configured (the
   current state: `config.js` has `firebase: null`; see [SETUP.md](SETUP.md)).
 - **`navbar.js`** (`window.SiteNavbar`) — the shared top navigation.
-- **`tables.js`** (`window.OOTables`) — IndexedDB-cached BFS distance tables.
-  Skewb-only machinery: replaced by the pattern-database layer at M5.
+- **`tables.js`** (`window.OOTables`) — the solver's pattern databases (M5):
+  coordinate codecs + Int8 distance-to-goal tables (~7.6 MB, IndexedDB-cached,
+  built in the browser in seconds on first visit).
 - **`config.js`** (`window.OO_CONFIG`) — site config (currently demo mode).
 
 ## Data flow & source of truth
@@ -59,9 +64,8 @@ data/fto_algs.json             ← authored authority (empty M1 seed; populated 
         ▼
 js/sheet.js + data/classmap.json   (generated build-gate artifacts; no page consumes them at runtime)
 
-algs.html fetches the algs JSON at runtime (live since M3 phase 1);
-trainer.html and solver.html follow at M4/M5 (their inherited code still
-references the deleted Skewb file until then).
+algs.html, trainer.html and solver.html all fetch the algs JSON at runtime
+(the solver finishes its solves with the sheets' LBT/L3T algorithms verbatim).
 ```
 
 - **`js/sheet.js`, `data/classmap.json` and `js/trainer.js` are generated — do
@@ -95,14 +99,19 @@ is no manual version to bump. To preview locally, serve over HTTP (e.g.
 - **`tools/check-sheet.mjs`** — verifier of the shipped `js/sheet.js`
   (`npm run check`, wired into `npm run build`).
 - **`tools/import-method-sheets.mjs`** — re-runnable importer of authored
-  method sheets from `data/sources/` (gains FTO adapters at M3).
+  method sheets from `data/sources/`; **`tools/import-1l3t.mjs`** and
+  **`tools/import-lbt.mjs`** — the M3 adapters for zwegner's pages (run over
+  committed snapshots, self-checked).
 - **`tools/stamp-assets.mjs`** / **`tools/check-fresh.mjs`** — cache stamping
   and freshness gate.
-- **`tools/test-engine.mjs`** — the FTO engine suite (37 tests), pinned
+- **`tools/test-engine.mjs`** — the FTO engine suite (67 tests), pinned
   against **`tools/fixtures/xyzzy-fto.mjs`** (oracle tables from xyzzy's
   ftosolver.js, MIT, reproduced with attribution as test fixtures).
-  **`tools/test-trainer.mjs`**, **`tools/test-solver.mjs`**,
-  **`tools/solver-lab.mjs`** — Skewb suites, known-red until M4/M5.
+  **`tools/test-trainer.mjs`** — the trainer substrate suite (27 tests).
+  **`tools/test-solver.mjs`** — the solver suite (19 tests: codecs, table
+  admissibility, step regions, orientation machinery, end-to-end pipelines).
+  **`tools/solver-lab.mjs`** — solver scans over random scrambles
+  (`--scan 200`: the statistical exit gate — 100% solved, 0 verify failures).
 - **`build.mjs`** — esbuild config for the React trainer.
 
 ### Module strategy (why no `"type": "module"`)

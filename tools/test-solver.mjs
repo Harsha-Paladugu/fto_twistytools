@@ -1,32 +1,31 @@
-/* Skewbiks.com — solver-core unit tests (M7; physical-model rework 2026-07-07).
+/* fto.twistytools.com — Bencisco solver tests (js/tables.js + js/solver-core.js). M5.
  *
- * Asserts the method solver's substrate: the first-step target spaces (counts
- * pinned by the 2026-07-07 machine probe + membership of every imported sheet
- * case), the frame-aware WCA emitter and its physical-execution twin, the
- * PHYSICAL finish index (texts fold their leading rotations into the setup;
- * per text the index holds Φ⁻¹ of the 24 solved orientations; junctions match
- * under 24 rotations from the junction the HUMAN holds), and the search —
- * every emitted solution's method view carries a physical facelet proof, the
- * three USER-validated junction rotations (y' z / y x' / y2 z) are pinned
- * end-to-end, and constructed decompositions must be found.
+ * The solver exit gate: coordinate codecs pinned, every pruning table
+ * admissible and goal-exact, the Bencisco step regions re-derived against
+ * the M3 sheet data, the orientation (conjugation + Streeter rotation
+ * spelling) machinery proven, the LBT effect-matcher and L3T exact index
+ * verified, and full pipelines on fixed seeds — every displayed line
+ * re-proved end-to-end by applyParsed from the original scramble state.
+ * The wide statistical scan (>= 200 scrambles, 0 verify failures) lives in
+ * tools/solver-lab.mjs; this suite stays deterministic and CI-sized.
  *
  * Run: node tools/test-solver.mjs   (exit 0 = OK, 1 = a test failed)
- * Builds the full BFS distance table once (~30 s), like test-trainer.
  */
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { readFileSync } from 'fs';
-import { buildDist } from './lib/bfs-dist.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 globalThis.window = {};
 require(path.join(ROOT, 'js', 'engine.js'));
-const E = globalThis.window.OOEngine;
+require(path.join(ROOT, 'js', 'tables.js'));
 require(path.join(ROOT, 'js', 'solver-core.js'));
-const { makeSolverCore, METHOD_DEFS, METHOD_PRIORITY } = globalThis.window.OOSolverCore;
-const algData = JSON.parse(readFileSync(path.join(ROOT, 'data', 'skewb_algs.json'), 'utf8'));
+const E = globalThis.window.OOEngine;
+const T = globalThis.window.OOTables;
+const { makeSolverCore, STEP_DEFS, STEP_ORDER } = globalThis.window.OOSolverCore;
+const ALGDATA = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'fto_algs.json'), 'utf8'));
 
 let passed = 0, failed = 0;
 function t(name, fn) {
@@ -38,313 +37,204 @@ function t(name, fn) {
     console.log('✗ ' + name + '\n    ' + (e && e.message)); failed++;
   }
 }
-const rndInt = n => Math.floor(Math.random() * n);
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'assert'); }
 
-console.log('building distance table…');
-const dist = buildDist(E);
-const C = makeSolverCore(E, dist, algData);
-const { syms, rotBy } = C;
-const IDS = Object.keys(METHOD_DEFS);
-const pThen = (P, Q) => Q.map(q => P[q]);           // "apply P, then Q"
-
-/* ---------- target spaces ---------- */
-t('method registry: fl/tcll/eg2 with priority order', () => {
-  if (JSON.stringify(IDS) !== '["fl","tcll","eg2"]') throw new Error(IDS.join());
-  if (JSON.stringify(METHOD_PRIORITY) !== '["fl","tcll","eg2"]') throw new Error('priority');
-});
-t('D-anchored spaces: 540 fl / 2,160 tcll / 540 eg2, all reachable', () => {
-  for (const [id, n] of [['fl', 540], ['tcll', 2160], ['eg2', 540]]) {
-    const states = C.dAnchored(id);
-    if (states.length !== n) throw new Error(id + ': ' + states.length);
-    for (const s of states) if (dist[E.idx(s)] < 0) throw new Error(id + ': unreachable state');
-  }
-});
-t('expanded target maps: 3,110 fl / 11,964 tcll / 3,204 eg2 (12-rotation orbit)', () => {
-  for (const [id, n] of [['fl', 3110], ['tcll', 11964], ['eg2', 3204]])
-    if (C.targets[id].size !== n) throw new Error(id + ': ' + C.targets[id].size);
-});
-t('D-anchored predicates: layer pieces as specced per method', () => {
-  for (const id of IDS) for (const s of C.dAnchored(id)) {
-    if (s.ctr[3] !== 3 || s.fx[2] !== 0 || s.fx[3] !== 0) throw new Error(id + ': layer ctr/axis');
-    const twists = [s.fo[2], s.fo[3]].filter(v => v !== 0).length;
-    if (id === 'fl' && (s.fp.join('') !== '0123' || twists !== 0)) throw new Error('fl layer dirty');
-    if (id === 'tcll' && (s.fp.join('') !== '0123' || twists !== 1)) throw new Error('tcll needs exactly one twist');
-    if (id === 'eg2' && (s.fp.join('') !== '1032' || twists !== 0)) throw new Error('eg2 needs the pair swap');
-  }
-});
-t('every imported sheet case sits in its method space (minus 5 known outliers)', () => {
-  const subs = { ...(algData.subsets || {}), ...(algData.other_subsets || {}) };
-  const expect = { NS: ['fl', 134, 135], EG2: ['eg2', 136, 136], TCLL: ['tcll', 1076, 1080] };
-  for (const key of Object.keys(expect)) {
-    const [meth, want, total] = expect[key];
-    let got = 0, seen = 0;
-    for (const c of subs[key].cases) {
-      let st = null;
-      for (const a of c.algs || []) { st = E.caseStateOf(a.alg); if (st) break; }
-      if (!st) continue;
-      seen++;
-      if (C.targets[meth].has(E.idx(st))) got++;
-    }
-    if (seen !== total || got !== want) throw new Error(`${key}: ${got}/${seen} (want ${want}/${total})`);
-  }
-});
-t('target faces: solved state carries a face; faces are valid letters', () => {
-  const f = C.targets.fl.get(E.idx(E.solved()));
-  if (!E.FACES.includes(f)) throw new Error('solved: ' + f);
-  for (const id of IDS) for (const face of new Set(C.targets[id].values()))
-    if (!E.FACES.includes(face)) throw new Error(id + ': ' + face);
-});
-
-/* ---------- emitters + the physical model ---------- */
-t('emitWCA at the identity frame == engine nativeToWCA', () => {
-  for (let trial = 0; trial < 200; trial++) {
-    const mis = []; for (let i = 0; i < 12; i++) mis.push(rndInt(8));
-    const mine = C.emitWCA(mis).tokens.join(' ');
-    const eng = E.nativeToWCA(mis.map(m => E.MOVES[m]).join(' '));
-    if (mine !== eng) throw new Error(mine + ' vs ' + eng);
-  }
-});
-t('ROT24: 24 distinct orientations, identity first, sheet spellings are rotation tokens', () => {
-  if (C.ROT24.length !== 24 || C.ROT24[0].spell !== '') throw new Error(C.ROT24.map(r => r.spell).join(','));
-  const seen = new Set();
-  for (const r of C.ROT24) {
-    for (const tok of r.spell.split(/\s+/).filter(Boolean))
-      if (!/^[xyz](2'|2|')?$/.test(tok)) throw new Error('not a rotation token: ' + tok);
-    seen.add(r.perm.join(','));
-  }
-  if (seen.size !== 24) throw new Error('duplicate perms: ' + seen.size);
-});
-t('physical corpus anchor: every imported text solves its identity pre-state physically', () => {
-  // physical execution = fixed hand positions + fixed-axis rotations; must end
-  // solved (any orientation) from the engine's identity pre-state — this is
-  // the semantic bridge between the corpus-validated engine reading and the
-  // facelet model (machine-discriminated: the grip-relative alternative
-  // passes only 641 of these)
-  const subs = { ...(algData.subsets || {}), ...(algData.other_subsets || {}) };
-  let checked = 0;
-  for (const key of Object.keys(subs)) for (const c of subs[key].cases || [])
-    for (const a of c.algs || []) {
-      const toks = E.parseAlg(E.preprocessAlg(a.ns || a.alg), 'ns');
-      if (!toks) continue;
-      const sT = E.inverseState(E.applyParsed(toks, E.solved(), syms, rotBy));
-      const end = C.pApply(E.toFacelets(sT), C.physPerm(toks));
-      if (!C.SOLVED24_KEYS.has(C.flKey(end))) throw new Error('not solved physically: ' + (a.ns || a.alg));
-      checked++;
-    }
-  if (checked !== 3082) throw new Error('checked ' + checked + ' texts (want 3082)');
-});
-t('emitPhysPerm == physical execution of the DISPLAYED step; walkIdxOf factors it', () => {
-  const NS_OF_AXIS = { UBR: 'B', DBL: 'l', DFR: 'r', UFL: 'F' };
-  const NATIVE_AXIS = ['UBR', 'UBR', 'DBL', 'DBL', 'DFR', 'DFR', 'UFL', 'UFL'];
-  for (let trial = 0; trial < 200; trial++) {
-    const mis = []; for (let i = 0; i < 1 + rndInt(7); i++) mis.push(rndInt(8));
-    const emitted = C.emitPhysPerm(mis);
-    // (a) equals physPerm of the parsed displayed NS text
-    const nsText = E.wcaToNS(C.emitWCA(mis).tokens.join(' '));
-    const viaText = C.physPerm(E.parseAlg(E.preprocessAlg(nsText), 'ns'));
-    if (emitted.join(',') !== viaText.join(',')) throw new Error('emitPhysPerm != displayed-text physPerm');
-    // (b) equals the native physical perm followed by the walk rotation
-    const natText = mis.map(m => NS_OF_AXIS[NATIVE_AXIS[m]] + ((m & 1) ? "'" : '')).join(' ');
-    const nat = C.physPerm(E.parseAlg(natText, 'ns'));
-    const rhs = pThen(nat, C.ROT24[C.walkIdxOf(mis)].perm);
-    if (emitted.join(',') !== rhs.join(',')) throw new Error('walk factorization fails');
-  }
-});
-
-/* ---------- the physical finish index (leading rotations folded) ---------- */
-t('foldLeadRots: cuts plain leading rotations; grouped/odd texts fall back untouched', () => {
-  const cases = [
-    ["x z' R B r'", "R B r'"],
-    ["y B2' F r", "B2' F r"],       // preprocess rewrite kept authored in the body
-    ["R B r'", "R B r'"],           // no leading rotations
-    ["z x y2 y", "z x y2 y"],       // all rotations
-    ["y (r b' r')", "y (r b' r')"], // grouping chars: never cut (post-review guard)
-    ["[y2] r b' r'", "[y2] r b' r'"],
-  ];
-  for (const [inp, want] of cases) {
-    const toks = E.parseAlg(E.preprocessAlg(inp), 'ns');
-    if (!toks) throw new Error('fixture does not parse: ' + inp);
-    const got = C.foldLeadRots(inp, toks).ns;
-    if (got !== want) throw new Error(`"${inp}" -> "${got}" (want "${want}")`);
-  }
-});
-t('alg index: 65,640 pre-states / 73,968 entries; texts lead with a turn; entries re-prove physically', () => {
-  const idx = C.algIndex();
-  if (idx.size !== 65640) throw new Error('size ' + idx.size);
-  let entries = 0; for (const l of idx.values()) entries += l.length;
-  if (entries !== 73968) throw new Error('entries ' + entries);
-  const keys = [...idx.keys()];
-  for (let trial = 0; trial < 200; trial++) {
-    const k = keys[rndInt(keys.length)];
-    const arr = k.split('').map(Number);
-    for (const row of idx.get(k)) {
-      // by construction: the body's physical perm solves this pre-state
-      if (!C.SOLVED24_KEYS.has(C.flKey(C.pApply(arr, row.phi)))) throw new Error('entry does not solve: ' + row.ns);
-      const toks = E.parseAlg(E.preprocessAlg(row.ns), 'ns');
-      if (row.moves > 0 && (!toks || toks[0].kind === 'rot')) throw new Error('indexed text leads with a rotation: ' + row.ns);
-      if (!row.preKeys.has(k)) throw new Error('row.preKeys misses its own key');
-    }
-  }
-});
-t('physical-finish coverage over the method spaces: 2733/3110 fl, 10392/11964 tcll, 3180/3204 eg2', () => {
-  // measured under the physical model 2026-07-07 (identical counts to the old
-  // engine-frame index — the match RELATION agreed; the printed rotations did
-  // not). Update deliberately when the alg data changes.
-  const idx = C.algIndex();
-  for (const [id, want, total] of [['fl', 2733, 3110], ['tcll', 10392, 11964], ['eg2', 3180, 3204]]) {
-    let cov = 0;
-    const seen = new Set();
-    for (const st of C.dAnchored(id)) for (const rot of syms.rots) {
-      const s = rot.apply(st);
-      const k = E.stateKey(s);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      const jArr = E.toFacelets(s);
-      for (const r of C.ROT24) if (idx.has(C.flKey(C.pApply(jArr, r.perm)))) { cov++; break; }
-    }
-    if (seen.size !== total || cov !== want) throw new Error(`${id}: ${cov}/${seen.size}`);
-  }
-});
-
-/* ---------- search: soundness (every emitted view proves physically) ---------- */
-const FIXTURES = [
-  "L R L U' B R' U' R' L R B",   // KPW 2015 official final
-  "R U' B L' U R' B'",
-  "B U L R' U' B' L R",
-  "U L R B U' R' B' L'",
-];
-const NS_BODIES = (() => {  // display-membership oracle: every shipped text's token
-  const s = new Set();      // stream AFTER its leading rotations (independent fold)
-  const subs = { ...(algData.subsets || {}), ...(algData.other_subsets || {}) };
-  for (const key of Object.keys(subs)) for (const c of subs[key].cases || [])
-    for (const a of c.algs || []) {
-      const p = E.parseAlg(E.preprocessAlg(a.ns || a.alg), 'ns');
-      if (!p) continue;
-      let i = 0;
-      while (i < p.length && p[i].kind === 'rot') i++;
-      s.add(JSON.stringify(i < p.length ? p.slice(i) : p));
-    }
+// seeded RNG so every run tests the same states
+let seed = 20260713;
+const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x80000000; };
+const randState = (n) => {
+  let s = E.solved();
+  for (let i = 0; i < (n || 30); i++) s = E.move(s, (rnd() * 16) | 0);
   return s;
-})();
-const runFixture = (scr) => {
-  const state = E.applyParsed(E.parseAlg(scr), E.solved(), syms, rotBy);
-  const res = C.search(state, { methods: { fl: true, tcll: true, eg2: true }, caps: {} });
-  return { state, dopt: dist[E.idx(state)], res };
 };
-t('fixtures: solutions exist, none truncated', () => {
-  for (const scr of FIXTURES) {
-    const { res } = runFixture(scr);
-    if (res.truncated) throw new Error(scr + ': truncated');
-    if (!Object.values(res.byLength).some(items => items.length)) throw new Error(scr + ': no solutions');
+
+console.log('building pruning tables…');
+const PDB = await T.buildPDBs(E);
+const solved = E.solved();
+
+/* ---------- 1. codecs ---------- */
+t('pattern codec: solved rank 0, bijective on samples, full-range round trip', () => {
+  assert(T.encPattern([0,0,0,1,1,1,2,2,2,3,3,3]) === 0, 'solved pattern rank');
+  for (let ix = 0; ix < T.NPAT; ix += 1237) {
+    const pat = T.decPattern(ix, new Array(12));
+    assert(T.encPattern(pat) === ix, 'round trip at ' + ix);
   }
 });
-t('fixtures: every solution proves physically; algebra holds; alg text is a sheet body', () => {
-  for (const scr of FIXTURES) {
-    const { state, res } = runFixture(scr);
-    for (const [L, items] of Object.entries(res.byLength)) for (const it of items) {
-      if (it.total !== +L || it.v + it.fin !== it.total) throw new Error('bucket algebra');
-      if (it.v !== it.pmoves.length) throw new Error('v vs pmoves');
-      if (it.v > METHOD_DEFS[it.id].cap) throw new Error('over cap ' + it.id);
-      const mv = C.methodView(state, it);
-      if (!mv || !mv.ok) throw new Error('method view fails: ' + it.id + ' total ' + L);
-      if (it.row) {
-        if (mv.alg !== it.row.ns) throw new Error('alg text differs from the indexed row');
-        const p = E.parseAlg(E.preprocessAlg(mv.alg), 'ns');
-        if (!p || p[0].kind === 'rot') throw new Error('alg text still leads with a rotation: ' + mv.alg);
-        if (!NS_BODIES.has(JSON.stringify(p))) throw new Error('alg text is not a sheet body: ' + mv.alg);
-        if (E.countMoves(E.parseAlg(E.preprocessAlg(mv.text), 'ns')) !== it.total) throw new Error('text movecount');
-        if (mv.rot !== C.ROT24[it.rotIdx].spell) throw new Error('rot spelling mismatch');
-      } else {
-        if (it.fin !== 0 || mv.rot || mv.alg) throw new Error('solved junction shape');
+t('corner codec: solved 0, round trip, flip parity forced', () => {
+  assert(T.cornerIndex(solved.cp, solved.co) === 0, 'solved corner index');
+  for (let ix = 0; ix < T.NCORNER; ix += 37) {
+    const { cp, co } = T.cornerUnpack(ix);
+    assert(T.cornerIndex(cp, co) === ix, 'round trip at ' + ix);
+    assert(co.reduce((a, b) => a + b, 0) % 2 === 0, 'flip parity at ' + ix);
+  }
+});
+t('edge placement codec: round trip; orbit views survive moves', () => {
+  for (const f of Object.keys(T.HEX_EDGES)) {
+    const ix = T.edgePlaceIndex(solved.ep, T.HEX_EDGES[f]);
+    assert(T.edgePlaceUnrank(ix, 3).join() === T.HEX_EDGES[f].join(), 'home placement ' + f);
+  }
+  for (let i = 0; i < 40; i++) {
+    const s = randState(25);
+    assert(T.decPattern(T.encA(s.ctr), new Array(12)).join() === s.ctr.slice(0, 12).join(), 'encA view');
+    assert(T.decPattern(T.encB(s.ctr), new Array(12)).join() === s.ctr.slice(12).map(c => c - 4).join(), 'encB view');
+  }
+});
+
+/* ---------- 2. pruning tables ---------- */
+t('every table: solved state at distance 0; no unreached entries', () => {
+  for (const k of Object.keys(PDB.B)) assert(PDB.B[k][T.encB(solved.ctr)] === 0, 'B[' + k + ']');
+  for (const k of Object.keys(PDB.A)) assert(PDB.A[k][T.encA(solved.ctr)] === 0, 'A[' + k + ']');
+  for (const k of Object.keys(PDB.C)) assert(PDB.C[k][T.cornerIndex(solved.cp, solved.co)] === 0, 'C[' + k + ']');
+  for (const k of Object.keys(PDB.E3)) assert(PDB.E3[k][T.edgePlaceIndex(solved.ep, T.HEX_EDGES[k])] === 0, 'E3[' + k + ']');
+  for (const k of Object.keys(PDB.E6)) assert(PDB.E6[k][T.edgePlaceIndex(solved.ep, T.E6_PAIRS[k])] === 0, 'E6[' + k + ']');
+  for (const k of Object.keys(PDB.H1)) assert(PDB.H1[k][T.h1Index(solved.ep, solved.ctr, k, T.HEX_EDGES[k])] === 0, 'H1[' + k + ']');
+  for (const fam of [PDB.B, PDB.A, PDB.C, PDB.E3, PDB.E6, PDB.H1])
+    for (const k of Object.keys(fam))
+      for (let i = 0; i < fam[k].length; i += 101) assert(fam[k][i] >= 0, 'unreached entry');
+});
+t('every table is 1-Lipschitz along moves (BFS distance consistency)', () => {
+  for (let trial = 0; trial < 60; trial++) {
+    const s = randState(20);
+    const m = (rnd() * 16) | 0;
+    const s2 = E.move(s, m);
+    const reads = (st) => [
+      ...Object.keys(PDB.B).map(k => PDB.B[k][T.encB(st.ctr)]),
+      ...Object.keys(PDB.A).map(k => PDB.A[k][T.encA(st.ctr)]),
+      ...Object.keys(PDB.C).map(k => PDB.C[k][T.cornerIndex(st.cp, st.co)]),
+      ...Object.keys(PDB.E3).map(k => PDB.E3[k][T.edgePlaceIndex(st.ep, T.HEX_EDGES[k])]),
+      ...Object.keys(PDB.E6).map(k => PDB.E6[k][T.edgePlaceIndex(st.ep, T.E6_PAIRS[k])]),
+      ...Object.keys(PDB.H1).map(k => PDB.H1[k][T.h1Index(st.ep, st.ctr, k, T.HEX_EDGES[k])]),
+    ];
+    const a = reads(s), b = reads(s2);
+    for (let i = 0; i < a.length; i++)
+      assert(Math.abs(a[i] - b[i]) <= 1, 'jump > 1 at table #' + i + ' (' + a[i] + '->' + b[i] + ')');
+  }
+});
+t('B[D] ignores D turns (own triangles identical), sees BR turns', () => {
+  assert(PDB.B.D[T.encB(E.move(solved, 2 * E.FIDX.D).ctr)] === 0, 'after D');
+  assert(PDB.B.D[T.encB(E.move(solved, 2 * E.FIDX.BR).ctr)] === 1, 'after BR');
+});
+
+/* ---------- 3. the core: geometry + orientation machinery ---------- */
+const C = makeSolverCore(E, T, PDB, ALGDATA);   // init self-checks throw on any mismatch
+t('core init passes its construction asserts (regions, spelling, conjugation)', () => true);
+t('hexagon edge sets partition the 12 edges across the tetrad-B faces', () => {
+  const all = Object.values(C.HEX_EDGES).flat().sort((a, b) => a - b);
+  assert(all.join() === '0,1,2,3,4,5,6,7,8,9,10,11', 'partition');
+});
+t('bottom triple slots match the sheet-pinned LBT pair {4,10}', () =>
+  C.TRIPLE_SLOTS[4].join() === '4,10' && C.TRIPLE_SLOTS[3].join() === '6,9' && C.TRIPLE_SLOTS[5].join() === '5,8');
+t('conjState: inverse round trip, solved invariance', () => {
+  const s = randState(25);
+  for (const o of C.ORIENTS.slice(0, 8)) {
+    assert(E.eq(C.conjState(E.mInv(o.M), C.conjState(o.M, s)), s), 'round trip');
+    assert(E.eq(C.conjState(o.M, solved), solved), 'solved invariance');
+  }
+});
+t('all 24 orientations have distinct spells; identity spells empty', () => {
+  const spells = new Set(C.ORIENTS.map(o => o.spell));
+  assert(spells.size === 24, 'distinct spells');
+  assert(C.ORIENTS.some(o => o.spell === ''), 'identity present');
+});
+
+/* ---------- 4. the finish index ---------- */
+const fin = C.finishIndex();
+t('finish index shape: LBT effect entries, L3T exact keys, TCP included', () => {
+  assert(fin.lbt.length === 360, 'LBT entries (120 algs x 3 pre-AUFs): ' + fin.lbt.length);
+  assert(fin.l3t.size > 1500, 'L3T keys: ' + fin.l3t.size);
+  let tcp = 0;
+  for (const list of fin.l3t.values()) for (const en of list) if (en.subset === 'TCP') tcp++;
+  assert(tcp > 0, 'TCP entries present');
+});
+t('the 21 setup-undo LBT algs are indexed with their closing token appended', () => {
+  const undone = new Set(fin.lbt.filter(en => /setup undo appended/.test(en.note || ''))
+    .map(en => en.text.replace(/^U'? /, '')));
+  assert(undone.size === 21, 'distinct closed texts: ' + undone.size);
+});
+t('every sampled finish entry text exactly solves its own case state', () => {
+  const sample = fin.lbt.filter((_, i) => i % 7 === 0);
+  for (const list of fin.l3t.values()) if (rnd() < 0.05) sample.push(list[0]);
+  assert(sample.length > 60, 'sample size');
+  for (const en of sample) {
+    const cs = E.caseStateOf(en.text, en.dialect);
+    assert(cs, 'parses: ' + en.text);
+    assert(E.eq(E.applyParsed(E.parseAlg(en.text), cs, en.dialect), solved), 'solves: ' + en.text);
+  }
+});
+t('LBT effect tables agree with applyParsed on random states', () => {
+  for (let i = 0; i < 10; i++) {
+    const en = fin.lbt[(rnd() * fin.lbt.length) | 0];
+    const s = randState(15);
+    assert(E.eq(E.applyTable(en.table, s), E.applyParsed(E.parseAlg(en.text), s, en.dialect)),
+      'table/parse mismatch: ' + en.text);
+  }
+});
+
+/* ---------- 5. full pipelines (the exit gate in miniature) ---------- */
+const SCRAMBLES = [
+  "R U' B L' U R' B' D BR' L F' D' BL R' F U' B' R D' BL' U F' L' BR D R' U' L B' F",
+  "U L D' B R' F BL' U' BR D L' R' B U' F' BL R D' U' B' L F R' BR' D U B L' F' D",
+  "BL' F R' U' D B L BR' F' U R D' B' L' U' F BL R' B D U' L' F' R BR B' U' D L F'",
+];
+t('three fixed scrambles solve end to end; every emitted line is machine-proved', () => {
+  for (const scrText of SCRAMBLES) {
+    const parsed = E.parseAlg(scrText);
+    assert(parsed, 'scramble parses');
+    const s = E.applyParsed(parsed, E.solved());
+    const res = C.search(s, {});
+    assert(res.best != null, 'solved: ' + scrText.slice(0, 20) + '…');
+    assert(res.verifyFailures === 0, 'no dropped lines');
+    assert(res.best < 90, 'sane total: ' + res.best);
+    for (const it of res.byLength[res.best]) {
+      assert(it.ok, 'ok flag');
+      // independent replay of the DISPLAYED line, exactly as a human reads it
+      let st = E.copy(s);
+      for (const seg of it.segs) {
+        const p = E.parseAlg(((it.rotSpell ? it.rotSpell + ' ' : '') + seg.text).trim());
+        assert(p, 'segment parses: ' + seg.text);
+        st = E.applyParsed(p, st, seg.dialect || 'cif');
       }
+      assert(E.eq(st, solved), 'independent replay solves');
+      // segments follow the Bencisco step order
+      const order = it.segs.map(sg => STEP_ORDER.indexOf(sg.id));
+      for (let i = 1; i < order.length; i++) assert(order[i] > order[i - 1], 'step order');
+      // totals add up: segment moves sum to the badge total
+      assert(it.segs.reduce((a, sg) => a + sg.moves, 0) === it.total, 'movecount adds up');
     }
   }
 });
-
-/* ---------- the USER-validated junction rotations (2026-07-07) ---------- */
-// Three physically-executed data points from the site owner; the old
-// engine-frame derivation got #2 wrong ("y x") and pre-fix #1 read "y x".
-t('USER fixture 1: "B\' l r l\' b r l" + Pi Triple Sledge 135 prints rotation "y\' z"', () => {
-  const L1 = "B' l r l' b r l y x r' R r R'";        // the engine-letter line of the original report
-  const scr = E.inverseState(E.applyParsed(E.parseAlg(E.preprocessAlg(L1), 'ns'), E.solved(), syms, rotBy));
-  const res = C.search(scr, { methods: { fl: true, tcll: true, eg2: true }, caps: {} });
-  for (const items of Object.values(res.byLength)) for (const it of items) {
-    if (!it.row) continue;
-    const mv = C.methodView(scr, it);
-    if (E.wcaToNS(mv.vmoves) === "B' l r l' b r l" && mv.alg === "r' R r R'") {
-      if (mv.rot !== "y' z") throw new Error('rot "' + mv.rot + '" (want "y\' z")');
-      if (!mv.ok) throw new Error('does not verify');
-      return;
-    }
+t('a rotated orientation produces a proven line (the conjugation sweep end to end)', () => {
+  const s = E.applyParsed(E.parseAlg(SCRAMBLES[0]), E.solved());
+  const vert = C.ORIENT_SETS.vertical().filter(i => C.ORIENTS[i].spell !== '');
+  let provenRotated = false;
+  for (const oi of vert) {
+    const res = C.search(s, { orient: [oi] });
+    if (res.best == null) continue;
+    const it = res.byLength[res.best][0];
+    assert(it.rotSpell !== '', 'rotated spell');
+    let st = E.copy(s);
+    for (const seg of it.segs)
+      st = E.applyParsed(E.parseAlg((it.rotSpell + ' ' + seg.text).trim()), st, seg.dialect || 'cif');
+    assert(E.eq(st, solved), 'rotated replay solves');
+    provenRotated = true;
+    break;
   }
-  throw new Error('solution not found');
+  assert(provenRotated, 'no rotated orientation solved scramble 0 — investigate');
 });
-t('USER fixture 2: "l r" + TCLL BST- BL S1 prints rotation "y x\'"', () => {
-  const scr = E.keyToState('015432|30212220|0022');  // machine-derived from the user's junction
-  const res = C.search(scr, { methods: { fl: true, tcll: true, eg2: true }, caps: {} });
-  for (const items of Object.values(res.byLength)) for (const it of items) {
-    if (!it.row || it.pmoves.join(',') !== '2,4' || it.row.ns !== "R' B' r' R r R B R'") continue;
-    const mv = C.methodView(scr, it);
-    if (mv.rot !== "y x'") throw new Error('rot "' + mv.rot + '" (want "y x\'")');
-    if (!mv.ok) throw new Error('does not verify');
-    return;
-  }
-  throw new Error('solution not found');
+t('verifyLine rejects tampered lines', () => {
+  const s = E.applyParsed(E.parseAlg(SCRAMBLES[0]), E.solved());
+  const res = C.search(s, {});
+  const it = res.byLength[res.best][0];
+  const bad = { ...it, segs: it.segs.map((sg, i) => i === 0 ? { ...sg, text: sg.text + ' U' } : sg) };
+  assert(C.verifyLine(s, bad) === false, 'tampered line must fail');
+  assert(C.verifyLine(s, it) === true, 'original line must pass');
 });
-t('USER fixture 3: Pi Triple Sledge 136 junction prints rotation "y2 z"', () => {
-  const J3 = E.keyToState('415302|01230210|0201');   // machine-derived fl junction
-  const scr = E.copy(J3);
-  E.applyMoveIdx(scr, 3); E.applyMoveIdx(scr, 1);    // scr = J3 minus the path [0, 2]
-  const res = C.search(scr, { methods: { fl: true, tcll: true, eg2: true }, caps: {} });
-  for (const items of Object.values(res.byLength)) for (const it of items) {
-    if (!it.row || it.pmoves.join(',') !== '0,2' || it.row.ns !== "R r' R' r") continue;
-    const mv = C.methodView(scr, it);
-    if (mv.rot !== 'y2 z') throw new Error('rot "' + mv.rot + '" (want "y2 z")');
-    if (!mv.ok) throw new Error('does not verify');
-    return;
-  }
-  throw new Error('solution not found');
+t('an already-solved input needs no line; a one-move scramble solves short', () => {
+  const res0 = C.search(E.solved(), {});
+  assert(res0.best === null || res0.best === 0, 'solved input');
+  const res1 = C.search(E.move(E.solved(), 2 * E.FIDX.U), {});
+  assert(res1.best != null && res1.best <= 4, 'one-move scramble: ' + res1.best);
 });
 
-/* ---------- search: completeness (constructed decompositions are found) ---------- */
-t('constructed first-step + sheet-alg decompositions are found (50 randomized)', () => {
-  const idx = C.algIndex();
-  // per method: target states with at least one physical finish, + a matching row
-  const perMethod = {};
-  for (const id of IDS) {
-    perMethod[id] = [];
-    for (const ix of C.targets[id].keys()) {
-      const jArr = E.toFacelets(E.unidx(ix));
-      for (const r of C.ROT24) {
-        const list = idx.get(C.flKey(C.pApply(jArr, r.perm)));
-        if (list) { perMethod[id].push({ ix, row: list[0] }); break; }
-      }
-      if (perMethod[id].length >= 400) break;
-    }
-  }
-  let done = 0, tries = 0;
-  while (done < 50 && ++tries < 600) {
-    const id = IDS[rndInt(3)];
-    const pool = perMethod[id];
-    const pick = pool[rndInt(pool.length)];
-    const j = E.unidx(pick.ix);
-    // P = a short reversed random walk (no same-axis neighbours) ending at j
-    const n = 1 + rndInt(3);
-    const P = [];
-    let last = -1;
-    for (let i = 0; i < n; i++) { let m; do { m = rndInt(8); } while ((m >> 1) === last); last = m >> 1; P.push(m); }
-    const scr = E.copy(j);
-    for (let i = P.length - 1; i >= 0; i--) E.applyMoveIdx(scr, P[i] ^ 1);
-    if (dist[E.idx(scr)] === 0 || P.length > METHOD_DEFS[id].cap) continue;
-    const total = P.length + pick.row.moves;
-    const res = C.search(scr, { methods: { [id]: true }, caps: {} });
-    const hit = (res.byLength[total] || []).some(it =>
-      it.pmoves.join(',') === P.join(',') && it.row && it.row.uid === pick.row.uid);
-    if (!hit) throw new Error(`${id}: missing P=${P.join(',')} + ${pick.row.ns}`);
-    done++;
-  }
-  if (done < 50) throw new Error('only ' + done + ' constructions in ' + tries + ' tries');
-});
-
-console.log(`\n${passed} passed, ${failed} failed`);
+console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

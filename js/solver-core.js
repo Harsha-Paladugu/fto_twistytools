@@ -1,499 +1,631 @@
-/* Skewbiks.com — Method solver core: first-step targets, sheet-alg finishes. */
+/* fto.twistytools.com — Bencisco method solver core (no DOM; testable in node). M5. */
 (function(){const module={exports:{}};
-/* Skewb OO — method solver core (no DOM; testable in node).
-   Methods = first-step target spaces derived from the imported method sheets
-   (machine-probed against data/skewb_algs.json, 2026-07-07 — every NS/EG2/TCLL
-   case state sits in its method's space, minus 5 known sheet outliers):
-   - fl:   a first layer solved on some face (the NS / Sarah's first step).
-           540 states per face, 3,110 distinct; max distance 6 from anywhere.
-   - tcll: a layer built with exactly ONE of its two free corners twisted in
-           place (the TCLL pre-state; layer axis corners and center clean).
-           2,160 per face, 11,964 distinct; max distance 6.
-   - eg2:  a layer built with the free-corner pairs swapped (EG2 pre-state:
-           the layer face reads solved, its free corners exchanged — which
-           forces the opposite pair swapped too). 540 per face, 3,204; max 7.
-   A solution = a first step P that reaches an enabled target within its cap,
-   then one of the sheet's algorithms with its LEADING rotation tokens folded
-   into the printed setup rotation (USER revision 2026-07-07: the one printed
-   rotation must be exactly what brings the cube to where the alg's first
-   turn starts; from the first turn on the text is verbatim, mid-alg
-   rotations included). Score = MOVECOUNT as listed (first step + algorithm;
-   rotations are free, no junction-cancellation bookkeeping).
-   Fingertrick/ergonomic metrics are deliberately absent for now.
+/* Step-by-step FTO solver following the Bencisco method (the user's decision,
+   2026-07-13), the dominant FTO method (Ben Streeter; ground-truth §Methods).
+   A Bencisco "center" is a HEXAGON: one face's 3 edges + 3 centre triangles —
+   there are four of them, on the tetrad-B faces {D, L, R, B}, and together
+   they hold all 12 edges (the four faces of one tetrad partition the edge
+   set; machine-derived from engine geometry and asserted at init). The six
+   "triples" (corner + its two flanking tetrad-A triangles) carry the 6
+   corners and the 12 tetrad-A triangles. Engine-coordinate step regions
+   (derived at init from E.EDGES / face-vertex incidence, pinned in
+   tools/test-solver.mjs against the M3 sheet data):
 
-   PHYSICAL MODEL (the load-bearing part — reworked 2026-07-07 after the
-   USER's junctions falsified the engine-frame derivation): the finish index
-   and the printed setup rotation live in PHYSICAL facelet space, not in the
-   engine's frame machinery. The engine reads letters correctly from
-   identity starts only (corpus-validated over all imported texts); behind a
-   rotation prefix its frame-walk resolution is NOT what a human does, so
-   "which states this text solves from a rotated hold" and "which rotation
-   sets it up" must be computed physically: letters twist the corner at a
-   FIXED hand position, rotation tokens turn the cube about fixed spatial
-   axes (this reading solves 3,082/3,082 imported texts from their identity
-   pre-states; the grip-relative alternative solves 641). A body T with
-   physical perm Φ solves, from setup rotation R, exactly the junctions J
-   with Φ(R(J)) solved in ANY orientation — so the index stores Φ⁻¹ of the
-   24 solved orientations per text, a junction is matched by looking up its
-   24 rotations, and the printed rotation IS the matching R, spelled in the
-   sheets' letters (sheet x/y/z = physical z/y/x′ — the letters this
-   community actually reads; engine x/y/z are physically inverted and are
-   never shown). USER-validated on three junctions: y′ z, y x′, y2 z.
-   Every displayed line is re-proved by the facelet check in methodView. */
-/* ---------- method registry (module-level: no E/dist dependency) ---------- */
-// Names are the display labels used by the solver page and the tuning lab;
-// METHOD_PRIORITY is the display tie-break order. Caps default to the
-// machine-measured max distance (+1 for fl, the primary method, so slightly
-// indirect layers are still found).
-const METHOD_DEFS = {
-  fl:   { name: 'Layer', cap: 7 },
-  tcll: { name: 'TCLL',  cap: 6 },
-  eg2:  { name: 'EG2',   cap: 7 },
+     1  First center   D hexagon: edges {9,10,11} + D slots (color 6)
+     2  First 2 triples corners 3,5 + A slots {6,9} and {5,8} (either order)
+     3  Second center  one of the L/R/B hexagons (search picks)
+     4  Last 2 centers the remaining two hexagons (search picks the order)
+     5  Last bottom triple  corner 4 + slots F(4)/BL(10)  — LBT sheet algs
+     6  Last 3 triples  the U layer                       — 1L3T/TCP sheet algs
+
+   Steps 1-4 are per-step IDA* over the 16 native moves (weighted on the
+   deep center steps) with max()-combined pattern-database lower bounds
+   (js/tables.js; each PDB alone is admissible, so the max is). A beam of
+   the best partial lines is kept across step junctions so early greed does
+   not hide a better total (K tunable). Steps 5-6 finish with the sheets'
+   algs verbatim, under TWO different matching semantics (see the finish
+   index below): L3T by exact state key, LBT by EFFECT — caseStateOf is the
+   single source of truth either way, so annotation subtleties (setup-undo
+   closings, AUF-short texts, working-slot variants) resolve themselves.
+
+   Color neutrality = whole-puzzle pre-rotation: solving "with a different
+   first center" is solving conj_g(scramble) with the fixed-region method.
+   conj_g is physical rotation of the sticker arrangement (test-engine's
+   conjState); the displayed line starts with that rotation spelled in
+   Streeter tokens, and the engine's 48-hold frame walk reads every later
+   letter through it — the init self-check pins that this reading equals the
+   conjugation algebra, and every displayed line is re-proved end-to-end by
+   applyParsed from the original scramble state (verifyLine; the M5 exit
+   gate). Between segments the solver assumes the standard re-grip (each alg
+   is read from the recognition hold, i.e. the leading rotation again), which
+   verifyLine models by re-prefixing the rotation tokens per segment.
+
+   Movecount-only metrics (family precedent); rotations are free. No global
+   optimality is claimed anywhere (FTO God's number is unknown). */
+
+/* ---------- method registry (module-level: no engine dependency) ---------- */
+const METHOD_NAME = 'Bencisco';
+const STEP_DEFS = {
+  fc:  { name: 'First center',      cap: 12 },
+  t1:  { name: 'First triple',      cap: 13 },
+  t2:  { name: 'Second triple',     cap: 13 },
+  sc:  { name: 'Second center',     cap: 14 },
+  c3:  { name: 'Third center',      cap: 15 },
+  c4:  { name: 'Last center',       cap: 16 },
+  lbt: { name: 'Last bottom triple' },
+  l3t: { name: 'Last 3 triples' },
 };
-const METHOD_PRIORITY = ['fl', 'tcll', 'eg2'];
+const STEP_ORDER = ['fc', 't1', 't2', 'sc', 'c3', 'c4', 'lbt', 'l3t'];
+const DEFAULTS = {
+  beam: 4, maxSolsPerStep: 3, slack: 0, budget: 1.6e7, stepBudget: 6e5, orient: 'auto',
+  // per-step weighted-IDA* factors: 1 = exact; the late center steps run
+  // 10+ moves deep, where exact search is intractable. Measured on the hard
+  // third-center instances: w=1.6-1.8 is ~30x faster than exact at <= +1
+  // move, while w>=2.5 is WORSE on both axes (over-pruning re-expands).
+  weights: { fc: 1, t1: 1, t2: 1, sc: 1.4, c3: 1.8, c4: 1.8 },
+};
 
-function makeSolverCore(E, dist, algData) {
-  const NMOVES = E.MOVES.length;              // 8 native moves; m>>1 = axis, m^1 = inverse
-  const syms = E.buildSyms();
-  const rotBy = E.makeFrames(syms);
+function makeSolverCore(E, T, PDB, algData) {
+  const FACES = E.FACES, OPPF = E.OPPF, FIDX = E.FIDX;
+  const SOLVED = E.solved();
+  const SOLVED_KEY = E.stateKey(SOLVED);
 
-  /* ---------- frames (display only — written letters resolve through them) ---------- */
-  const FACES = E.FACES;
-  const ALLC = Object.keys(E.CPOS);
-  const faceSetOf = {}; for (const c of ALLC) faceSetOf[c] = E.CFACES[c].slice().sort().join('');
-  function cornerMapOf(fp) {
-    const m = {};
-    for (const c of ALLC) {
-      const set = E.CFACES[c].map(f => fp[f]).sort().join('');
-      m[c] = ALLC.find(d => faceSetOf[d] === set);
-    }
-    return m;
+  /* ---------- geometry (derived, then asserted) ---------- */
+  // hexagon faces and their edge slots come from js/tables.js (same source
+  // the PDBs were built from); re-derive from E.EDGES here and assert equal.
+  const HEX_FACES = ['D', 'L', 'R', 'B'];
+  const HEX_EDGES = {};
+  for (const f of HEX_FACES) {
+    HEX_EDGES[f] = E.EDGES.map((e, i) => (e[2] === FIDX[f] || e[3] === FIDX[f]) ? i : -1).filter(i => i >= 0);
+    if (HEX_EDGES[f].join() !== T.HEX_EDGES[f].join()) throw new Error('hexagon edge set mismatch: ' + f);
   }
-  const frameOf = fp => ({ fp, corner: cornerMapOf(fp) });
-  const ID_FRAME = frameOf(E.FACE_ID);
-  const BYC_FP = {}; for (const A of Object.keys(rotBy.byCorner)) BYC_FP[A] = rotBy.byCorner[A].fp;
-  // native move index -> the axis corner it twists (mirrors engine MOVE_AXIS)
-  const NATIVE_AXIS = ['UBR', 'UBR', 'DBL', 'DBL', 'DFR', 'DFR', 'UFL', 'UFL'];
-  const WLETTERS = ['R', 'U', 'L', 'B'];
-
-  // Emit written WCA tokens for a native move list, starting from `frame`
-  // (mirrors applyParsed's resolution exactly, including the free-corner
-  // frame walk — unlike engine nativeToWCA this also handles the odd
-  // tetrad-swapping frames a rotated hold creates).
-  function emitWCA(mis, frame) {
-    frame = frame || ID_FRAME;
-    const out = [];
-    for (const mi of mis) {
-      const axis = NATIVE_AXIS[mi], amt = (mi & 1) ? 2 : 1;
-      let w = WLETTERS.find(l => frame.corner[E.WCA_CORNER[l]] === axis);
-      if (w) { out.push(w + (amt === 2 ? "'" : '')); continue; }   // direct axis letter
-      w = WLETTERS.find(l => E.OPP[frame.corner[E.WCA_CORNER[l]]] === axis);
-      if (!w) throw new Error('frame resolution failed');
-      out.push(w + (amt === 2 ? "'" : ''));                        // free-corner letter + walk
-      for (let k = 0; k < amt % 3; k++) frame = frameOf(E.faceCompose(BYC_FP[axis], frame.fp));
-    }
-    return { tokens: out, frame };
-  }
-
-  /* ---------- the physical model (facelet space; TNoodle-anchored) ---------- */
-  // Letters twist the corner at a FIXED hand position; rotation tokens turn
-  // the cube about fixed spatial axes. Machine-discriminated 2026-07-07:
-  // this fixed-axes reading solves all 3,082 imported texts from their
-  // identity pre-states (the grip-relative alternative solves 641), and it
-  // reproduced the USER's three physically-executed junction rotations.
-  // Corner twists and rotations are facelet perms; the construction is
-  // anchored to the TNoodle-validated engine perms (asserted below).
-  const FIDX = { U: 0, R: 1, F: 2, D: 3, L: 4, B: 5 };
-  const FNORM = { U: [0,1,0], R: [1,0,0], F: [0,0,1], D: [0,-1,0], L: [-1,0,0], B: [0,0,-1] };
-  const vkey = v => v.map(Math.round).join(',');
-  const FACE_BY_N = {}; for (const f of FACES) FACE_BY_N[vkey(FNORM[f])] = f;
-  const CORNER_BY_P = {}; for (const c of ALLC) CORNER_BY_P[vkey(E.CPOS[c])] = c;
-  const dot3 = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-  const cross3 = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-  const cornerFacesOf = c => FACES.filter(f => dot3(FNORM[f], E.CPOS[c]) > 0);
-  const stickerAt = (face, corner) => FIDX[face]*5 + 1 + E.STICKER_POS[face].indexOf(corner);
-  const ID30 = Array.from({ length: 30 }, (_, i) => i);
-  const pThen = (P, Q) => Q.map(q => P[q]);       // "apply P, then Q" (dst<-src maps)
-  const pInv = P => { const r = new Array(30); for (let i = 0; i < 30; i++) r[P[i]] = i; return r; };
-  const pPow = (P, n) => { let r = ID30; for (let i = 0; i < n; i++) r = pThen(r, P); return r; };
-  const pApply = (fl, P) => P.map(src => fl[src]);
-  const flKey = fl => fl.join('');                // facelet colors 0..5 -> 30 chars
-  const permKey = p => p.join(',');
-  // all 8 corner-twist perms (the engine ships only the 4 native axis ones)
-  function twistPerm(A) {
-    const p = E.CPOS[A], n = Math.sqrt(3), k = [p[0]/n, p[1]/n, p[2]/n];
-    const ct = -0.5, st = -Math.sqrt(3)/2;        // native direction (TNoodle-pinned)
-    const rot = v => { const kxv = cross3(k, v), kv = dot3(k, v);
-      return [0, 1, 2].map(i => ct*v[i] + st*kxv[i] + (1-ct)*k[i]*kv); };
-    const half = ALLC.filter(c => c === A || E.CPOS[c].filter((v, i) => v === p[i]).length === 2);
-    const map = ID30.slice();
-    for (const f of cornerFacesOf(A)) map[FIDX[FACE_BY_N[vkey(rot(FNORM[f]))]]*5] = FIDX[f]*5;
-    for (const c of half) { const c2 = CORNER_BY_P[vkey(rot(E.CPOS[c]))];
-      for (const f of cornerFacesOf(c)) map[stickerAt(FACE_BY_N[vkey(rot(FNORM[f]))], c2)] = stickerAt(f, c);
-    }
-    return map;
-  }
-  const TWIST = {}; for (const c of ALLC) TWIST[c] = twistPerm(c);
-  for (const A of E.AXIS) if (permKey(TWIST[A]) !== permKey(E.moveFaceletPerm[A])) throw new Error('twist perm mismatch: ' + A);
-  if (permKey(TWIST.DBR) !== permKey(E.WCA_FACELET_MOVES.B)) throw new Error('twist perm mismatch: DBR');
-  // physical whole-cube quarter rotations (WCA sticker movement: x F->U, y F->L, z U->R)
-  const rotPermOf = map3 => {
-    const m = ID30.slice();
-    for (const f of FACES) m[FIDX[FACE_BY_N[vkey(map3(FNORM[f]))]]*5] = FIDX[f]*5;
-    for (const c of ALLC) for (const f of cornerFacesOf(c))
-      m[stickerAt(FACE_BY_N[vkey(map3(FNORM[f]))], CORNER_BY_P[vkey(map3(E.CPOS[c]))])] = stickerAt(f, c);
-    return m;
-  };
-  const PHYS_XYZ = {
-    x: rotPermOf(v => [v[0], v[2], -v[1]]),
-    y: rotPermOf(v => [-v[2], v[1], v[0]]),
-    z: rotPermOf(v => [v[1], -v[0], v[2]]),
-  };
-  // engine rot letters denote the physical INVERSE of the same-name rotation
-  const ENG_ROT_PHYS = { x: pInv(PHYS_XYZ.x), y: pInv(PHYS_XYZ.y), z: pInv(PHYS_XYZ.z) };
-  // physical execution perm of a parsed token list from an identity start
-  // (tokens carry .c = the corner a move letter names; both notations)
-  function physPerm(toks) {
-    let C = ID30;
-    for (const t of toks)
-      C = pThen(C, t.kind === 'rot' ? pPow(ENG_ROT_PHYS[t.f], t.amt) : pPow(TWIST[t.c], t.amt));
-    return C;
-  }
-  // The 24 orientations with their SHEET-letter spellings, nicest first
-  // (identity, y-family singles, then pairs — the letters the sheets and
-  // their solvers actually read: sheet x/y/z = physical z/y/x').
-  const SHEET_PHYS = { x: PHYS_XYZ.z, y: PHYS_XYZ.y, z: pInv(PHYS_XYZ.x) };
-  const sheetStrPerm = str => String(str).split(/\s+/).filter(Boolean).reduce((C, tok) => {
-    const m = tok.match(/^([xyz])(2'|2|')?$/);
-    if (!m) throw new Error('not a rotation token: ' + tok);
-    return pThen(C, pPow(SHEET_PHYS[m[1]], m[2] === "'" ? 3 : m[2] ? 2 : 1));
-  }, ID30);
-  const SHEET_SINGLES = [];
-  for (const a of ['y', 'x', 'z']) for (const suf of ['', "'", '2']) SHEET_SINGLES.push(a + suf);
-  const ROT24 = [{ perm: ID30.slice(), spell: '' }];
-  const seenRot = new Set([permKey(ID30)]);
-  const addRot = spell => {
-    const p = sheetStrPerm(spell), k = permKey(p);
-    if (!seenRot.has(k)) { seenRot.add(k); ROT24.push({ perm: p, spell }); }
-  };
-  for (const t of SHEET_SINGLES) addRot(t);
-  for (const a of SHEET_SINGLES) for (const b of SHEET_SINGLES) addRot(a + ' ' + b);
-  if (ROT24.length !== 24) throw new Error('expected 24 orientations, got ' + ROT24.length);
-  const SOLVED_FL = E.solvedFacelets();
-  const SOLVED24 = ROT24.map(r => pApply(SOLVED_FL, r.perm));
-  const SOLVED24_KEYS = new Set(SOLVED24.map(flKey));
-  const GROUP_IDX = new Map(ROT24.map((r, i) => [permKey(r.perm), i]));
-  const MUL24 = ROT24.map(w => ROT24.map(r => GROUP_IDX.get(permKey(pThen(w.perm, r.perm)))));
-
-  // The displayed first step is NOT always the native move sequence: emitWCA
-  // substitutes a free-corner letter (WCA B / NS b) for native UFL-axis
-  // moves, and executing the substituted letter leaves the cube ROTATED
-  // relative to the native bookkeeping — the junction the HUMAN holds is
-  // W(junction), where W is that accumulated rotation. These return the
-  // physical perm of the displayed step and its W (a ROT24 group index).
-  function emitPhysPerm(mis) {
-    let frame = ID_FRAME, C = ID30;
-    for (const mi of mis) {
-      const axis = NATIVE_AXIS[mi], amt = (mi & 1) ? 2 : 1;
-      let w = WLETTERS.find(l => frame.corner[E.WCA_CORNER[l]] === axis);
-      if (!w) {
-        w = WLETTERS.find(l => E.OPP[frame.corner[E.WCA_CORNER[l]]] === axis);
-        if (!w) throw new Error('frame resolution failed');
-        for (let k = 0; k < amt % 3; k++) frame = frameOf(E.faceCompose(BYC_FP[axis], frame.fp));
+  // bottom triples: corner slot -> its two tetrad-A centre slots. Slot 3f+k
+  // sits at the vertex reached from face f along axis k with the face's sign.
+  const TRIPLE_SLOTS = { 3: [6, 9], 4: [4, 10], 5: [5, 8] };
+  for (const c of [3, 4, 5]) {
+    const slots = [];
+    for (let f = 0; f < 8; f++) {
+      if (E.TETRAD[f] !== 0) continue;
+      for (let k = 0; k < 3; k++) {
+        const v = [0, 1, 2].map(i => i === k ? E.FSIGN[f][k] : 0);
+        const vi = E.VAX.findIndex(a => a[0] === v[0] && a[1] === v[1] && a[2] === v[2]);
+        if (vi === c) slots.push(3 * f + k);
       }
-      C = pThen(C, pPow(TWIST[E.WCA_CORNER[w]], amt));   // the human twists the WRITTEN position
     }
-    return C;
+    if (slots.sort((a, b) => a - b).join() !== TRIPLE_SLOTS[c].join())
+      throw new Error('triple slot mismatch at corner ' + c + ': ' + slots);
   }
-  function walkIdxOf(mis) {                              // W with phys = native then W
-    let nat = ID30;
-    for (const mi of mis) nat = pThen(nat, pPow(TWIST[NATIVE_AXIS[mi]], (mi & 1) ? 2 : 1));
-    const wIdx = GROUP_IDX.get(permKey(pThen(pInv(nat), emitPhysPerm(mis))));
-    if (wIdx === undefined) throw new Error('emission walk is not a rotation');
-    return wIdx;
+  const T1_OPTS = [{ corner: 3, aKey: '6,9', cKey: '3' }, { corner: 5, aKey: '5,8', cKey: '5' }];
+
+  /* ---------- goal predicates on states ---------- */
+  function hexOK(s, f) {
+    for (const e of HEX_EDGES[f]) if (s.ep[e] !== e) return false;
+    const fi = FIDX[f];
+    for (let k = 0; k < 3; k++) if (s.ctr[3 * fi + k] !== fi) return false;
+    return true;
+  }
+  function tripleOK(s, c) {
+    if (s.cp[c] !== c || s.co[c] !== 0) return false;
+    for (const x of TRIPLE_SLOTS[c]) if (s.ctr[x] !== ((x / 3) | 0)) return false;
+    return true;
+  }
+  const lbtOK = s => tripleOK(s, 4);
+
+  /* ---------- per-stage heuristics (max of admissible PDBs) ---------- */
+  // h(s, lim) contract: exact max when it is <= lim; any value > lim may be
+  // returned early once ANY component exceeds lim (the DFS only needs to
+  // know whether g + w*h clears the bound — early exit skips the expensive
+  // 6-edge pair lookups on most pruned nodes). h === 0 stays exact.
+  const h1 = (s, f) => PDB.H1[f][T.h1Index(s.ep, s.ctr, f, HEX_EDGES[f])];
+  const bKeyOf = faces => HEX_FACES.filter(f => faces.includes(f)).join('');
+  function stageH(stage, line) {
+    switch (stage.id) {
+      case 'fc': return s => h1(s, 'D');    // exact for the D hexagon
+      case 't1': {
+        const o = stage.opt;
+        return (s, lim) => {
+          let h = PDB.C[o.cKey][T.cornerIndex(s.cp, s.co)];
+          if (h > lim) return h;
+          const d = PDB.A[o.aKey][T.encA(s.ctr)]; if (d > h) h = d;
+          if (h > lim) return h;
+          const e = h1(s, 'D'); return e > h ? e : h;
+        };
+      }
+      case 't2':
+        return (s, lim) => {
+          let h = PDB.C['3,5'][T.cornerIndex(s.cp, s.co)];
+          if (h > lim) return h;
+          const d = PDB.A['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
+          if (h > lim) return h;
+          const e = h1(s, 'D'); return e > h ? e : h;
+        };
+      default: {
+        // center stages: hexes done so far + the one being solved. The heavy
+        // lifters are the one-hexagon EXACT tables and the hexagon-PAIR
+        // 6-edge tables — keeping solved hexagons while building another is
+        // the real cost, and only combined coordinates see any of it.
+        const faces = line.hexes.concat([stage.opt.face]);
+        const bt = PDB.B[bKeyOf(faces)];
+        const pairs = [];
+        for (let i = 0; i < faces.length; i++) for (let j = i + 1; j < faces.length; j++) {
+          const key = HEX_FACES.filter(f => f === faces[i] || f === faces[j]).join('');
+          pairs.push({ t: PDB.E6[key], p: T.E6_PAIRS[key] });
+        }
+        return (s, lim) => {
+          let h = PDB.C['3,5'][T.cornerIndex(s.cp, s.co)];
+          if (h > lim) return h;
+          let d = PDB.A['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
+          if (h > lim) return h;
+          d = bt[T.encB(s.ctr)]; if (d > h) h = d;
+          if (h > lim) return h;
+          for (const f of faces) { d = h1(s, f); if (d > h) h = d; if (h > lim) return h; }
+          for (const q of pairs) { d = q.t[T.edgePlaceIndex(s.ep, q.p)]; if (d > h) h = d; if (h > lim) return h; }
+          return h;
+        };
+      }
+    }
+  }
+  function stageGoal(stage, line) {
+    switch (stage.id) {
+      case 'fc': return s => hexOK(s, 'D');
+      case 't1': return s => hexOK(s, 'D') && tripleOK(s, stage.opt.corner);
+      case 't2': return s => hexOK(s, 'D') && tripleOK(s, 3) && tripleOK(s, 5);
+      default: {
+        const faces = line.hexes.concat([stage.opt.face]);
+        return s => tripleOK(s, 3) && tripleOK(s, 5) && faces.every(f => hexOK(s, f));
+      }
+    }
   }
 
-  /* ---------- first-step target spaces ---------- */
-  // D-anchored states per method (the complement of the built layer is free,
-  // subject to the two reachability constraints — see the engine header), then
-  // expanded over the 12 proper rotations into Map(stateIdx -> layer face).
-  function dAnchored(kind) {
-    const out = [];
-    const others = [0, 1, 2, 4, 5];                     // non-D center positions
-    // free perm + layer free-corner twist options per kind (slots 2=DFL, 3=DBR)
-    const fp = kind === 'eg2' ? [1, 0, 3, 2] : [0, 1, 2, 3];
-    const foDs = kind === 'tcll' ? [[1, 0], [2, 0], [0, 1], [0, 2]] : [[0, 0]];
-    for (const perm of E.permsOf(others)) {
-      const ctr = [0, 0, 0, 3, 0, 0];
-      others.forEach((pos, i) => { ctr[pos] = perm[i]; });
-      if (E.permParity(ctr) !== 0) continue;            // centers reach A6 only
-      for (const [fo2, fo3] of foDs) {
-        for (let fo0 = 0; fo0 < 3; fo0++) {
-          const fo1 = (3 - (fo0 + fo2 + fo3) % 3) % 3;  // free twists sum to 0 (mod 3)
-          for (let fx0 = 0; fx0 < 3; fx0++) {
-            // linking: sum(fx) === class(fp) === 0 for both id and the V4 swap
-            const fx1 = (3 - fx0 % 3) % 3;
-            out.push({ ctr: ctr.slice(), fx: [fx0, fx1, 0, 0], fp: fp.slice(), fo: [fo0, fo1, fo2, fo3] });
+  /* ---------- (weighted) IDA* over the 16 native moves ---------- */
+  // canonical successor rule: never the same face twice in a row; opposite
+  // faces commute (their layers are disjoint), so only the smaller-index
+  // face may come first when adjacent. weight > 1 makes the pruning
+  // inadmissible (weighted IDA*): solutions are then near-optimal, found
+  // exponentially faster — the later center steps run 10+ moves deep where
+  // exact search is intractable, and the port plan promises optimal OR
+  // near-optimal per step. Found solutions are always goal-checked.
+  const work = { nodes: 0, budget: DEFAULTS.budget, limit: Infinity, stopped: false, truncated: false };
+  // preallocated per-depth node buffers: the DFS writes each child into its
+  // depth's buffer instead of allocating — no GC pressure in the hot loop
+  // (single-threaded, non-reentrant; sols copy what they keep)
+  const TBLM = E.moveTables;
+  const STACK = [];
+  function stackNode(d) {
+    while (STACK.length <= d)
+      STACK.push({ cp: new Array(6), co: new Array(6), ep: new Array(12), ctr: new Array(24) });
+    return STACK[d];
+  }
+  function moveInto(m, s, o) {
+    const t = TBLM[m];
+    for (let v = 0; v < 6; v++) { o.cp[v] = s.cp[t.cperm[v]]; o.co[v] = s.co[t.cperm[v]] ^ t.cflip[v]; }
+    for (let e = 0; e < 12; e++) o.ep[e] = s.ep[t.eperm[e]];
+    for (let x = 0; x < 24; x++) o.ctr[x] = s.ctr[t.xperm[x]];
+  }
+  function dfs(s, g, bound, lastFace, goal, h, w, path, sols, maxSols) {
+    if (++work.nodes > work.limit) {
+      work.stopped = true;
+      if (work.nodes > work.budget) work.truncated = true;
+      return;
+    }
+    const lim = (bound - g) / w;
+    const hh = h(s, lim);
+    if (hh > lim + 1e-9) return;
+    // goal check at ANY depth: with w > 1 a solution shorter than the bound
+    // is only reachable at a higher bound, so a g === bound gate would walk
+    // straight past solved states and never record them
+    if (hh === 0 && goal(s)) { sols.push({ moves: path.slice(), st: E.copy(s) }); return; }
+    if (g === bound) return;
+    const t = stackNode(g);
+    for (let f = 0; f < 8; f++) {
+      if (f === lastFace) continue;
+      if (OPPF[f] === lastFace && f > lastFace) continue;
+      for (let d = 0; d < 2; d++) {
+        const m = 2 * f + d;
+        moveInto(m, s, t);
+        path.push(m);
+        dfs(t, g + 1, bound, f, goal, h, w, path, sols, maxSols);
+        path.pop();
+        if (work.stopped || sols.length >= maxSols) return;
+      }
+    }
+  }
+  // stepBudget bounds THIS call's nodes: a pathological instance fails fast
+  // (killing one line-option) instead of starving the whole solve. On a
+  // budget stop with nothing found, one retry at a higher weight rescues
+  // most hard instances (heavier pruning finds a slightly longer answer).
+  function searchStep(start, goal, h, cap, maxSols, slack, weight, stepBudget) {
+    if (goal(start)) return [{ moves: [], st: E.copy(start) }];
+    const attempt = (w, budget) => {
+      // with w > 1 a length-L solution may only survive the weighted pruning
+      // at bounds up to ~w*L, so the bound iterates past the length cap
+      work.limit = Math.min(work.budget, work.nodes + budget);
+      work.stopped = false;
+      const boundCap = Math.ceil(cap * w);
+      const sols = [];
+      let bound = Math.max(1, h(start, Infinity));
+      for (; bound <= boundCap && !sols.length && !work.stopped; bound++)
+        dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols);
+      if (slack > 0 && sols.length && sols.length < maxSols && bound <= boundCap && !work.stopped)
+        dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols); // one extra depth
+      return sols.filter(x => x.moves.length <= cap);
+    };
+    const w = weight || 1;
+    const budget = stepBudget || Infinity;
+    let sols = attempt(w, budget);
+    if (!sols.length && work.stopped && !work.truncated)
+      sols = attempt(w + 0.6, 2 * budget);     // rescue: prune much harder
+    return sols;
+  }
+
+  /* ---------- the sheet-alg finish index (LBT, then L3T incl. TCP) ---------- */
+  // Two different matching semantics, both machine-derived from the M3 data:
+  //
+  // L3T (last step, NOTHING else unsolved): exact stateKey -> [entry] lookup.
+  // caseStateOf(text) is the one state a text exactly solves, so an exact hit
+  // guarantees applyParsed(text, junction) === solved. {ε,U,U'} pre- and
+  // trailing AUF variants are indexed as insurance (prio>0, only used when
+  // no verbatim text matches).
+  //
+  // LBT (a mid-solve step): matching by EFFECT, not by state. The sheet's 95
+  // cases pin only the LBT-relevant features (the corner-4 piece and the two
+  // source triangles); the rest of the top layer is a DON'T-CARE, and a real
+  // junction's top arrangement almost never coincides with an alg's one
+  // exact case state — key matching would miss nearly always (measured). So
+  // each LBT entry carries its precomputed effect table; at the junction an
+  // entry applies iff applyTable(effect, junction) lands in the L3T index
+  // (or on solved) — that one test IS both the correctness proof and the
+  // guarantee that the next stage succeeds. A cheap prefilter (where the
+  // entry expects the corner-4 piece) skips most of the ~360 candidates.
+  //
+  // LBT texts: the 21 noted setup-undo algs are indexed and DISPLAYED with
+  // their machine-verified closing token appended (as printed they end one
+  // wide/slice turn short of solved — a solver may not emit non-solving
+  // lines). {ε,U,U'} pre-AUFs bring back-top corners into the sheet's view
+  // (the flank displacement flows into the 1L3T odd cases — the sheet's own
+  // design).
+  const AUFS = ['', 'U', "U'"];
+  let _finish = null;
+  function finishIndex() {
+    if (_finish) return _finish;
+    _finish = { lbt: [], l3t: new Map() };
+    const subsets = (algData && algData.subsets) || {};
+    const undoTok = note => { const m = /append (\S+) \(machine-verified\)/.exec(note || ''); return m ? m[1] : null; };
+    for (const [subKey, sub] of Object.entries(subsets)) {
+      const step = subKey === 'LBT' ? 'lbt' : (subKey === '1L3T' || subKey === 'TCP') ? 'l3t' : null;
+      if (!step || !sub.cases) continue;
+      const dialect = sub.notation || 'cif';
+      for (const c of sub.cases) for (const a of c.algs || []) {
+        const closing = step === 'lbt' ? undoTok(a.note) : null;
+        const base = closing ? a.alg + ' ' + closing : a.alg;
+        const trails = step === 'l3t' ? AUFS : [''];
+        for (const pre of AUFS) for (const trail of trails) {
+          const text = [pre, base, trail].filter(Boolean).join(' ');
+          const cs = E.caseStateOf(text, dialect);
+          if (!cs) continue;                     // unparseable variant: skip
+          const key = E.stateKey(cs);
+          if (key === SOLVED_KEY) continue;      // never index a no-op
+          const entry = {
+            step, text, dialect, moves: E.countMoves(E.parseAlg(text)),
+            subset: subKey, caseName: c.name,
+            note: [closing && 'setup undo appended', pre && 'pre-AUF', trail && 'final AUF appended',
+                   a.note && !closing ? a.note : null].filter(Boolean).join('; ') || null,
+            prio: (pre ? 1 : 0) + (trail ? 1 : 0) + (subKey === 'TCP' ? 0.5 : 0),
+          };
+          if (step === 'l3t') {
+            let list = _finish.l3t.get(key);
+            if (!list) { list = []; _finish.l3t.set(key, list); }
+            list.push(entry);
+          } else {
+            entry.table = E.effectTable(E.parseAlg(text), dialect);
+            entry.srcSlot = cs.cp.indexOf(4);    // where the text expects the LBT piece
+            entry.srcFlip = cs.co[entry.srcSlot];
+            _finish.lbt.push(entry);
           }
         }
       }
+    }
+    for (const list of _finish.l3t.values())
+      list.sort((x, y) => x.prio - y.prio || x.moves - y.moves || (x.text < y.text ? -1 : 1));
+    _finish.lbt.sort((x, y) => x.prio - y.prio || x.moves - y.moves || (x.text < y.text ? -1 : 1));
+    return _finish;
+  }
+  // LBT candidates for a junction: entries whose effect lands in the L3T
+  // case space (or on solved), best-first, deduped by landing state
+  function lbtCandidates(fin, st) {
+    const p4 = st.cp.indexOf(4), f4 = st.co[p4];
+    const out = [];
+    const landed = new Set();
+    for (const en of fin.lbt) {
+      if (en.srcSlot !== p4 || en.srcFlip !== f4) continue;
+      const post = E.applyTable(en.table, st);
+      const key = E.stateKey(post);
+      if (key !== SOLVED_KEY && !fin.l3t.has(key)) continue;
+      if (landed.has(key)) continue;
+      landed.add(key);
+      out.push({ en, post, postKey: key });
+      if (out.length >= 3) break;                // entries are best-first
     }
     return out;
   }
-  function buildTargets() {
-    const maps = {};
-    for (const id of Object.keys(METHOD_DEFS)) {
-      const m = new Map();
-      const states = dAnchored(id);
-      for (const rot of syms.rots) {
-        const face = rot.fp.D;                          // where the built layer sits
-        for (const s of states) {
-          const ix = E.idx(rot.apply(s));
-          if (!m.has(ix)) m.set(ix, face);
-        }
-      }
-      maps[id] = m;
-    }
-    return maps;
-  }
-  const targets = buildTargets();
 
-  /* ---------- the sheet-alg finish index ---------- */
-  // stateKey -> [entry] over EVERY alg's text evaluated from all 24 whole-
-  // cube holds: each entry records the exact state "hold-rotation + text"
-  // solves and that hold's frame. A junction is then matched by plain state
-  // lookup and the display rotation derived exactly — WHICH hold executes a
-  // text is a property of the TEXT (mid-alg rotations and free-corner
-  // letters make the frame machinery non-conjugation-equivariant), so it
-  // cannot be guessed from the layer position. The indexed and displayed
-  // text is the authored `ns` field with its LEADING rotation tokens folded
-  // away: they are the author's setup, not execution, so the derived display
-  // rotation absorbs them and lands directly on the alg's first turn.
-  // Folding is exact — dropping a leading rotation only shifts WHICH hold
-  // matches, and all 24 are swept, so the solved-state set is unchanged.
-  // From the first turn on the text is what the Algorithms page lists; the
-  // rotationless `alg` conversion only counts moves. Built lazily (~1–2 s).
-  const RATE_RANK = { best: 0, neutral: 1, poor: 3 };
-  const rateRank = r => (r.rating in RATE_RANK ? RATE_RANK[r.rating] : 2) + (r.suspect ? 10 : 0);
-  // Cut the leading rotation tokens out of a text. Texts containing any
-  // grouping/comma character never fold (a cleanup there could eat a paren
-  // that belongs to the BODY and ship an unbalanced text — post-review
-  // finding 2026-07-07; the shipped data has zero such texts). For plain
-  // space-separated texts raw tokens map 1:1 onto parsed tokens, so the cut
-  // is a token slice — and the remainder must still re-parse to exactly the
-  // un-cut token tail, else the authored text stands untouched.
-  function foldLeadRots(text, toks) {
-    let lead = 0;
-    while (lead < toks.length && toks[lead].kind === 'rot') lead++;
-    if (lead && lead < toks.length && !/[()[\]，,]/.test(text)) {
-      const parts = String(text).trim().split(/\s+/);
-      if (parts.length === toks.length) {
-        const s = parts.slice(lead).join(' ');
-        const chk = E.parseAlg(E.preprocessAlg(s), 'ns');
-        if (chk && JSON.stringify(chk) === JSON.stringify(toks.slice(lead)))
-          return { ns: s, nsToks: chk };
+  /* ---------- orientations: conjugation + Streeter rotation spelling ---------- */
+  function conjState(M, s) {                    // physical rotation of the arrangement
+    const F = E.toFacelets(s), P = E.rotFaceletPerm(M), F2 = new Array(72);
+    for (let i = 0; i < 72; i++) F2[i] = E.faceImg(M, F[P[i]]);
+    return E.fromFacelets(F2);
+  }
+  // spell every CIF hold reachable by rotation tokens (all 24), shortest first
+  const SPELL_BY_HOLD = (() => {
+    const toks = [];
+    for (const f of FACES) toks.push(f + 'o', f + "o'");
+    toks.push('T', "T'", 'T2');
+    const seen = new Map();                     // hold key -> spell
+    const holdOf = spell => E.walkParsed(E.parseAlg(spell), () => {});
+    seen.set([0, 1, 2, 3, 4, 5, 6, 7].join(','), '');
+    for (const a of toks) {
+      const k = holdOf(a).join(',');
+      if (!seen.has(k)) seen.set(k, a);
+    }
+    outer:
+    for (const a of toks) for (const b of toks) {
+      if (seen.size >= 24) break outer;
+      const k = holdOf(a + ' ' + b).join(',');
+      if (!seen.has(k)) seen.set(k, a + ' ' + b);
+    }
+    if (seen.size < 24) {                       // two holds need three tokens
+      outer3:
+      for (const a of toks) for (const b of toks) for (const c of toks) {
+        if (seen.size >= 24) break outer3;
+        const k = holdOf(a + ' ' + b + ' ' + c).join(',');
+        if (!seen.has(k)) seen.set(k, a + ' ' + b + ' ' + c);
       }
     }
-    return { ns: text, nsToks: toks };
-  }
-  let _algIndex = null;
-  function algIndex() {
-    if (_algIndex) return _algIndex;
-    _algIndex = new Map();
-    const conts = algData ? [algData.subsets || {}, algData.other_subsets || {}] : [];
-    for (const cont of conts) {
-      for (const key of Object.keys(cont)) {
-        const sub = cont[key];
-        for (const c of sub.cases || []) {
-          (c.algs || []).forEach((a, ai) => {
-            const authored = a.ns || a.alg;             // the text as the algs page lists it
-            // 34 slash-alternate texts ("r'/r2") don't parse and are skipped —
-            // their cases carry other algs. Movecount = the text's own move
-            // tokens (the sheets sometimes write R R where the conversion
-            // says R2); rotations never count, so folding doesn't change it.
-            const toks = E.parseAlg(E.preprocessAlg(authored), 'ns');
-            if (!toks) return;
-            const { ns, nsToks } = foldLeadRots(authored, toks);
-            const phi = physPerm(nsToks);               // the body's physical action
-            const row = {
-              uid: key + '::' + c.name + '::' + ai,
-              ns, moves: E.countMoves(nsToks), phi,
-              name: key === c.name ? c.name : key + ' · ' + c.name,
-              rating: a.rating || '', suspect: !!a.suspect,
-            };
-            // the text physically solves (before any setup rotation) exactly
-            // Φ⁻¹ of the 24 solved orientations — a finish may leave the cube
-            // solved in ANY orientation; leading rotations changed nothing
-            // here (they only permute SOLVED24), which is why the fold above
-            // is exact
-            const inv = pInv(phi);
-            const seenStates = new Set();
-            for (const S of SOLVED24) {
-              const k = flKey(pApply(S, inv));
-              if (seenStates.has(k)) continue;          // symmetric texts repeat states
-              seenStates.add(k);
-              let list = _algIndex.get(k);
-              if (!list) { list = []; _algIndex.set(k, list); }
-              list.push(row);
-            }
-            row.preKeys = seenStates;                   // per-row set, for rotation choice
-          });
-        }
-      }
+    if (seen.size !== 24) throw new Error('rotation spelling: expected 24 holds, got ' + seen.size);
+    return seen;
+  })();
+  // ORIENTS[i] = { M, spell } such that executing `spell` then reading plain
+  // face letters equals conjugating the state by M first (pinned below).
+  const ORIENTS = E.ROT24.map(M => {
+    const hold = [0, 1, 2, 3, 4, 5, 6, 7].map(p => E.faceImg(E.mInv(M), p));
+    const spell = SPELL_BY_HOLD.get(hold.join(','));
+    if (spell === undefined) throw new Error('no spelling for rotation hold ' + hold);
+    return { M, spell };
+  });
+  // init self-check: the engine's frame-walk reading of "spell + letters"
+  // must equal the conjugation algebra, for every orientation (else the
+  // sweep would emit unexecutable lines — fail loudly at load, not per line).
+  (() => {
+    let probe = E.solved();
+    for (const m of [0, 5, 12, 9, 3, 14]) probe = E.move(probe, m);
+    const seq = [2 * FIDX.U, 2 * FIDX.F + 1, 2 * FIDX.BR];
+    const letters = seq.map(m => E.MOVES[m]).join(' ');
+    for (const o of ORIENTS) {
+      let a = conjState(o.M, probe);
+      for (const m of seq) a = E.move(a, m);
+      const b = conjState(E.mInv(o.M), a);      // back to the un-rotated frame
+      const c = E.applyParsed(E.parseAlg((o.spell + ' ' + letters).trim()), probe);
+      if (!E.eq(b, c)) throw new Error('orientation reading mismatch for spell "' + o.spell + '"');
     }
-    for (const list of _algIndex.values())
-      list.sort((a, b) => rateRank(a) - rateRank(b) || a.moves - b.moves || (a.uid < b.uid ? -1 : 1));
-    return _algIndex;
-  }
+  })();
+  const ORIENT_SETS = {
+    fixed: () => [ORIENTS.findIndex(o => o.spell === '')],
+    vertical: () => ORIENTS.map((o, i) => (E.faceImg(o.M, FIDX.U) === FIDX.U ? i : -1)).filter(i => i >= 0),
+    full: () => ORIENTS.map((_, i) => i),
+  };
 
-  /* ---------- the search ---------- */
-  // search(scrambleState, opts) -> { byLength: {total: [items]}, dopt, truncated, work }
-  // opts: { methods:{id:bool}, caps:{id:int}, budget }
-  // item: { pmoves:[ints], id, face, v, fin, total, row|null, rotIdx }
-  //   row = the finishing sheet alg (null when the first step already solves);
-  //   rotIdx = the ROT24 setup rotation under which the alg solves the junction.
+  /* ---------- the pipeline ---------- */
+  function centerOptions(line) {
+    return HEX_FACES.filter(f => f !== 'D' && !line.hexes.includes(f)).map(face => ({ face }));
+  }
+  function stagesFor(line, stageId) {
+    switch (stageId) {
+      case 'fc': return [{ id: 'fc', opt: {} }];
+      case 't1': return T1_OPTS.map(opt => ({ id: 't1', opt }));
+      case 't2': return [{ id: 't2', opt: T1_OPTS.find(o => o.corner !== line.t1corner) }];
+      case 'sc': case 'c3': case 'c4':
+        return centerOptions(line).map(opt => ({ id: stageId, opt }));
+      default: throw new Error('unknown stage ' + stageId);
+    }
+  }
+  const stepLabel = (stage) => {
+    if (stage.id === 'fc') return STEP_DEFS.fc.name + ' (D)';
+    if (stage.id === 't1' || stage.id === 't2')
+      return STEP_DEFS[stage.id].name + ' (corner ' + (stage.opt.corner === 3 ? 'back' : 'right') + ')';
+    return STEP_DEFS[stage.id].name + ' (' + stage.opt.face + ')';
+  };
+
+  // search(state, opts) -> { byLength, best, truncated, work, failures, orientUsed }
+  // opts: { orient:'auto'|'fixed'|'vertical'|'full'|[rotIdx], beam, caps:{id:int},
+  //         slack, budget, stepBudget, weights, maxSolsPerStep }
+  // 'auto' (default) is a ladder: the fixed frame solves ~24/25 scrambles in
+  // a few seconds; the rare LBT source dead-ends (both source triangles
+  // trapped on side slots no sheet alg reaches — measured) are retried with
+  // the vertical pre-rotations, then a trimmed full 24-orientation sweep.
   function search(scr, opts) {
+    opts = opts || {};
+    const orientOpt = opts.orient || DEFAULTS.orient;
+    if (orientOpt === 'auto') {
+      const carry = (into, from) => {
+        into.failures.lbt += from.failures.lbt; into.failures.l3t += from.failures.l3t;
+        into.failures.step += from.failures.step; into.verifyFailures += from.verifyFailures;
+        return into;
+      };
+      let res = search(scr, { ...opts, orient: 'fixed' });
+      if (res.best == null) res = carry(search(scr, { ...opts, orient: 'vertical' }), res);
+      if (res.best == null) res = carry(search(scr, { ...opts, orient: 'full', beam: 2, maxSolsPerStep: 2 }), res);
+      return res;
+    }
     const caps = {};
-    for (const id of Object.keys(METHOD_DEFS))
-      caps[id] = Number.isFinite(opts.caps && opts.caps[id]) ? opts.caps[id] : METHOD_DEFS[id].cap;
-    const ids = Object.keys(METHOD_DEFS).filter(id => opts.methods[id]);
-    const budget = opts.budget || 8e6;
-    const dopt = dist[E.idx(scr)];
-    const capMax = Math.max(0, ...ids.map(id => caps[id]));
-    let work = 0, truncated = false;
+    for (const id of ['fc', 't1', 't2', 'sc', 'c3', 'c4'])
+      caps[id] = Number.isFinite(opts.caps && opts.caps[id]) ? opts.caps[id] : STEP_DEFS[id].cap;
+    const beam = opts.beam || DEFAULTS.beam;
+    const maxSols = opts.maxSolsPerStep || DEFAULTS.maxSolsPerStep;
+    const slack = Number.isFinite(opts.slack) ? opts.slack : DEFAULTS.slack;
+    const weights = Object.assign({}, DEFAULTS.weights, opts.weights || {});
+    const stepBudget = opts.stepBudget || DEFAULTS.stepBudget;
+    const orientIdxs = Array.isArray(opts.orient)
+      ? opts.orient : ORIENT_SETS[opts.orient || DEFAULTS.orient]();
+    // the node budget is per orientation — a sweep multiplies the work
+    work.nodes = 0; work.budget = (opts.budget || DEFAULTS.budget) * orientIdxs.length;
+    work.limit = Infinity; work.stopped = false; work.truncated = false;
+    const failures = { lbt: 0, l3t: 0, step: 0 };
+    const fin = finishIndex();
+    const done = [];
 
-    // phase 1: DFS enumerating first-step prefixes; junctions by state idx
-    const junctions = new Map();              // ix -> { state, paths: [{seq, hits:[id]}] }
-    const dfs1 = (s, seq, lastAxis) => {
-      if (++work > budget) { truncated = true; return; }
-      const ix = E.idx(s);
-      const hits = [];
-      for (const id of ids) if (seq.length <= caps[id] && targets[id].has(ix)) hits.push(id);
-      if (hits.length) {
-        let j = junctions.get(ix);
-        if (!j) { j = { state: E.copy(s), paths: [] }; junctions.set(ix, j); }
-        j.paths.push({ seq: seq.slice(), hits });
-      }
-      if (seq.length >= capMax) return;
-      for (let m = 0; m < NMOVES; m++) {
-        if ((m >> 1) === lastAxis) continue;
-        const t = E.copy(s); E.applyMoveIdx(t, m);
-        seq.push(m);
-        dfs1(t, seq, m >> 1);
-        seq.pop();
-        if (truncated) return;
-      }
-    };
-    dfs1(scr, [], -1);
-
-    // phase 2: match each junction against the sheet algs that solve it — a
-    // junction J matches alg Φ from setup rotation R iff R(J) is in the alg's
-    // physical pre-state set. Membership is rotation-closed, so WHICH algs
-    // match is a property of the junction (looked up under all 24 rotations);
-    // but the rotation SHOWN is a property of the PATH: the human's junction
-    // is W(J) (W = the displayed step's emission walk), and the printed
-    // rotation is the nicest R with R(W(J)) in the alg's pre-state set.
-    const index = algIndex();
-    const byLength = {};
-    const seen = new Set();
-    if (!truncated) for (const [ti, j] of junctions) {
-      const solvedJ = dist[ti] === 0;
-      let matches = null, jKeys = null;
-      if (!solvedJ) {
-        matches = [];
-        const jArr = E.toFacelets(j.state);
-        jKeys = ROT24.map(r => flKey(pApply(jArr, r.perm)));
-        const seenRow = new Set();
-        for (let ri = 0; ri < ROT24.length; ri++) {
-          const list = index.get(jKeys[ri]);
-          if (!list) continue;
-          for (const row of list) {
-            if (seenRow.has(row.uid)) continue;
-            seenRow.add(row.uid);
-            matches.push(row);
-          }
-        }
-      }
-      for (const p of j.paths) {
-        // key of W(J) under rotation ri == jKeys[ MUL24[W][ri] ]
-        const mul = (solvedJ || !matches.length) ? null : MUL24[walkIdxOf(p.seq)];
-        const rotFor = row => {
-          for (let ri = 0; ri < 24; ri++) if (row.preKeys.has(jKeys[mul[ri]])) return ri;
-          return -1;
-        };
-        for (const id of p.hits) {
-          const face = targets[id].get(ti);
-          const pkey = p.seq.join(',') + '|' + id + '|';
-          if (solvedJ) {
-            if (p.seq.length && !seen.has(pkey)) {
-              seen.add(pkey);
-              const item = { pmoves: p.seq.slice(), id, face, v: p.seq.length, fin: 0, total: p.seq.length, row: null, rotIdx: -1 };
-              (byLength[item.total] = byLength[item.total] || []).push(item);
+    for (const oi of orientIdxs) {
+      const o = ORIENTS[oi];
+      let frontier = [{
+        st: o.spell ? conjState(o.M, scr) : E.copy(scr),
+        segs: [], moves: 0, hexes: ['D'], t1corner: 0, rotIdx: oi,
+      }];
+      const memo = new Map();                    // stage+opt+state -> step solutions
+      for (const stageId of ['fc', 't1', 't2', 'sc', 'c3', 'c4']) {
+        // the LAST center decides the LBT junction: enumerate more (and one
+        // move longer) alternatives there — distinct landings are what give
+        // the sheet-corridor its hit probability, and c4 searches are cheap
+        const stageSols = stageId === 'c4' ? Math.max(maxSols, 8) : maxSols;
+        const stageSlack = stageId === 'c4' ? Math.max(slack, 1) : slack;
+        const next = [];
+        for (const line of frontier) {
+          for (const stage of stagesFor(line, stageId)) {
+            const mk = stageId + '|' + JSON.stringify(stage.opt) + '|' + line.hexes.join('') + '|' + E.stateKey(line.st);
+            let sols = memo.get(mk);
+            if (!sols) {
+              sols = searchStep(line.st, stageGoal(stage, line), stageH(stage, line),
+                caps[stageId], stageSols, stageSlack, weights[stageId], stepBudget);
+              memo.set(mk, sols);
             }
-            continue;
+            if (!sols.length) { failures.step++; continue; }
+            for (const sol of sols) {
+              next.push({
+                st: sol.st,
+                segs: sol.moves.length ? line.segs.concat([{
+                  id: stage.id, kind: 'search', label: stepLabel(stage),
+                  text: sol.moves.map(m => E.MOVES[m]).join(' '), moves: sol.moves.length,
+                }]) : line.segs.slice(),
+                moves: line.moves + sol.moves.length,
+                hexes: (stageId === 'sc' || stageId === 'c3' || stageId === 'c4')
+                  ? line.hexes.concat([stage.opt.face]) : line.hexes,
+                t1corner: stageId === 't1' ? stage.opt.corner : line.t1corner,
+                rotIdx: line.rotIdx,
+              });
+            }
           }
-          for (const row of matches) {
-            const kk = pkey + row.uid;
-            if (seen.has(kk)) continue;
-            seen.add(kk);
-            const rotIdx = rotFor(row);
-            if (rotIdx < 0) continue;                    // cannot happen (rotation-closed)
-            const item = { pmoves: p.seq.slice(), id, face, v: p.seq.length, fin: row.moves,
-                           total: p.seq.length + row.moves, row, rotIdx };
-            (byLength[item.total] = byLength[item.total] || []).push(item);
+        }
+        // trim: dedupe same-state same-length lines, keep the best K — but
+        // after c4 keep every distinct landing (finishes are cheap lookups,
+        // and junction diversity is what beats LBT source dead-ends)
+        const keep = stageId === 'c4' ? beam * 6 : beam;
+        next.sort((a, b) => a.moves - b.moves);
+        const seen = new Set();
+        frontier = [];
+        for (const l of next) {
+          const k = E.stateKey(l.st) + '|' + l.moves;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          frontier.push(l);
+          if (frontier.length >= keep) break;
+        }
+        if (!frontier.length) break;
+      }
+
+      // finishes: LBT by effect-matching, then L3T by exact lookup
+      for (const line of frontier) {
+        let cands = [line];
+        // LBT
+        const next = [];
+        for (const l of cands) {
+          const key = E.stateKey(l.st);
+          if (key === SOLVED_KEY || lbtOK(l.st)) { next.push(l); continue; }
+          const hits = lbtCandidates(fin, l.st);
+          if (!hits.length) { failures.lbt++; continue; }
+          for (const hit of hits.slice(0, 2))
+            next.push({ ...l, st: hit.post, moves: l.moves + hit.en.moves,
+              segs: l.segs.concat([segOfEntry(hit.en)]) });
+        }
+        cands = next;
+        // L3T
+        for (const l of cands) {
+          const key = E.stateKey(l.st);
+          if (key === SOLVED_KEY) { done.push(l); continue; }
+          const entries = fin.l3t.get(key);
+          if (!entries) { failures.l3t++; continue; }
+          for (const en of entries.slice(0, 2)) {
+            const st2 = E.applyParsed(E.parseAlg(en.text), l.st, en.dialect);
+            if (E.stateKey(st2) !== SOLVED_KEY) continue;   // cannot happen (indexed by caseStateOf)
+            done.push({ ...l, st: st2, moves: l.moves + en.moves,
+              segs: l.segs.concat([segOfEntry(en)]) });
           }
         }
       }
     }
-    // organize by movecount; within a bucket: shortest first step, then the
-    // sheet's own ranking (rating; suspects last), then stable order
-    for (const L of Object.keys(byLength))
-      byLength[L].sort((a, b) => a.v - b.v
-        || (a.row ? rateRank(a.row) : -1) - (b.row ? rateRank(b.row) : -1)
-        || METHOD_PRIORITY.indexOf(a.id) - METHOD_PRIORITY.indexOf(b.id)
-        || (a.row && b.row ? (a.row.uid < b.row.uid ? -1 : 1) : 0)
-        || (a.pmoves.join() < b.pmoves.join() ? -1 : 1));
-    return { byLength, dopt, truncated, work };
-  }
 
-  /* ---------- method view (the staged reconstruction) ---------- */
-  // The first step as written from the start, the setup rotation (the item's
-  // matched ROT24 entry, spelled in the sheets' physical letters — leading
-  // rotations were folded out of the text at index time, so this one printed
-  // rotation is the whole setup), and the algorithm text from its first turn
-  // on. ok = a full physical proof, run from the DISPLAYED texts: the first
-  // step engine-lands on the junction (its identity-start evaluation is
-  // corpus-validated physical), and the facelets a human holds after
-  // physically executing the displayed first step, rotated by the printed
-  // rotation and pushed through the body's physical perm, are a solved cube
-  // (any orientation). The layer label reads through the emission frame —
-  // the human's view of a substituted (b-for-UFL) step is walk-rotated.
-  function methodView(scr, item) {
-    const pE = emitWCA(item.pmoves, ID_FRAME);
-    const vmoves = pE.tokens.join(' ');
-    const q = FACES.find(w => pE.frame.fp[w] === item.face);   // in-hand position of the layer
-    const nsP = E.wcaToNS(vmoves);
-    if (!item.row) {
-      const parsed = E.parseAlg(E.preprocessAlg(nsP), 'ns');
-      const ok = !!(parsed && E.eq(E.applyParsed(parsed, E.copy(scr), syms, rotBy), E.solved()));
-      return { vmoves, rot: '', alg: '', name: null, rating: '', suspect: false, face: q, text: nsP, ok };
+    // verify + bucket by total movecount
+    const byLength = {};
+    let verifyFailures = 0;
+    const seenLine = new Set();
+    for (const l of done) {
+      const item = {
+        total: l.moves, rotIdx: l.rotIdx, rotSpell: ORIENTS[l.rotIdx].spell,
+        segs: l.segs, ok: false,
+      };
+      const lineKey = item.rotSpell + '|' + l.segs.map(s => s.text).join('|');
+      if (seenLine.has(lineKey)) continue;
+      seenLine.add(lineKey);
+      item.ok = verifyLine(scr, item);
+      if (!item.ok) { verifyFailures++; continue; }   // never emit an unproved line
+      (byLength[item.total] = byLength[item.total] || []).push(item);
     }
-    const { perm: R, spell: rot } = ROT24[item.rotIdx];
-    // the displayed first step must engine-land exactly on the junction state
-    const jState = E.copy(scr);
-    for (const m of item.pmoves) E.applyMoveIdx(jState, m);
-    const parsed = E.parseAlg(E.preprocessAlg(nsP), 'ns');
-    const okFirst = !!(parsed && E.eq(E.applyParsed(parsed, E.copy(scr), syms, rotBy), jState));
-    // physical proof of the finish, from the junction the human holds
-    const jPhys = pApply(E.toFacelets(scr), physPerm(parsed || []));
-    const okBody = !!parsed && SOLVED24_KEYS.has(flKey(pApply(pApply(jPhys, R), item.row.phi)));
-    const text = [nsP, rot, item.row.ns].filter(Boolean).join(' ');
-    return { vmoves, rot, alg: item.row.ns, name: item.row.name,
-             rating: item.row.rating, suspect: item.row.suspect, face: q, text, ok: okFirst && okBody };
+    for (const L of Object.keys(byLength))
+      byLength[L].sort((a, b) => (a.rotSpell ? 1 : 0) - (b.rotSpell ? 1 : 0)
+        || a.segs.length - b.segs.length
+        || (lineText(a) < lineText(b) ? -1 : 1));
+    const lens = Object.keys(byLength).map(Number).sort((a, b) => a - b);
+    return { byLength, best: lens.length ? lens[0] : null,
+             truncated: work.truncated, work: work.nodes, failures, verifyFailures,
+             orientUsed: Array.isArray(orientOpt) ? 'custom' : orientOpt };
+  }
+  function segOfEntry(en) {
+    return { id: en.step, kind: 'alg', label: STEP_DEFS[en.step].name, dialect: en.dialect,
+             text: en.text, moves: en.moves, subset: en.subset, caseName: en.caseName, note: en.note };
+  }
+  const lineText = it => [it.rotSpell, ...it.segs.map(s => s.text)].filter(Boolean).join(' ');
+
+  /* ---------- the per-line proof (every displayed line, end to end) ---------- */
+  // Executes the DISPLAYED text through the engine from the original
+  // scramble state: the leading rotation is re-prefixed per segment (the
+  // human re-grips to the recognition hold between algorithms — rotations
+  // have no state effect, they only set the reading frame), and the final
+  // state must be EXACTLY solved. Any false here means a bug upstream.
+  function verifyLine(scr, item) {
+    try {
+      let st = E.copy(scr);
+      for (const seg of item.segs) {
+        const parsed = E.parseAlg(((item.rotSpell ? item.rotSpell + ' ' : '') + seg.text).trim());
+        if (!parsed) return false;
+        // seg dialects are all cif today; a future EIF sheet would need its
+        // own rotation-prefix reading pinned before it may join the sweep
+        st = E.applyParsed(parsed, st, seg.dialect || 'cif');
+      }
+      return E.eq(st, SOLVED);
+    } catch (e) { return false; }
   }
 
-  return { emitWCA, emitPhysPerm, walkIdxOf, ROT24, physPerm, sheetStrPerm, SOLVED24_KEYS, flKey, pApply, pInv,
-           foldLeadRots, targets, dAnchored, algIndex, search, methodView, METHOD_DEFS, syms, rotBy };
+  // standalone searchStep callers (tests, lab) manage the budget themselves
+  function resetWork(budget) {
+    work.nodes = 0; work.limit = Infinity; work.stopped = false; work.truncated = false;
+    if (budget) work.budget = budget;
+  }
+
+  return {
+    METHOD_NAME, STEP_DEFS, STEP_ORDER, DEFAULTS,
+    HEX_FACES, HEX_EDGES, TRIPLE_SLOTS,
+    hexOK, tripleOK, lbtOK,
+    searchStep, stageH, stageGoal, resetWork, work,
+    finishIndex, lbtCandidates, conjState, ORIENTS, ORIENT_SETS,
+    search, verifyLine, lineText,
+  };
 }
-if (typeof module !== 'undefined') module.exports = { makeSolverCore, METHOD_DEFS, METHOD_PRIORITY };
+if (typeof module !== 'undefined') module.exports = { makeSolverCore, METHOD_NAME, STEP_DEFS, STEP_ORDER, DEFAULTS };
 window.OOSolverCore=module.exports;})();

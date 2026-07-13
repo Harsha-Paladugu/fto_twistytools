@@ -260,6 +260,31 @@ The USER supplies the actual sheets; this section is context, not authority.
   avg; beginner form needs ~4 algs (Hedge `R B' R' B`, Sledge `R' L R L'`,
   two corner 3-cycles); advanced 1-look L3T ≈ **179 algs**. ✅ [SSwiki, Ben's
   doc, forum]
+- **Bencisco structure, machine-verified (M5, 2026-07-13)**: a Bencisco
+  "center" is a HEXAGON — one face's **3 edges + 3 centre triangles**
+  ("grouped such that they form an inscribed hexagon on one face"; four of
+  them total) 🔶→✅ [cubinghistory.com/FTO/Methods/Bencisco; piece accounting
+  closes exactly and is asserted at solver-core init]. The four hexagon
+  faces are ONE tetrad — in engine coordinates tetrad B {D, L, R, B} — and
+  they PARTITION the 12 edges (D {9,10,11}, L {1,2,8}, R {0,3,6},
+  B {4,5,7}); the six triples carry the 6 corners + the other tetrad's 12
+  triangles (each corner pairs with its two flanking tetrad-A slots:
+  0↔{U(0),F(3)}, 1↔{U(1),BR(7)}, 2↔{U(2),BL(11)}, 3↔{BR(6),BL(9)},
+  4↔{F(4),BL(10)} = the LBT sheet's pin, 5↔{F(5),BR(8)}). Solve order in
+  engine coordinates: D hexagon → corners 3,5 triples (F2T) → L/R/B
+  hexagons (SC + L2C) → LBT (corner 4) → L3T (the U layer). All pinned in
+  tools/test-solver.mjs against the M3 sheet data.
+- **LBT case-space semantics (M5 discovery, machine-measured)**: the LBT
+  sheet's 95 cases pin only the LBT-RELEVANT features (the corner-4 piece +
+  the two source triangles); the rest of the top layer is a DON'T-CARE, so
+  matching a junction by exact state key nearly always misses — an LBT alg
+  applies at a junction iff its EFFECT lands the state in the L3T case
+  space. The 1L3T sheet, being the LAST step, does match by exact state.
+  Post-L2C states can also strand both of a color's source triangles on
+  side parking slots that no sheet alg (even AUF'd) reaches — a real
+  dead-end for the fixed hold, resolved by re-anchoring the method via a
+  whole-puzzle pre-rotation (~1 in 25 random scrambles; the solver's
+  'auto' orientation ladder).
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶

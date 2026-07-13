@@ -49,7 +49,7 @@ equivalents are:
 |---|---|
 | Full-state BFS dist table (`tables.js`) | Per-step pattern databases (corners, per-orbit centers, edge slices) — same IndexedDB cache layer, new table shapes |
 | `optimalSolution` (global optimal) | Per-step IDA* with PDB lower bounds; no global-optimal claim anywhere in UI copy |
-| Masked scrambles from dist fibers | Setup-based scrambles: inverse of the case state + randomized pre-moves (trainer); full-solve scrambles start as ~30 random face moves, upgrade to random-state once the M5 step solver exists (the community standard IS random-state via cubing.js's vendored xyzzy solver — prior art we can match or reuse) |
+| Masked scrambles from dist fibers | Setup-based scrambles: inverse of the case state + randomized pre-moves (trainer); full-solve scrambles are ~30 random face moves. Random-state stays deferred even after M5: the method solver's ~55-move inverses are not scramble-grade (community standard ≤ 39 via xyzzy's phases, whose ~97 MB tables exceed the shipped-table budget) — revisit with the trainer full-solve mode |
 | Uniform random reachable state | Random-move scramble (documented as such) until M5's random-state upgrade |
 | Census (oo.html) | deleted |
 
@@ -271,40 +271,69 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   recognition variants, one-look — scoped when the user specs them; any mode
   needing "N moves from a solved step" uses the M5 pruning tables, so
   trainer-analysis features sequence AFTER M5. Random-state scrambles for
-  full-solve arrive with M5 (upgrade path in the table above).
-- [ ] **M5 — Solver.** The headline feature: step-by-step best-human solution.
-  Prior art exists and de-risks this: cubing.js vendors xyzzy's random-state
-  FTO solver (3-phase IDA* + BFS pruning tables, phase spaces exactly
-  2,555,520 / 193,536,000 / 63,504,000; ≤ 39 moves when its fast combined
-  phase-2+3 search succeeds, per-phase worst-case caps 15/15/25) — proof
-  that per-step FTO search is browser-feasible, and a correctness oracle for
-  ours. **First task: SIZE the pruning tables before committing to the search
-  design** — extract the actual xyzzy table shapes/sizes from the vendored
-  source, list our per-step PDB candidates with bytes and build-seconds each;
-  user checkpoint if any shipped table exceeds ~10 MB or first build exceeds
-  the ~30 s budget (options: sub-coordinate PDBs, Web Worker build with
-  progress UI, precomputed download — GitHub Pages caps files at 100 MB and
-  this is a full-history fork, so repo bloat is a real cost).
-  `js/tables.js` is rewritten here: delete `loadOrBuildDist`/
-  `loadOrBuildClassTables` (full-state BFS, dead since M0/M4), add the PDB
-  load/build layer under new cache keys, update js/solver.js's table
-  bootstrap. `js/solver-core.js` rewritten: METHOD_DEFS = the
-  steps of the user's actual method(s) (machine-derived from the M3 sheets
-  where possible, as the Skewb fl/tcll/eg2 defs were); per-step search = IDA*
-  over the step's subspace with pattern-database lower bounds;
-  this also unlocks random-state scrambles for the trainer (upgrade the M4
-  random-move interim). Finishes = the user's sheet algs
-  verbatim (the Skewbiks physical-facelet-model lessons — hold/rotation logic,
-  leading-rotation folding, per-line machine proof — apply wholesale and the
-  code ports with the engine swapped under it). Movecount-only metrics first
-  (the Skewb precedent; fingertrick metrics deferred until the user consults
-  solvers). Multi-step beam: keep top-K lines per step junction so early greed
-  doesn't hide the best total (K user-tunable, like the Skewb buckets).
-  Exit gate: `npm run test:solver` green — every displayed line re-proved by
-  facelet check end-to-end; `tools/solver-lab.mjs` scan over ≥200 scrambles with
-  0 verify failures and a pinned latency budget; solutions match hand-solves on
-  fixture scrambles executed by the USER (the Skewb port's junction-pinning
-  protocol).
+  full-solve stay deferred (see the M5 entry: the method solver's inverses
+  are not scramble-grade; vendor or port xyzzy's phases when the mode is
+  specced).
+- [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step
+  Bencisco solves** (the USER's method decision this session), every line
+  machine-proved end-to-end. **The sizing task came in far under the
+  checkpoint thresholds** — xyzzy's actual tables (extracted from the
+  vendored source): phase 1 three tiny tables ≤ 20 KB; phase 2 ONE 33.9 MB
+  in-RAM Int8 table (2,520 × 13,440); phase 3 ONE 63.5 MB table
+  (44,100 × 1,440, weighted BFS to depth 25) — ~100 MB RAM built on demand,
+  proof the browser tolerates far more than we need. OUR tables
+  (`js/tables.js`, rewritten; `loadOrBuildDist`/`loadOrBuildClassTables`
+  deleted): per-step pattern databases over independent coordinates —
+  centre-orbit multiset patterns (369,600; 8 B-orbit + 3 A-orbit goal sets),
+  corners (11,520 × 3 goal sets), 3-edge placements (1,320 × 4), 6-edge
+  hexagon-PAIR placements (665,280 × 6 — the strong bound for the later
+  center steps), and one-hexagon EXACT tables (edge-placement × color-mask,
+  290,400 × 4) — **≈ 7.6 MB persisted in IndexedDB ('fto-tables'/
+  'fto-pdb-v2'), first build ≈ 4-10 s, cached visits instant.** No shipped
+  binaries, no repo bloat. Decomposition (machine-derived from engine
+  geometry + the M3 sheet pins, asserted at core init): a Bencisco "center"
+  is a HEXAGON (one face's 3 edges + 3 centre triangles; cubinghistory.com)
+  — four of them on tetrad B {D,L,R,B}, partitioning the 12 edges exactly;
+  the six triples carry the 6 corners + the 12 tetrad-A triangles. Steps:
+  FC = D hexagon → T1/T2 = bottom triples (corners 3,5; either order) →
+  SC/C3/C4 = the L/R/B hexagons (search picks the order) → LBT → L3T.
+  Steps 1-4 = per-step IDA* over the 16 native moves, h = max of PDBs with
+  early-exit thresholding; **weighted IDA* (w = 1.4-1.8) on the center
+  steps** — the third center runs 10+ moves deep where exact search
+  explodes (measured: w=1.6-1.8 is ~30× faster at ≤ +1 move; w ≥ 2.5 is
+  worse on BOTH axes); per-step node budgets + one higher-w rescue retry;
+  beam over step junctions (K tunable). Finishes = the sheets' algs
+  VERBATIM with two different matching semantics (a real M5 discovery):
+  **L3T = exact stateKey lookup** (last step; 1L3T + TCP entries, {ε,U,U'}
+  pre/trailing AUF variants as insurance), but **LBT = matching by EFFECT,
+  not state** — the sheet's 95 cases pin only the LBT-relevant features and
+  the rest of the top layer is a don't-care, so exact keys nearly always
+  miss (measured); each LBT entry carries its precomputed effect table and
+  applies iff applyTable(effect, junction) lands in the L3T index — one
+  test that is both the correctness proof and the guarantee the next stage
+  succeeds. The 21 setup-undo LBT texts are indexed/displayed with their
+  machine-verified closing token appended. Color neutrality = whole-puzzle
+  pre-rotation (conjugation; spelled in Streeter rotation tokens, pinned at
+  init against the engine's 48-hold frame walk): orient 'auto' ladder =
+  fixed hold (~24/25 scrambles) → vertical spins → trimmed full-24 sweep
+  (the rare LBT source dead-ends — both source triangles trapped on side
+  slots — get rescued by re-anchoring the method). Measured over the 200-scramble gate scan: **200/200 solved, 0 verify
+  failures; totals min 43 / median 55 / p90 61 / max 66 (avg 55.7, better
+  than the ~70 human average); median 4.3 s, p90 7 s, max 22 s; ladder use
+  186 fixed / 14 vertical / 0 full.** Exit gates met: `npm run test:solver` 19 tests
+  green (codecs, admissibility/Lipschitz pins, step regions vs sheet data,
+  orientation machinery, tampered-line rejection, full pipelines with
+  independent replay); `tools/solver-lab.mjs --scan 200` = GATE PASS (numbers above); headless-Edge E2E 17 checks / 0 console errors (boot,
+  IndexedDB cache, solve flow, diagrams, cached reboot < 1 s). solver.html
+  un-parked (banner removed), home card updated. DEVIATIONS/deferrals:
+  movecount-only metrics (as planned); **random-state trainer scrambles
+  DEFERRED** — our method solver's ~55-move inverses are not scramble-grade
+  (community standard ≤ 39 via xyzzy's 3 phases, whose 97 MB tables exceed
+  the shipped-table budget); revisit when the user specs trainer full-solve
+  mode (options: vendor cubing.js's scrambler, or port xyzzy's phases with
+  a user checkpoint). USER validation still welcome: execute a printed
+  solve or two on hardware (the Skewb junction-pinning protocol) — every
+  line is engine-proved, but a physical spot-check closes the loop.
 - [ ] **M6 — Accounts/Firebase (OPTIONAL — user decision).** Demo mode suffices
   until launch. If wanted: new Firebase project, auth + per-user prefs/stats
   sync only (no census collections; firestore.rules shrinks accordingly), rules
@@ -342,12 +371,15 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   rotations; `T` 90° front-vertex rotation (ground-truth §Notation quotes the
   rules). M1 still owes the direction-encoding pin against Twizzle before any
   test vectors or alg text are recorded.
-- Pruning tables: build-in-browser vs ship precomputed binaries (M5's sizing
-  task produces the numbers; checkpoint if >10 MB shipped or >30 s first
-  build).
-- Algorithm sheet sources + formats (M3 blocker) — and with them the method
-  lineup the solver targets (M5) and the case-key symmetry fold (M1 finalizes
-  conservatively, revisit at M3).
+- ~~Pruning tables: build-in-browser vs ship precomputed binaries~~
+  **RESOLVED (M5, 2026-07-13): build-in-browser** — ≈ 7.6 MB IndexedDB-cached,
+  first build seconds; both checkpoint thresholds cleared with wide margin,
+  so no user decision was needed.
+- Algorithm sheet sources + formats (M3 stays open for more sheets) — the
+  case-key symmetry fold still revisits with more data. ~~The method lineup
+  the solver targets~~ **DECIDED (user, 2026-07-13): the solver follows the
+  Bencisco method** (matching the supplied LBT/1L3T sheets); further methods
+  would be new step decompositions over the same machinery.
 - Trainer tool lineup beyond case drill (M4 shipped drill + recap from the M3
   data; full-solve/recognition/one-look modes await the user's spec, and the
   analysis-flavored ones want M5's tables first).
