@@ -55,8 +55,9 @@ t('model: TCP present; empty subsets skipped; counts match the JSON', () => {
   const algs = ALL_CASES.reduce((a, c) => a + c.algs.length, 0);
   return model.subsets.some((s) => s.key === 'TCP') && cases === jsonCases && algs === jsonAlgs && cases > 0;
 });
-t('model: uid = subset␟name; dialect cif; AUF randomization on', () =>
-  ALL_CASES.every((c) => c.uid === c.subset + SEP + c.name && c.dialect === 'cif' && c.auf === true));
+t('model: uid = subset␟name; dialect cif; AUF on for last-layer sets, off for LBT', () =>
+  ALL_CASES.every((c) => c.uid === c.subset + SEP + c.name && c.dialect === 'cif' &&
+    c.auf === (c.subset !== 'LBT')));
 t('model: authored groups partition every subset, no strays', () =>
   model.subsets.every((s) =>
     s.groups.reduce((a, g) => a + g.cases.length, 0) === s.cases.length &&
@@ -130,7 +131,7 @@ t('makeDrill: the scramble reproduces the shown state from solved (all cases × 
 t('makeDrill: undo the AUF, run the alg in its dialect — solved (all cases × AUFs)', () =>
   ALL_CASES.every((c) => RNGS.every((rng, k) => {
     const d = core.makeDrill(c, rng);
-    if (d.auf !== k) return false;
+    if (d.auf !== (c.auf === false ? 0 : k)) return false;
     let st = d.state;
     if (d.auf) st = E.move(st, d.auf === 1 ? U_CCW : U_CW);
     const spec = core.caseSpec(c);
@@ -152,10 +153,19 @@ t('makeDrill: scramble stays merged (no adjacent same-face tokens) and short', (
     }
     return toks.length >= 1 && toks.length <= core.caseSpec(c).anchor.natives.length + 1;
   })));
-t('makeDrill: AUF distribution — all three offsets appear over 100 draws', () => {
+t('makeDrill: AUF distribution — all three offsets appear over 100 draws (AUF-on cases)', () => {
+  const aufCases = ALL_CASES.filter((c) => c.auf);
   const seen = new Set();
-  for (let i = 0; i < 100; i++) seen.add(core.makeDrill(ALL_CASES[i % ALL_CASES.length]).auf);
+  for (let i = 0; i < 100; i++) seen.add(core.makeDrill(aufCases[i % aufCases.length]).auf);
   return seen.size === 3;
+});
+t('LBT subset (real data): 95 cases, auf:false throughout, drills pinned to AUF 0', () => {
+  const lbt = model.subsets.find((s) => s.key === 'LBT');
+  if (!lbt || lbt.cases.length !== 95 || !lbt.cases.every((c) => c.auf === false)) return false;
+  return lbt.cases.every((c) => RNGS.every((rng) => {
+    const d = core.makeDrill(c, rng);
+    return d && d.auf === 0 && d.aufUndo === '' && core.verifyDrill(d);
+  }));
 });
 t('rowAufToken: anchor row chip = the drill\'s AUF undo', () =>
   ALL_CASES.every((c) => RNGS.every((rng) => {

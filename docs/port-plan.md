@@ -161,8 +161,31 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   **closing the M1 single-T direction residue machine-exactly** —, Uv/Rv/Lv ≡
   our o-rotations, SiGN 2U ≡ Us, their lowercase wides ≡ our w tokens,
   orientation-reference solves, probe patterns). test:engine now 45 tests.
-- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 2 LANDED (2026-07-13):
-  the 1L3T set (one-look last 3 triples, 178 cases / 251 algs) is LIVE**,
+- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 3 LANDED (2026-07-13):
+  the Algorithmic LBT set (last bottom triple, 95 cases / 120 algs) is
+  LIVE**, imported from zwegner's page by `tools/import-lbt.mjs` over the
+  committed snapshot `data/sources/lbt-zwegner.html` (curated algs only —
+  the page's hidden "gen" dumps stay behind). Plain Streeter dialect
+  (Uo/Uw/Us), zero parser work needed. First NON-last-layer set: subset
+  `auf: false` (a U pre-turn would change the case; the trainer's opt-out is
+  now exercised on real data), locality region = the 1L3T region PLUS the
+  bottom-left triple slot {corner 4, F(4), BL(10)} — a Bencisco-order
+  cross-sheet pin (after LBT, exactly the L3T region remains). **21 algs are
+  printed with a leading Uw/Us setup left unrestored — as printed they end
+  one wide/slice turn short of solved; each carries a machine-verified
+  closing-token note** (the closing token is always the textual inverse of
+  the alg's first wide/slice token), surfaced as a '⚠ setup undo' chip on
+  algs.html and in the trainer reveal. Page structure machine-checked by the
+  importer and pinned in test-engine §15: 24 groups of 4 across 6 sections,
+  corner-in-slot ⇔ section 1 (front-top slots {0,2} otherwise), per-case
+  corner agreement across algs (centre sources may differ — the page's
+  "two of each color's triangles" freedom, live in cases 56/84), section-1
+  quads = base/mirror/flipped/flipped-mirror, the page's "same alg notated
+  differently" pairs (cases 7/8) state-identical, 95 distinct primaries,
+  case 21 = the solved state (no alg, omitted). test:engine 67 green,
+  test:trainer 27 green, headless-Edge E2E 19 checks / 0 console errors.
+  PHASE 2 (2026-07-13):
+  the 1L3T set (one-look last 3 triples, 178 cases / 251 algs) LIVE,
   imported from zwegner's page (algs by Aedan Bryant; 6c = the TCP set, from
   Edd Dibley's document) by the new adapter `tools/import-1l3t.mjs` over the
   committed snapshot `data/sources/1l3t-zwegner.html`. The engine gained that

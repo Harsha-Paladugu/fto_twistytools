@@ -169,6 +169,32 @@ Skewb engine and stays until M1 deletes the code it documents).
   alg; 4b.O.4's fourth) — excluded from our data, exclusion self-checked.
   Cross-sheet oracle: all 18 TCP alg states appear EXACTLY among the 6c algs;
   TCP 11/12 appear as the working-slot variants of 6c.O.6/6c.O.8.
+- **zwegner LBT sheet (M3 phase 3, machine-verified 2026-07-13)** — plain
+  Streeter dialect (Uo rotations, Uw/BLw/BRw wides, Us slices; no S/H macros,
+  no brackets, no [U] marks — zero parser work). LBT = Bencisco's Last Bottom
+  Triple: the bottom-left slot between the F and BL faces = corner slot 4 +
+  centre slots F(4)/BL(10) in engine numbering. **LBT-locality = the 1L3T
+  region ∪ that slot** (after LBT exactly the last-layer region remains — the
+  Bencisco solve order as a cross-sheet pin; test-engine §15). Sheet facts,
+  machine-pinned: 96 page cases in 24 groups of 4 across 6 sections (case 21
+  = the solved state, no alg, omitted from our data), 120 curated algs (the
+  page's hidden "raw dump of all generated algs" is deliberately NOT
+  imported); corner-in-slot ⇔ section 1, on-top corners only ever sit on the
+  front-top slots {0,2}; all algs of a case agree on the corner, but may
+  consume DIFFERENT source triangles (the page's "there are two of each
+  color's triangles that can be used" — cases 56/84 genuinely differ on slot
+  color-status across their algs, so per-alg exact states are the only
+  authority below the corner level). **21 algs are printed with a leading
+  Uw/Us setup whose restore the page leaves implicit — as printed they end
+  exactly one wide/slice turn short of solved (a rotation conjugation can NOT
+  absorb it: the residue is a real bottom-vs-rest misalignment); the closing
+  token is always the textual inverse of the alg's first wide/slice token**,
+  noted per alg in the JSON ('⚠ setup undo' on algs.html). Cases 7/8 each
+  print two spellings the page calls "the same, just notated differently" —
+  pinned state-identical. First `auf: false` trainer subset (a U pre-turn
+  would change the case). Credits: zwegner (generation + curation), 360cubed
+  (keyhole cases 1/2/5/6), Ben Streeter (trapped-triangles cases 33/34/37/38
+  + the traditional flipping-alg cases).
 - **TCP sheet findings (machine-verified 2026-07-10)**: the TCP sheet's
   header claims EIF notation, but all 18 algs execute from the **CIF hold**
   (the community notation doc's TCP description is the accurate one). The
@@ -263,7 +289,9 @@ The USER supplies the actual sheets; this section is context, not authority.
   diagrams and possibly a direct import for sheet imagery. 🔶
 - **zwegner's LBT alg sheet** (zwegner.github.io/cubing/fto/lbt-algs.html) —
   live FTO algset page with inline-SVG case diagrams, `o`-suffix rotations,
-  Uw wides; prior art for the Algorithms page AND a candidate data source. 🔶
+  Uw wides; IMPORTED at M3 phase 3 (2026-07-13, `tools/import-lbt.mjs`,
+  snapshot `data/sources/lbt-zwegner.html`) — see §Notation for the
+  machine-verified sheet facts. ✅
 - Community hubs: the "FTO Notation" standardization guide (Scribd copy),
   Nautilus notation page (sites.google.com/view/nautilusfto/notation), Ben's
   speedy.cubing.net/fto/, the FTO Discord, mzrg.com scrambler megadoc. 🔶

@@ -756,5 +756,75 @@ t('1L3T data: the two source errata are excluded and are provably broken', () =>
   }
 });
 
+/* ---------- 15. LBT sheet data (M3 ph3): machine pins for the imported set ---------- */
+const LBTS = ALGDATA.subsets.LBT;
+// LBT-local = the 1L3T region plus the bottom-left triple slot {corner 4,
+// F(4), BL(10)} — the Bencisco order's cross-sheet pin: after LBT, exactly
+// the last-layer (L3T) region remains unsolved
+const LBT_CENTRES = new Set([...L3T_CENTRES, 4, 10]);
+const lbtState = (a) => E.caseStateOf(a, 'cif');
+function lbtLocal(s){
+  const solved = E.solved();
+  for (let i = 0; i < 6; i++) if ((s.cp[i] !== i || s.co[i] !== 0) && ![0, 1, 2, 4].includes(i)) return false;
+  for (let i = 0; i < 12; i++) if (s.ep[i] !== i && ![0, 1, 4].includes(i)) return false;
+  for (let i = 0; i < 24; i++) if (s.ctr[i] !== solved.ctr[i] && !LBT_CENTRES.has(i)) return false;
+  return true;
+}
+t('LBT data: 95 cases in 6 section groups, 120 algs, CIF, AUF off, page numbering', () => {
+  assert(LBTS && LBTS.notation === 'cif' && LBTS.auf === false, 'subset dialect/auf');
+  assert(LBTS.cases.length === 95, 'cases: ' + LBTS.cases.length);
+  assert(LBTS.groups.length === 6 && LBTS.cases.every(c => LBTS.groups.includes(c.group)), 'section groups');
+  const algs = LBTS.cases.reduce((a, c) => a + c.algs.length, 0);
+  assert(algs === 120, 'algs: ' + algs);
+  const names = new Set(LBTS.cases.map(c => c.name));
+  for (let n = 1; n <= 96; n++)
+    assert(names.has('LBT ' + n) === (n !== 21), 'page numbering (case 21 = the solved state, omitted): LBT ' + n);
+});
+t('LBT data: every alg solves an LBT-local state — as printed, or after its noted setup-undo (21 pinned)', () => {
+  let setups = 0;
+  for (const c of LBTS.cases) for (const a of c.algs){
+    const s = lbtState(a.alg);
+    assert(s, c.name + ' parses: ' + a.alg);
+    if (!a.note){ assert(lbtLocal(s), c.name + ' non-local as printed: ' + a.alg); continue; }
+    setups++;
+    assert(/setup/.test(a.note), c.name + ' unexpected note kind');
+    assert(!lbtLocal(s), c.name + ' noted alg is local as printed (stale note): ' + a.alg);
+    const setup = (a.alg.match(/(?:^|\s)(Uw'?|Us'?)(?=\s|$)/) || [])[1];
+    assert(setup, c.name + ' noted alg has no Uw/Us token');
+    const closing = setup.endsWith("'") ? setup.slice(0, -1) : setup + "'";
+    assert(a.note.includes('append ' + closing), c.name + ' note names the wrong closing token');
+    const s2 = lbtState(a.alg + ' ' + closing);
+    assert(s2 && lbtLocal(s2), c.name + ' closing token does not localize: ' + a.alg);
+  }
+  assert(setups === 21, 'leading-setup algs: ' + setups);
+});
+t('LBT data: corner structure — algs agree per case; in the slot iff section S1, front-top otherwise', () => {
+  const cornerOf = (s) => { for (let i = 0; i < 6; i++) if (s.cp[i] === 4) return i * 2 + s.co[i]; };
+  for (const c of LBTS.cases){
+    const marks = c.algs.map(a => {
+      const setup = a.note ? (a.alg.match(/(?:^|\s)(Uw'?|Us'?)(?=\s|$)/) || [])[1] : null;
+      const closing = setup ? (setup.endsWith("'") ? setup.slice(0, -1) : setup + "'") : null;
+      return cornerOf(lbtState(closing ? a.alg + ' ' + closing : a.alg));
+    });
+    assert(marks.every(m => m === marks[0]), c.name + ' algs disagree on the corner');
+    const pos = marks[0] >> 1;
+    assert((pos === 4) === (c.group === 'S1 corner in slot'), c.name + ' corner-in-slot vs section');
+    assert(pos === 4 || pos === 0 || pos === 2, c.name + ' corner on an unexpected slot: ' + pos);
+  }
+});
+t('LBT data: states are distinct except the two "notated differently" pairs (LBT 7/8)', () => {
+  for (const n of [7, 8]){
+    const c = LBTS.cases.find(x => x.name === 'LBT ' + n);
+    assert(c.algs.length === 2 &&
+      E.stateKey(lbtState(c.algs[0].alg)) === E.stateKey(lbtState(c.algs[1].alg)),
+      'LBT ' + n + ' pair not state-identical');
+  }
+  const keys = new Set();
+  for (const c of LBTS.cases) for (const a of c.algs) keys.add(E.stateKey(lbtState(a.alg)));
+  assert(keys.size === 118, 'distinct alg states: ' + keys.size);
+  const prim = new Set(LBTS.cases.map(c => E.stateKey(lbtState(c.algs[0].alg))));
+  assert(prim.size === 95, 'distinct primaries: ' + prim.size);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
