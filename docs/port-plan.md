@@ -300,6 +300,36 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   full-solve stay deferred (see the M5 entry: the method solver's inverses
   are not scramble-grade; vendor or port xyzzy's phases when the mode is
   specced).
+  **STEP TRAINERS v1 (2026-07-13, post-M5): the First center mode is LIVE**
+  — the first Bencisco step-by-step trainer (the user's spec this session:
+  scramble → find the white center in the optimal move count → reveal the
+  optimal solutions, difficulty chosen against God's number). The goal is
+  placement-neutral and machine-derived: the white hexagon on ANY tetrad-A
+  face in one of the 12 rotation-valid formations (the 12 mirror formations
+  are false solves at exactly God's number — surfaced in the UI copy;
+  ground-truth §Methods has the full derivation). `js/tables.js` gained
+  `buildFirstCenter` (exact multi-goal BFS over the 290,400-state hexagon
+  coordinate, both metrics, built on demand in ~0.1-0.3 s, structural
+  init-asserts, no IndexedDB); trainer.html now loads tables.js (the M4
+  "no tables on the trainer page" note is superseded — the M5 PDB bundle
+  itself stays solver-page-only); `fto-core.mjs` gained the drill layer
+  (30-random-move scrambles rejection-sampled to the chosen exact optimal
+  length, canonical enumeration of ALL optimal solutions with an exact
+  count, hold-aware token respelling so slice-containing texts mean exactly
+  what the engine and the sheets mean, landing-face chips read through the
+  walked hold, and a table-independent state-level verifier — no displayed
+  line is ever unproved). UI: third mode chip, metric toggle (slice turns =
+  1 move, God's number 6 / face turns only, God's number 7), optimal-length
+  difficulty chips with population tooltips, per-difficulty stats rows.
+  Gates: test:trainer **40** green (God's number + full histograms pinned
+  in both metrics, mirror-at-max, facelet-level false-solve trap, every
+  drill and every displayed solution re-proved on full states, tamper
+  rejection); the derivation adversarially verified by 3 independent
+  workflow agents (a second BFS with a different encoding reproduced the
+  histograms digit for digit); headless-Edge E2E 21 checks / 0 console
+  errors; build + check:fresh green. Next step trainers (triples, second
+  center, …) follow this pattern: a coordinate + goal set in tables.js, a
+  drill layer in the core, a mode chip.
 - [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step
   Bencisco solves** (the USER's method decision this session), every line
   machine-proved end-to-end. **The sizing task came in far under the
@@ -410,8 +440,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   Bencisco method** (matching the supplied LBT/1L3T sheets); further methods
   would be new step decompositions over the same machinery.
 - Trainer tool lineup beyond case drill (M4 shipped drill + recap from the M3
-  data; full-solve/recognition/one-look modes await the user's spec, and the
-  analysis-flavored ones want M5's tables first).
+  data; **step trainers started 2026-07-13 with the First center mode** — the
+  user's decision; triples/second-center step modes are the natural next
+  additions, same pattern; full-solve/recognition/one-look modes still await
+  the user's spec).
 - Notation presentation: the 8 face letters are settled, but rotation spelling
   (`Ro` vs `Rv` vs `[R]`), slice spelling (`Rs` vs `2U` vs lowercase), and
   lowercase-means-wide-or-slice are NOT community-settled (ground-truth

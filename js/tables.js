@@ -544,6 +544,162 @@
     return out;
   }
 
+  // ---------------- first-center trainer table (post-M5 step trainers) ----------------
+  // The Bencisco FIRST CENTER as a standalone drill goal: the WHITE hexagon
+  // (U's 3 edge pieces + the 3 white centre triangles) formed on ANY tetrad-A
+  // face, edges in a rotation-valid order. Unlike the solver's fixed-frame
+  // H1['D'] this goal is placement-neutral: a first center is correct iff the
+  // white-piece arrangement is the restriction of some tetrad-preserving
+  // PROPER rotation image of solved — 12 formations (3 per candidate face).
+  // The other 3 all-white edge orders per face are the IMPROPER (mirror)
+  // restrictions: visually complete hexagons that no finished solve can
+  // contain (false solves) — and they sit at exactly God's number in both
+  // metrics (pinned in tools/test-trainer.mjs, derivation 2026-07-13).
+  //
+  // Coordinate: (ordered placement of U's 3 edges, 1,320) x (white-triangle
+  // mask over orbit A, 220) = 290,400 — the H1 shape on the white family.
+  // Two unit-cost metrics, both exact BFS (multi-source over the 12 goals):
+  //   dist16  16 native face moves;                     God's number 7
+  //   dist24  + the 8 slice turns at unit cost (the     God's number 6
+  //           sheets' countMoves convention: Xs is one move)
+  // Built on demand in < 1 s (no IndexedDB cache needed) by the trainer page.
+  function buildFirstCenter(E) {
+    // U's edge slots/pieces and the tetrad-A face blocks
+    const U_EDGES = E.EDGES.map((e, i) => (e[2] === 0 ? i : -1)).filter(i => i >= 0);
+    if (U_EDGES.length !== 3) throw new Error('fc: U edge set ' + U_EDGES);
+    const edgeImg = (M, e) => {
+      const a = E.vertImg(M, E.EDGES[e][0]), b = E.vertImg(M, E.EDGES[e][1]);
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      return E.EDGES.findIndex(q => q[0] === lo && q[1] === hi);
+    };
+    const placeIx = (pos) => {               // placement index from positions (piece order)
+      const ep = new Array(12).fill(-1);
+      for (let i = 0; i < 3; i++) ep[pos[i]] = U_EDGES[i];
+      return edgePlaceIndex(ep, U_EDGES);
+    };
+    // goals: proper tetrad-preserving rotations; mirrors: the improper images
+    const T12 = E.ROT24.filter(M => E.faceImg(M, 0) < 4);
+    if (T12.length !== 12) throw new Error('fc: T12 size ' + T12.length);
+    const coordFor = (M) => {
+      const X = E.faceImg(M, 0);
+      return placeIx(U_EDGES.map(q => edgeImg(M, q))) * NMASK + maskIndex(3 * X, 3 * X + 1, 3 * X + 2);
+    };
+    const goals = [...new Set(T12.map(coordFor))];
+    const mirrors = [...new Set(E.ROT24.map(R => E.mul(E.MIRROR, R))
+      .filter(M => E.faceImg(M, 0) < 4).map(coordFor))];
+    if (goals.length !== 12 || mirrors.length !== 12) throw new Error('fc: goal/mirror count');
+    const goalSet = new Set(goals);
+    if (mirrors.some(c => goalSet.has(c))) throw new Error('fc: mirror overlaps goals');
+
+    // transitions: 3-edge placements (positions move by the inverse pull perm)
+    // and the white mask over orbit-A slots
+    const eNext = new Int32Array(NE3 * 16);
+    {
+      const ie = E.moveTables.map(t => {
+        const inv = new Array(12);
+        for (let s = 0; s < 12; s++) inv[t.eperm[s]] = s;
+        return inv;
+      });
+      const np = new Array(3);
+      for (let ix = 0; ix < NE3; ix++) {
+        const pos = edgePlaceUnrank(ix, 3);
+        for (let m = 0; m < 16; m++) {
+          const q = ie[m];
+          for (let i = 0; i < 3; i++) np[i] = q[pos[i]];
+          let v = 0, base = 12;
+          for (let i = 0; i < 3; i++) {
+            let r = np[i];
+            for (let j = 0; j < i; j++) if (np[j] < np[i]) r--;
+            v = v * base + r; base--;
+          }
+          eNext[ix * 16 + m] = v;
+        }
+      }
+    }
+    const mNext = new Int32Array(NMASK * 16);
+    {
+      const xpA = E.moveTables.map(t => {
+        const p = new Array(12);
+        for (let i = 0; i < 12; i++) {
+          if (t.xperm[i] >= 12) throw new Error('fc: orbit A not closed');
+          p[i] = t.xperm[i];
+        }
+        return p;
+      });
+      const pat = new Array(12);
+      for (let p0 = 0; p0 < 12; p0++) for (let p1 = p0 + 1; p1 < 12; p1++) for (let p2 = p1 + 1; p2 < 12; p2++) {
+        pat.fill(0); pat[p0] = 1; pat[p1] = 1; pat[p2] = 1;
+        const ix = maskIndex(p0, p1, p2);
+        for (let m = 0; m < 16; m++) {
+          const q = xpA[m];
+          let a = -1, b = -1, c = -1;
+          for (let i = 0; i < 12; i++) if (pat[q[i]]) { if (a < 0) a = i; else if (b < 0) b = i; else c = i; }
+          mNext[ix * 16 + m] = maskIndex(a, b, c);
+        }
+      }
+    }
+    const stepNative = (c, m) => eNext[((c / NMASK) | 0) * 16 + m] * NMASK + mNext[(c % NMASK) * 16 + m];
+
+    // generators: 16 native (axis rank 0 = tetrad-A face, 2 = tetrad-B face)
+    // + 8 slices (rank 1; Xs cw = X' then OPP(X), the engine's pinned desugar).
+    // axis = the pair's tetrad-A face; ranks canonicalize commuting same-axis
+    // runs during solution enumeration (all three layers of an axis commute).
+    const GENS = [];
+    for (let m = 0; m < 16; m++) {
+      const f = m >> 1;
+      GENS.push({ tok: E.MOVES[m], moves: [m], axis: f < 4 ? f : E.OPPF[f], rank: f < 4 ? 0 : 2 });
+    }
+    for (const f of ['U', 'F', 'R', 'L']) {
+      const fi = E.FIDX[f], op = E.OPPF[fi], axis = fi < 4 ? fi : op;
+      GENS.push({ tok: f + 's', moves: [2 * fi + 1, 2 * op], axis, rank: 1 });
+      GENS.push({ tok: f + "s'", moves: [2 * fi, 2 * op + 1], axis, rank: 1 });
+    }
+    const stepGen = (c, gi) => { for (const m of GENS[gi].moves) c = stepNative(c, m); return c; };
+
+    // goal closure under the landing face's own turns (structural self-check)
+    for (const c of goals) {
+      const X = decMaskFace(c % NMASK);
+      for (const d of [0, 1]) if (!goalSet.has(stepNative(c, 2 * X + d))) throw new Error('fc: goal not closed');
+    }
+    function decMaskFace(mk) {              // which face block a 3-slot mask fills (or -1)
+      for (let X = 0; X < 4; X++) if (mk === maskIndex(3 * X, 3 * X + 1, 3 * X + 2)) return X;
+      return -1;
+    }
+
+    // multi-source BFS, both metrics
+    const bfsFc = (nGens) => {
+      const dist = new Int8Array(NH1).fill(-1);
+      let frontier = [];
+      for (const g of goals) { dist[g] = 0; frontier.push(g); }
+      const hist = [frontier.length];
+      let d = 0;
+      while (frontier.length) {
+        const nf = [];
+        for (const c of frontier) {
+          for (let gi = 0; gi < nGens; gi++) {
+            const t = stepGen(c, gi);
+            if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
+          }
+        }
+        d++;
+        if (nf.length) hist.push(nf.length);
+        frontier = nf;
+      }
+      if (hist.reduce((x, y) => x + y, 0) !== NH1) throw new Error('fc: unreachable coordinates');
+      return { dist, hist };
+    };
+    const b16 = bfsFc(16), b24 = bfsFc(GENS.length);
+
+    const coordOf = (s) => edgePlaceIndex(s.ep, U_EDGES) * NMASK + maskOfColor(s.ctr, 0);
+    return {
+      N: NH1, U_EDGES, GENS, goals, goalSet, mirrors, T12,
+      dist16: b16.dist, dist24: b24.dist,
+      gn16: b16.hist.length - 1, gn24: b24.hist.length - 1,
+      hist16: b16.hist, hist24: b24.hist,
+      coordOf, stepNative, stepGen, landingFace: (c) => decMaskFace(c % NMASK),
+    };
+  }
+
   module.exports = {
     idbGet, idbPut, idbDel, KEY_PDB,
     NPAT, NCORNER, NE3, NE6, NMASK, NH1, B_SETS, A_SETS, C_SETS, HEX_EDGES, E6_PAIRS,
@@ -551,7 +707,7 @@
     encPattern, decPattern, encA, encB,
     permRank, evenPermUnrank, cornerIndex, cornerUnpack,
     edgePlaceIndex, edgePlaceUnrank,
-    buildPDBs, loadOrBuildPDBs,
+    buildPDBs, loadOrBuildPDBs, buildFirstCenter,
   };
   window.OOTables = module.exports;
 })();

@@ -33,10 +33,13 @@
 <script>new SiteNavbar({ active: 'trainer' }).mount(document.body);</script>
 <div id="root"></div>
 <!-- Shared puzzle engine + renderer (the same code the rest of the site uses
-     for diagrams). No table cache: the FTO trainer runs on setup scrambles;
-     js/tables.js (the M5 solver's pruning tables) is solver-page-only. -->
+     for diagrams), plus js/tables.js for the step trainers: the First center
+     mode builds its exact distance tables (buildFirstCenter, < 1 s, no
+     IndexedDB needed) on demand. Case drills still use setup scrambles only;
+     the M5 solver's big PDB bundle stays solver-page-only. -->
 <script src="js/engine.js?v=eab65226"></script>
 <script src="js/render.js?v=b5333e64"></script>
+<script src="js/tables.js?v=9e449f34"></script>
 <script>
 /* Trainer storage bridge.
    The bundled trainer reads/writes its whole state through window.storage
@@ -82,7 +85,7 @@
   function boot() {
     if (booted) return; booted = true; bootUid = curUid();
     var s = document.createElement('script');
-    s.src = 'js/trainer.js?v=6ca4a03d';
+    s.src = 'js/trainer.js?v=cd6de08f';
     document.body.appendChild(s);
   }
   if (A && A.whenReady) {

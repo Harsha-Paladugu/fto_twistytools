@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { createCore } from "./fto-core.mjs";
+import { createCore, SEP } from "./fto-core.mjs";
 
 // ============================================================
 // FTO trainer (M4) — case drill over the authored algorithm sheet
 //   Drill: setup scrambles (inverted case alg + random AUF) onto sheet
 //   cases, timed; Recap: one pass over every enabled case.
-// Further modes (full-solve timer/analysis, recognition, one-look) are
-// scoped with the user and arrive after M5's step solver (they need
-// pruning-table search, which the FTO state space denies the M-era BFS).
+//   First center: the first Bencisco step trainer — full random scrambles,
+//   the exact optimal move count for the white center as the challenge, all
+//   optimal solutions on reveal (exact BFS tables from js/tables.js,
+//   built on demand in well under a second; God's number 6 counting slice
+//   turns as one move, 7 in pure face turns — pinned in test-trainer).
+// Further step trainers (triples, second center, …) follow this pattern;
+// full-solve/recognition/one-look modes are scoped with the user.
 // ============================================================
 
 // ---------- shared site layers (loaded by trainer.html before this bundle) ----------
@@ -67,6 +71,13 @@ export default function FtoTrainer() {
   const [mode, setMode] = useState("drill");
   const [setupOpen, setSetupOpen] = useState(true);
 
+  // ---------- first-center step trainer ----------
+  const fcRef = useRef(null);                         // OOTables.buildFirstCenter bundle
+  const fcSolsCache = useRef(null);                   // { drill, res } — reveal memo
+  const [fcStatus, setFcStatus] = useState("idle");   // idle | building | ready | error
+  const [fcMetric, setFcMetric] = useState("token");  // token: slice turns count as 1
+  const [fcTarget, setFcTarget] = useState(0);        // 0 = any, else exact optimal length
+
   const model = () => modelRef.current;
   const subsetOn = useCallback((key) => {
     if (subsetSel === null) { const m = model(); return !!m && m.subsets.length > 0 && m.subsets[0].key === key; }
@@ -109,8 +120,10 @@ export default function FtoTrainer() {
             if (Array.isArray(d.caseOff)) setCaseOff(new Set(d.caseOff.filter((x) => typeof x === "string")));
             if (Array.isArray(d.caseKnown)) setCaseKnown(new Set(d.caseKnown.filter((x) => typeof x === "string")));
             if (["all", "learning", "known"].includes(d.scope)) setScope(d.scope);
-            if (["drill", "recap"].includes(d.mode)) setMode(d.mode);
+            if (["drill", "recap", "fc"].includes(d.mode)) setMode(d.mode);
             if (typeof d.setupOpen === "boolean") setSetupOpen(d.setupOpen);
+            if (["token", "native"].includes(d.fcMetric)) setFcMetric(d.fcMetric);
+            if (Number.isInteger(d.fcTarget) && d.fcTarget >= 0 && d.fcTarget <= 7) setFcTarget(d.fcTarget);
             if (d.caseStats && typeof d.caseStats === "object") {
               const cs = {};
               for (const [k, st] of Object.entries(d.caseStats)) {
@@ -143,10 +156,10 @@ export default function FtoTrainer() {
     try {
       window.storage.set(STORE_KEY, JSON.stringify({
         subsetSel, groupSel, caseOff: [...caseOff], caseKnown: [...caseKnown],
-        scope, mode, setupOpen, caseStats, ...over,
+        scope, mode, setupOpen, caseStats, fcMetric, fcTarget, ...over,
       })).catch(() => {});
     } catch (e) {}
-  }, [subsetSel, groupSel, caseOff, caseKnown, scope, mode, setupOpen, caseStats]);
+  }, [subsetSel, groupSel, caseOff, caseKnown, scope, mode, setupOpen, caseStats, fcMetric, fcTarget]);
   useEffect(() => {
     if (!loadedStore.current) return;
     clearTimeout(saveTimer.current);
@@ -174,6 +187,30 @@ export default function FtoTrainer() {
     return out;
   }, [ready, subsetOn, groupsOf, caseOff, caseKnown, scope]);
 
+  // ---------- first-center tables (built on demand, once) ----------
+  // The cleanup must reset the status when it cancels a pending build:
+  // otherwise leaving fc mode inside the defer window would strand
+  // fcStatus at "building" with no timer, bricking the mode until reload.
+  useEffect(() => {
+    if (mode !== "fc" || fcRef.current) return;
+    setFcStatus("building");
+    // defer past the paint so the "building" note shows during the ~quarter second
+    const id = setTimeout(() => {
+      try {
+        fcRef.current = window.OOTables.buildFirstCenter(E);
+        setFcStatus("ready");
+      } catch (e) {
+        setFcStatus("error: " + String((e && e.message) || e));
+      }
+    }, 30);
+    return () => { clearTimeout(id); if (!fcRef.current) setFcStatus("idle"); };
+  }, [mode]);
+  const fcGn = (metric) => {
+    const FC = fcRef.current;
+    if (FC) return metric === "native" ? FC.gn16 : FC.gn24;
+    return metric === "native" ? 7 : 6;   // the pinned values, until the build lands
+  };
+
   // ---------- problem generation ----------
   const nextDrill = useCallback(() => {
     if (!entries.length) { setCurrent(null); return; }
@@ -184,6 +221,18 @@ export default function FtoTrainer() {
     setCurrent(null);
   }, [entries]);
 
+  const nextFc = useCallback(() => {
+    const FC = fcRef.current;
+    if (!FC) { setCurrent(null); return; }
+    const d = core.makeFcDrill(FC, { metric: fcMetric, target: fcTarget });
+    if (!d) { setCurrent(null); return; }
+    setCurrent({
+      ...d, subset: "FC",
+      uid: "FC" + SEP + d.metric + "-" + d.optimal,
+      c: { name: "optimal " + d.optimal + (d.metric === "native" ? " (face turns)" : "") },
+    });
+  }, [fcMetric, fcTarget]);
+
   const startRecap = useCallback(() => {
     const queue = shuffled(entries);
     setRecap({ queue, idx: 0 });
@@ -191,6 +240,7 @@ export default function FtoTrainer() {
   }, [entries]);
 
   const advance = useCallback(() => {
+    if (mode === "fc") { nextFc(); return; }
     if (mode === "drill") { nextDrill(); return; }
     setRecap((r) => {
       if (!r) return r;
@@ -199,7 +249,7 @@ export default function FtoTrainer() {
       setCurrent(core.makeDrill(r.queue[idx]));
       return { ...r, idx };
     });
-  }, [mode, nextDrill]);
+  }, [mode, nextDrill, nextFc]);
 
   // Regenerate on boot/mode switch (stage reset) and on pool edits. A pool
   // edit only swaps the PENDING problem — it must not clear a stop-screen
@@ -211,10 +261,11 @@ export default function FtoTrainer() {
     const modeSwitch = genMode.current !== mode;
     genMode.current = mode;
     if (modeSwitch || phase === "running") { setPhase("ready"); setLast(null); }
-    if (mode === "drill") nextDrill();
+    if (mode === "fc") nextFc();
+    else if (mode === "drill") nextDrill();
     else startRecap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, mode, entries]);
+  }, [ready, mode, entries, fcStatus, fcMetric, fcTarget]);
 
   // ---------- timer ----------
   const tick = useCallback(() => {
@@ -259,7 +310,7 @@ export default function FtoTrainer() {
       const tag = e.target && e.target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (caseBrowser) { if (e.code === "Escape") setCaseBrowser(null); return; }
-      if (phase === "stopped" && e.code === "KeyK" && last) {
+      if (phase === "stopped" && e.code === "KeyK" && last && last.drill.kind !== "fc") {
         e.preventDefault();
         const k = last.drill.uid;
         setCaseKnown((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
@@ -351,6 +402,35 @@ export default function FtoTrainer() {
     );
   }
 
+  // ---------- optimal solutions for a finished first-center drill ----------
+  // Every line is re-proved on the full state before display (fcSolutions
+  // drops anything unproved); the chip names the face the white center lands
+  // on, read in the hold the solution itself leaves you in. Cached per drill
+  // at the parent level: this component is re-declared each render, so a
+  // local useMemo would not survive.
+  function FcSolutions({ drill }) {
+    const FC = fcRef.current;
+    if (!FC) return null;
+    let res;
+    if (fcSolsCache.current && fcSolsCache.current.drill === drill) res = fcSolsCache.current.res;
+    else { res = core.fcSolutions(FC, drill, 10); fcSolsCache.current = { drill, res }; }
+    return (
+      <div className="alglist">
+        <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>
+          {res.total} optimal solution{res.total === 1 ? "" : "s"}
+          {res.total > res.lines.length ? " · showing " + res.lines.length : ""} · chip = where the white center lands
+        </div>
+        {res.lines.map((l, i) => (
+          <div key={i} className="algrow">
+            <span className="ychip mono">{"→ " + l.landing}</span>
+            <AlgText text={l.text} />
+            {l.sliceCount ? <span className="ratetag">{l.sliceCount} slice{l.sliceCount === 1 ? "" : "s"}</span> : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   // ---------- case browser modal ----------
   function CaseBrowser({ subKey }) {
     const sub = model().subsets.find((s) => s.key === subKey);
@@ -426,18 +506,73 @@ export default function FtoTrainer() {
 
         <div className="chips" style={{ alignItems: "center" }}>
           <div className="modes">
-            {[["drill", "Drill"], ["recap", "Recap"]].map(([v, l]) => (
+            {[["drill", "Drill"], ["recap", "Recap"], ["fc", "First center"]].map(([v, l]) => (
               <button key={v} className={"mode" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
             ))}
           </div>
-          <span className="grouplabel">practice</span>
-          <div className="modes">
-            {[["all", "All"], ["learning", "Learning"], ["known", "Known"]].map(([v, l]) => (
-              <button key={v} className={"mode" + (scope === v ? " on" : "")} onClick={() => setScope(v)}>{l}</button>
-            ))}
-          </div>
+          {mode !== "fc" && <>
+            <span className="grouplabel">practice</span>
+            <div className="modes">
+              {[["all", "All"], ["learning", "Learning"], ["known", "Known"]].map(([v, l]) => (
+                <button key={v} className={"mode" + (scope === v ? " on" : "")} onClick={() => setScope(v)}>{l}</button>
+              ))}
+            </div>
+          </>}
         </div>
 
+        {mode === "fc" ? (
+          <div className="card setupcard">
+            <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
+              <strong>Setup</strong>
+              <span className="setupsum">
+                white center · optimal length {fcTarget === 0 ? "any" : fcTarget}
+                {fcMetric === "native" ? " · face turns" : ""}
+              </span>
+              <span className="chev">{setupOpen ? "▾" : "▸"}</span>
+            </button>
+            {setupOpen && (
+              <div className="setupbody">
+                <div className="chips" style={{ alignItems: "center" }}>
+                  <span className="grouplabel">counting</span>
+                  <div className="modes">
+                    <button className={"mode" + (fcMetric === "token" ? " on" : "")}
+                      onClick={() => { setFcMetric("token"); if (fcTarget > fcGn("token")) setFcTarget(0); }}>slice turns = 1 move</button>
+                    <button className={"mode" + (fcMetric === "native" ? " on" : "")}
+                      onClick={() => { setFcMetric("native"); }}>face turns only</button>
+                  </div>
+                </div>
+                <div className="chips" style={{ alignItems: "center" }}>
+                  <span className="grouplabel">optimal length</span>
+                  <div className="modes">
+                    <button className={"mode" + (fcTarget === 0 ? " on" : "")} onClick={() => setFcTarget(0)}>any</button>
+                    {Array.from({ length: fcGn(fcMetric) }, (_, i) => i + 1).map((n) => {
+                      const FC = fcRef.current;
+                      const hist = FC ? (fcMetric === "native" ? FC.hist16 : FC.hist24) : null;
+                      const pct = hist ? (100 * hist[n] / FC.N) : null;
+                      return (
+                        <button key={n} className={"mode" + (fcTarget === n ? " on" : "")}
+                          title={pct != null ? pct.toFixed(pct < 1 ? 2 : 1) + "% of positions" : ""}
+                          onClick={() => setFcTarget(n)}>{n}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
+                  Scramble with white on top, then build the white center: the three white-sticker
+                  edges plus the three white triangles, grouped into a hexagon around any face where
+                  white can live. The move count shown with each scramble is exact. Try to hit it.
+                  God&apos;s number for this step is {fcMetric === "native" ? "7 face turns" : "6 moves counting a slice turn as one"}
+                  {fcMetric === "native" ? "" : " (7 in pure face turns)"}: no scramble ever needs more.
+                </div>
+                <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
+                  Watch for the false solve: the mirror formation (all six white stickers in place but
+                  the side colors in reverse order around the hexagon) can never survive a full solve,
+                  and it sits at exactly God&apos;s number from a real center.
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="card setupcard">
           <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
             <strong>Setup</strong>
@@ -476,6 +611,7 @@ export default function FtoTrainer() {
             </div>
           )}
         </div>
+        )}
 
         {mode === "recap" && recap && recap.queue.length > 0 && (
           <div className="recapbar">
@@ -501,7 +637,11 @@ export default function FtoTrainer() {
         ) : !current ? (
           <div className="stage" style={{ cursor: "default" }}>
             <div className="empty" style={{ padding: "40px 0", textAlign: "center" }}>
-              {entries.length === 0
+              {mode === "fc"
+                ? (fcStatus.startsWith("error") ? "Couldn’t build the first-center tables: " + fcStatus.slice(7)
+                  : fcStatus === "ready" ? "Couldn’t generate a scramble. Try another optimal length."
+                  : "Building the first-center distance tables… (a moment, first time only)")
+                : entries.length === 0
                 ? (scope === "learning" ? "Nothing left to learn in this selection — every enabled case is marked known."
                   : scope === "known" ? "No cases marked known yet in this selection."
                   : "Pick at least one subset and group in Setup to start.")
@@ -514,6 +654,12 @@ export default function FtoTrainer() {
               <div className="scramble">{current.scramble}</div>
               <Net state={current.state} w={240} />
             </div>
+            {current.kind === "fc" && (
+              <div className="hint" style={{ marginTop: 6 }}>
+                white center in <strong>{current.optimal}</strong> move{current.optimal === 1 ? "" : "s"}
+                {current.metric === "native" ? " (face turns)" : ""}
+              </div>
+            )}
             <div className={"timer" + (phase === "running" ? " running" : "")}>{fmt(elapsed)}</div>
             {phase === "stopped" && last ? (
               <div className="reveal" onPointerDown={(e) => e.stopPropagation()}>
@@ -522,7 +668,7 @@ export default function FtoTrainer() {
                 </span>
                 <span className="casename">{last.drill.c.name}</span>
                 {last.drill.c.group ? <span className="bartag">{last.drill.c.group}</span> : null}
-                {(() => {
+                {last.drill.kind !== "fc" && (() => {
                   const k = last.drill.uid;
                   const isK = caseKnown.has(k);
                   return (
@@ -538,8 +684,14 @@ export default function FtoTrainer() {
             )}
             {phase === "stopped" && last ? (
               <div className="analysis" onPointerDown={(e) => e.stopPropagation()}>
-                {last.drill.c.recognition ? <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>{last.drill.c.recognition}</div> : null}
-                <AlgList drill={last.drill} />
+                {last.drill.kind === "fc" ? (
+                  <FcSolutions drill={last.drill} />
+                ) : (
+                  <>
+                    {last.drill.c.recognition ? <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>{last.drill.c.recognition}</div> : null}
+                    <AlgList drill={last.drill} />
+                  </>
+                )}
               </div>
             ) : null}
           </div>

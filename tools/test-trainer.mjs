@@ -1,4 +1,4 @@
-/* fto.twistytools.com — trainer substrate tests (src/trainer/fto-core.mjs). M4.
+/* fto.twistytools.com — trainer substrate tests (src/trainer/fto-core.mjs). M4+.
  *
  * Asserts the trainer's math against the shared FTO engine: the case model
  * over data/fto_algs.json (counts, groups, dialect plumbing), the native-move
@@ -7,8 +7,13 @@
  * the scramble reproduces the shown state from solved, and undoing the AUF
  * then running the case's alg (in its authored hold dialect) solves it.
  *
- * No distance tables anywhere (the FTO state space has no full-state BFS) —
- * this suite is light, unlike its Skewb ancestor.
+ * Plus the FIRST CENTER step trainer (the first Bencisco step mode): the
+ * white-hexagon goal set (12 formations, 3 per tetrad-A face), the exact BFS
+ * distance tables over the 290,400-state coordinate, God's number pinned in
+ * both metrics (7 face turns; 6 with slice turns at unit cost), the mirror
+ * false-solve fact (visually complete, unsolvable, at exactly God's number),
+ * and every drill + displayed solution re-proved on full states. Derivation
+ * 2026-07-13, adversarially reviewed; docs/fto-ground-truth.md §Methods.
  *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
  */
@@ -21,7 +26,9 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 globalThis.window = {};
 require(path.join(ROOT, 'js', 'engine.js'));
+require(path.join(ROOT, 'js', 'tables.js'));
 const E = globalThis.window.OOEngine;
+const T = globalThis.window.OOTables;
 
 const { createCore, SEP, AUF, AUF_UNDO } = await import('../src/trainer/fto-core.mjs');
 const core = createCore(E);
@@ -238,6 +245,129 @@ t('unusable algs: broken text is skipped for anchor; all-broken case yields no d
 t('exports: AUF/AUF_UNDO are inverse token pairs', () =>
   AUF.length === 3 && AUF_UNDO.length === 3 && AUF[0] === '' && AUF_UNDO[0] === '' &&
   AUF[1] === 'U' && AUF_UNDO[1] === "U'" && AUF[2] === "U'" && AUF_UNDO[2] === 'U');
+
+// ================ first-center step trainer ================
+const FC = T.buildFirstCenter(E);
+const FC_HIST16 = [12, 72, 648, 5868, 39780, 139368, 102900, 1752];
+const FC_HIST24 = [12, 72, 936, 11412, 82548, 172248, 23172];
+
+// synthetic full state realizing a coordinate (predicates read ep/ctr only;
+// the fill for the untracked pieces is arbitrary)
+function fcStateWithCoord(c) {
+  const st = E.solved();
+  const pos = T.edgePlaceUnrank((c / T.NMASK) | 0, 3);
+  const ep = new Array(12).fill(-1);
+  pos.forEach((s, i) => { ep[s] = FC.U_EDGES[i]; });
+  const rest = [...Array(12).keys()].filter((q) => !FC.U_EDGES.includes(q));
+  let ri = 0;
+  for (let s = 0; s < 12; s++) if (ep[s] < 0) ep[s] = rest[ri++];
+  st.ep = ep;
+  const mk = c % T.NMASK;
+  let mpos = null;
+  outer: for (let a = 0; a < 12; a++) for (let b = a + 1; b < 12; b++) for (let d = b + 1; d < 12; d++)
+    if (T.maskIndex(a, b, d) === mk) { mpos = [a, b, d]; break outer; }
+  const fill = [1, 1, 1, 2, 2, 2, 3, 3, 3];
+  let fi = 0;
+  for (let i = 0; i < 12; i++) st.ctr[i] = mpos.includes(i) ? 0 : fill[fi++];
+  return st;
+}
+
+t('FC: coordinate space 290,400; 12 goals, 3 per tetrad-A face; 12 disjoint mirrors', () => {
+  if (FC.N !== 290400 || FC.goals.length !== 12 || FC.mirrors.length !== 12) return false;
+  if (FC.mirrors.some((c) => FC.goalSet.has(c))) return false;
+  const perFace = [0, 1, 2, 3].map((X) => FC.goals.filter((c) => FC.landingFace(c) === X).length);
+  return perFace.every((n) => n === 3);
+});
+t("FC: God's number pinned — 7 face turns, 6 with slice turns at unit cost", () =>
+  FC.gn16 === 7 && FC.gn24 === 6);
+t('FC: exact depth histograms pinned (both metrics; all coordinates reached)', () =>
+  FC.hist16.join() === FC_HIST16.join() && FC.hist24.join() === FC_HIST24.join() &&
+  FC_HIST16.reduce((a, b) => a + b, 0) === 290400 && FC_HIST24.reduce((a, b) => a + b, 0) === 290400);
+t("FC: the 12 mirror false-solves sit at exactly God's number in both metrics", () =>
+  FC.mirrors.every((c) => FC.dist16[c] === FC.gn16 && FC.dist24[c] === FC.gn24));
+t('FC: mirror formations look complete at facelet level (the trap is real)', () =>
+  FC.mirrors.every((c) => {
+    const st = fcStateWithCoord(c);
+    if (FC.coordOf(st) !== c) return false;
+    const X = FC.landingFace(c);
+    const fl = E.toFacelets(st);
+    return [1, 2, 3, 5, 6, 7].every((p) => fl[9 * X + p] === 0);   // centre + edge stickers all white
+  }));
+t('fcStateOK: accepts all 12 goal formations, rejects all 12 mirrors', () =>
+  FC.goals.every((c) => core.fcStateOK(FC, fcStateWithCoord(c))) &&
+  FC.mirrors.every((c) => !core.fcStateOK(FC, fcStateWithCoord(c))));
+t('FC: coordOf tracks the engine through 50 random scrambles; dist 0 ⇔ fcStateOK', () => {
+  for (let i = 0; i < 50; i++) {
+    let st = E.solved();
+    let c = FC.coordOf(st);
+    const scr = E.randomScramble(30, Math.random);
+    E.walkParsed(E.parseAlg(scr), (m) => { st = E.move(st, m); c = FC.stepNative(c, m); });
+    if (FC.coordOf(st) !== c) return false;
+    if ((FC.dist24[c] === 0) !== core.fcStateOK(FC, st)) return false;
+    if ((FC.dist16[c] === 0) !== (FC.dist24[c] === 0)) return false;
+  }
+  return true;
+});
+t('FC: all 24 generators match the engine on a random state (parse → same coordinate)', () => {
+  const st = E.applyParsed(E.parseAlg(E.randomScramble(25, Math.random)), E.solved());
+  const c = FC.coordOf(st);
+  return FC.GENS.every((g, gi) =>
+    FC.stepGen(c, gi) === FC.coordOf(E.applyParsed(E.parseAlg(g.tok), st)));
+});
+t('makeFcDrill: any target — 30 plain face letters, machine-verified, optimal in 1..gn', () => {
+  for (const metric of ['token', 'native']) {
+    for (let i = 0; i < 5; i++) {
+      const d = core.makeFcDrill(FC, { metric, target: 0 });
+      if (!d || !core.verifyFcDrill(FC, d)) return false;
+      const toks = d.scramble.split(/\s+/);
+      if (toks.length !== 30 || !toks.every((x) => FACE_TOK.test(x))) return false;
+      const gn = metric === 'native' ? FC.gn16 : FC.gn24;
+      if (d.optimal < 1 || d.optimal > gn) return false;
+    }
+  }
+  return true;
+});
+t('makeFcDrill: exact-N hits every level 1..gn in both metrics', () => {
+  for (const metric of ['token', 'native']) {
+    const gn = metric === 'native' ? FC.gn16 : FC.gn24;
+    for (let n = 1; n <= gn; n++) {
+      const d = core.makeFcDrill(FC, { metric, target: n });
+      if (!d || d.optimal !== n || !core.verifyFcDrill(FC, d)) return false;
+    }
+  }
+  return true;
+});
+t('fcSolutions: every displayed line re-proved on the full state, token count = optimal,\n  landing face correct through the walked hold, none dropped', () => {
+  for (const metric of ['token', 'native']) {
+    for (let i = 0; i < 8; i++) {
+      const d = core.makeFcDrill(FC, { metric, target: 0 });
+      const res = core.fcSolutions(FC, d, 10);
+      if (!res.lines.length || res.dropped !== 0 || res.total < res.lines.length) return false;
+      for (const l of res.lines) {
+        const parsed = E.parseAlg(l.text);
+        if (E.countMoves(parsed) !== d.optimal) return false;
+        if (metric === 'native' && /s/.test(l.text)) return false;   // no slices in the pure metric
+        const st2 = E.applyParsed(parsed, d.state);
+        if (!core.fcStateOK(FC, st2)) return false;
+        let X = -1;
+        for (let f = 0; f < 4; f++) if (st2.ctr[3 * f] === 0 && st2.ctr[3 * f + 1] === 0 && st2.ctr[3 * f + 2] === 0) X = f;
+        const hold = E.walkParsed(parsed, () => {});
+        if (hold[E.FIDX[l.landing]] !== X) return false;
+      }
+    }
+  }
+  return true;
+});
+t('makeFcDrill: a stuck injected rng exhausts the attempt cap and returns null (no hang)', () =>
+  core.makeFcDrill(FC, { metric: 'token', target: 3 }, () => 0) === null);
+t('verifyFcDrill: rejects a tampered state, scramble, coordinate, or optimal', () => {
+  const d = core.makeFcDrill(FC, { metric: 'token', target: 0 });
+  if (!core.verifyFcDrill(FC, d)) return false;
+  return !core.verifyFcDrill(FC, { ...d, state: E.move(d.state, 0) }) &&
+    !core.verifyFcDrill(FC, { ...d, scramble: d.scramble + ' R' }) &&
+    !core.verifyFcDrill(FC, { ...d, coord: (d.coord + 1) % FC.N }) &&
+    !core.verifyFcDrill(FC, { ...d, optimal: d.optimal + 1 });
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

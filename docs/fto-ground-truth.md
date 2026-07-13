@@ -328,6 +328,31 @@ The USER supplies the actual sheets; this section is context, not authority.
   dead-end for the fixed hold, resolved by re-anchoring the method via a
   whole-puzzle pre-rotation (~1 in 25 random scrambles; the solver's
   'auto' orientation ladder).
+- **First-center step space (trainer derivation, machine-verified 2026-07-13,
+  independently re-verified by a second BFS with a different encoding)**: a
+  correctly-solved Bencisco FIRST CENTER — the white hexagon (U's 3 edge
+  pieces + the 3 white centre triangles) formed on ANY tetrad-A face — is
+  exactly one of **12 formations**: 3 per candidate face, the restrictions of
+  the 12 tetrad-preserving proper rotations of solved. Edge orientation is
+  forced (an edge shows its tetrad-A color on the slot's tetrad-A face at
+  EVERY slot), so the other 3 all-white edge orders per face — the improper
+  (mirror) restrictions — display a visually complete hexagon that can never
+  survive a full solve: **false solves**. Over the 290,400-state coordinate
+  (1,320 placements of U's edges × 220 white-triangle masks; all reachable):
+  **God's number = 7 face turns** (depth histogram 12 / 72 / 648 / 5,868 /
+  39,780 / 139,368 / 102,900 / 1,752) and **= 6 when slice turns count as one
+  move** (12 / 72 / 936 / 11,412 / 82,548 / 172,248 / 23,172); the 12 mirror
+  false-solves sit at EXACTLY God's number in both metrics. Fixed-frame
+  exact-home variant (the solver's H1 shape): eccentricity 9. Supporting
+  pins for the trainer's displayed solutions: face-axis rotations generate
+  exactly the 12 tetrad-preserving CIF holds (A4), and from each of them
+  every fixed-frame face move or slice is spellable by exactly one token, so
+  the hold-aware respelling never gets stuck and never costs extra moves; a
+  single wide token's state effect is exactly one native move (16/16 — wides
+  can never beat the token metric); the hold-rotation-after-wide/slice
+  reading is pinned NON-circularly by the LBT sheet's case 7 "same alg
+  notated differently" twin (the wide spelling only reproduces its plain
+  twin's letters under it). All pinned in tools/test-trainer.mjs.
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶
