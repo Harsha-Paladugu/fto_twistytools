@@ -190,7 +190,7 @@ for (const c of J.subsets.TCP.cases) {
   const cs = E.caseStateOf(c.algs[0].alg, 'cif');
   if (pageKeys.has(E.stateKey(cs))) tcpHits++;
 }
-if (tcpHits < 16) fail('TCP cross-check: only ' + tcpHits + ' of 18 TCP states found (expected 16: TCP 11/12 appear as working-slot variants)');
+if (tcpHits !== 16) fail('TCP cross-check: only ' + tcpHits + ' of 18 TCP states found (expected 16: TCP 11/12 appear as working-slot variants)');
 
 // ---- assemble the subset ----
 const GROUPS = ['OLP 1', 'OLP 2', 'OLP 3', 'OLP 4a', 'OLP 4b', 'OLP 4c', 'OLP 5', 'OLP 6a', 'OLP 6b', 'OLP 6c', 'OLP 7', 'OLP 8'];
