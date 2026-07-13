@@ -196,22 +196,39 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   identity fold; widening re-keys the sheet). Exit gate: `npm run build` +
   `check:fresh` fully green with REAL data, every imported alg
   machine-verified to solve its case, algs.html verified in headless Edge.
-- [ ] **M4 — Trainer.** BLOCKED ON USER INPUT: which training tools. The chassis
-  ports (rAF timer, storage blob under a NEW key `fto-trainer-v1`, session
-  pills, per-case stats, recap queue, runtime JSON fetch) — but NOT as-is: the
-  inherited dist-table wiring (`OOTables.loadOrBuildDist` at trainer boot and
-  the skewb-core BFS goal tables) would attempt a full-state BFS and crash on
-  FTO, so it is stripped/guarded at M4 — case-drill uses setup scrambles only,
-  no distance table. Case-drill mode is
-  buildable from the M3 data alone (setup-scramble = randomized inverse of the
-  case state + masking decisions per the user's spec); further modes (full-solve
-  timer/analysis, recognition variants, one-look) are scoped when the user
-  specs them. Carry-item from the M2 review: the inherited trainer's mask sets
-  are SKEWB facelet indices (0..29) — every mask must be reauthored for the
-  FTO's 0..71 indexing when the trainer is rewritten. Any mode needing "N moves from a solved step" uses the M5 pruning
-  tables, so sequence trainer-analysis features AFTER M5 if they're wanted.
-  Exit gate: `npm run test:trainer` green over the new substrate; headless-Edge
-  E2E drives every shipped mode.
+- [x] **M4 — Trainer (case-drill v1)** (2026-07-13). trainer.html is LIVE.
+  `src/trainer/` REWRITTEN: `fto-core.mjs` (substrate; no React) +
+  `fto-trainer.jsx` (component); the inherited `skewb-core.mjs`/
+  `skewb-trainer.jsx` are DELETED, and with them every dist-table dependency —
+  the trainer no longer loads `js/tables.js` at all (`OOTables.loadOrBuildDist`
+  would full-state-BFS and crash on FTO; tables.js is now dead code on every
+  page until the M5 rewrite). Scrambles are SETUP scrambles as planned, with
+  one design refinement: **inverting at the resolved-native-move level** —
+  `walkParsed` flattens the case alg (brackets, o/T rotations, wides, dialect
+  hold model included) to absolute face moves; reversed + inverted + merged
+  (same-face cancel) + a random AUF (U-layer pre-turn, the way a last-layer
+  case appears mid-solve; subsets can opt out with `auf: false`). The engine's
+  textual `invertAlg` is NOT used (undefined for brackets, wrong across a
+  fresh hold for rotation algs). Scrambles therefore come out as plain face
+  letters, executable from the scrambling hold. Reveal shows a per-alg AUF
+  chip (`rowAufToken`) + the verbatim alg text. Chassis shipped: drill +
+  recap, rAF timer with tap guard, pool setup (subsets/groups/case browser/
+  known marks/scope), per-case + per-subset stats with diagram grid, session
+  pills, storage under the NEW key `fto-trainer-v1` (strict shape validation;
+  the trainer.html cloud/localStorage bridge unchanged). The Skewb mask
+  reauthoring carry-item DISSOLVED: v1 ships no masked diagrams (the M2
+  renderer's mask hook stays for future modes). Exit gate met:
+  `npm run test:trainer` 26 tests green (model, walkParsed-exact flattening,
+  merge/cancel effect-preservation, every case × every AUF re-proved to
+  solve, EIF-dialect plumbing, broken-data degradation) and a headless-Edge
+  CDP E2E (19 checks: boot, scramble sanity through the page engine, 72-
+  polygon diagram, timer keyboard flow, reveal, known-marking, recap
+  progression, case browser, `fto-trainer-v1` persistence, 0 console
+  errors). REMAINING (user input): further modes — full-solve timer/analysis,
+  recognition variants, one-look — scoped when the user specs them; any mode
+  needing "N moves from a solved step" uses the M5 pruning tables, so
+  trainer-analysis features sequence AFTER M5. Random-state scrambles for
+  full-solve arrive with M5 (upgrade path in the table above).
 - [ ] **M5 — Solver.** The headline feature: step-by-step best-human solution.
   Prior art exists and de-risks this: cubing.js vendors xyzzy's random-state
   FTO solver (3-phase IDA* + BFS pruning tables, phase spaces exactly
@@ -288,7 +305,9 @@ their consumers with them milestone by milestone (see M1/M4/M5).
 - Algorithm sheet sources + formats (M3 blocker) — and with them the method
   lineup the solver targets (M5) and the case-key symmetry fold (M1 finalizes
   conservatively, revisit at M3).
-- Trainer tool lineup (M4 blocker).
+- Trainer tool lineup beyond case drill (M4 shipped drill + recap from the M3
+  data; full-solve/recognition/one-look modes await the user's spec, and the
+  analysis-flavored ones want M5's tables first).
 - Notation presentation: the 8 face letters are settled, but rotation spelling
   (`Ro` vs `Rv` vs `[R]`), slice spelling (`Rs` vs `2U` vs lowercase), and
   lowercase-means-wide-or-slice are NOT community-settled (ground-truth

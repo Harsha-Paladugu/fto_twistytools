@@ -1,18 +1,21 @@
-/* Skewbiks.com — trainer substrate tests (src/trainer/skewb-core.mjs).
+/* fto.twistytools.com — trainer substrate tests (src/trainer/fto-core.mjs). M4.
  *
- * Asserts the M6 trainer's math against the shared engine: the case model over
- * data/skewb_algs.json (counts, presentation geometry, direction synthesis),
- * masked scrambles (correctness + length window), the first-layer predicate +
- * goal seeds + goal-distance table, and the full-solve analysis.
+ * Asserts the trainer's math against the shared FTO engine: the case model
+ * over data/fto_algs.json (counts, groups, dialect plumbing), the native-move
+ * flattening (walkParsed-exact, brackets/rotations/wides included), the
+ * merge/cancel pass, and the setup scrambles — every drill machine-verified:
+ * the scramble reproduces the shown state from solved, and undoing the AUF
+ * then running the case's alg (in its authored hold dialect) solves it.
+ *
+ * No distance tables anywhere (the FTO state space has no full-state BFS) —
+ * this suite is light, unlike its Skewb ancestor.
  *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
- * Heavier than test-engine: builds TWO full-space BFS tables (dist + FL-dist).
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { buildDist } from './lib/bfs-dist.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,7 +23,7 @@ globalThis.window = {};
 require(path.join(ROOT, 'js', 'engine.js'));
 const E = globalThis.window.OOEngine;
 
-const { createCore, DIRS, Y_PREFIX } = await import('../src/trainer/skewb-core.mjs');
+const { createCore, SEP, AUF, AUF_UNDO } = await import('../src/trainer/fto-core.mjs');
 const core = createCore(E);
 
 let passed = 0, failed = 0;
@@ -33,316 +36,198 @@ function t(name, fn) {
     console.log('✗ ' + name + '\n    ' + (e && e.message)); failed++;
   }
 }
-const rndInt = (n) => Math.floor(Math.random() * n);
-const applyWca = (alg, st) => E.applyParsed(E.parseAlg(E.preprocessAlg(alg)), st, null, E.makeFrames());
+const FACE_TOK = /^(U|F|R|L|D|B|BR|BL)'?$/;
+const U_CW = 2 * E.FIDX.U, U_CCW = U_CW + 1;
+const applyAlg = (alg, st, dialect) => E.applyParsed(E.parseAlg(alg), st, dialect);
+const foldNatives = (mis, st) => mis.reduce((s, m) => E.move(s, m), st);
 
 // ---------------- case model ----------------
-const JSON_DATA = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'skewb_algs.json'), 'utf8'));
+const JSON_DATA = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'fto_algs.json'), 'utf8'));
 const model = core.buildModel(JSON_DATA);
+const ALL_CASES = model.subsets.flatMap((s) => s.cases);
 
-t('model: empty subsets skipped, imported three present', () => {
-  const keys = model.subsets.map((s) => s.key);
-  return keys.length === 3 && keys.includes('NS') && keys.includes('EG2') && keys.includes('TCLL');
+t('model: TCP present; empty subsets skipped; counts match the JSON', () => {
+  const jsonSubsets = Object.entries(JSON_DATA.subsets).filter(([, s]) => s.cases && s.cases.length);
+  if (model.subsets.length !== jsonSubsets.length) return false;
+  const jsonCases = jsonSubsets.reduce((a, [, s]) => a + s.cases.length, 0);
+  const jsonAlgs = jsonSubsets.reduce((a, [, s]) => a + s.cases.reduce((b, c) => b + c.algs.length, 0), 0);
+  const cases = ALL_CASES.length;
+  const algs = ALL_CASES.reduce((a, c) => a + c.algs.length, 0);
+  return model.subsets.some((s) => s.key === 'TCP') && cases === jsonCases && algs === jsonAlgs && cases > 0;
 });
-t('model: keeps every case and alg the JSON carries', () => {
-  const jsonCases = Object.values(JSON_DATA.subsets).reduce((a, s) => a + s.cases.length, 0);
-  const jsonAlgs = Object.values(JSON_DATA.subsets).reduce((a, s) => a + s.cases.reduce((b, c) => b + c.algs.length, 0), 0);
-  const cases = model.subsets.reduce((a, s) => a + s.cases.length, 0);
-  const algs = model.subsets.reduce((a, s) => a + s.cases.reduce((b, c) => b + c.algs.length, 0), 0);
-  return jsonCases > 0 && cases === jsonCases && algs === jsonAlgs;
-});
-t('model: nav groups partition every subset (no strays)', () =>
+t('model: uid = subset␟name; dialect cif; AUF randomization on', () =>
+  ALL_CASES.every((c) => c.uid === c.subset + SEP + c.name && c.dialect === 'cif' && c.auf === true));
+t('model: authored groups partition every subset, no strays', () =>
   model.subsets.every((s) =>
     s.groups.reduce((a, g) => a + g.cases.length, 0) === s.cases.length &&
     !s.groups.some((g) => g.label === 'Other')));
-t('model: navSorted orders EG2 by the authored id order', () => {
-  const eg2 = model.subsets.find((s) => s.key === 'EG2');
-  const sorted = core.navSorted(eg2, eg2.groups[0].cases);
-  const order = eg2.nav.sort.order; // ['U','FL','FR','BR','BL']
-  const ids = sorted.map((c) => order.indexOf(c[eg2.nav.sort.field]));
-  return ids.every((v, i) => i === 0 || ids[i - 1] <= v);
+t('model: TCP groups are Even/Odd/2-Flip at 6 cases each', () => {
+  const tcp = model.subsets.find((s) => s.key === 'TCP');
+  return tcp.groups.map((g) => g.value).join(',') === 'Even,Odd,2-Flip' &&
+    tcp.groups.every((g) => g.cases.length === 6);
 });
+t('model: empty-subset shells are skipped', () =>
+  core.buildModel({ subsets: { X: { cases: [] }, Y: {} } }).subsets.length === 0);
 
-// sample cases spread across the subsets for the geometry tests
-const SAMPLE = [];
-for (const s of model.subsets) {
-  for (let i = 0; i < 10; i++) SAMPLE.push(s.cases[rndInt(s.cases.length)]);
-}
-
-t('casePres: anchors parse; 4 states; ≤2 canons; Front/Back + Right/Left pair', () =>
-  SAMPLE.every((c) => {
-    const cp = core.casePres(c);
-    if (!cp.ok) return false;
-    return cp.states.length === 4 && cp.canons.length <= 2 &&
-      E.realCanonKey(cp.states[0]) === E.realCanonKey(cp.states[2]) &&
-      E.realCanonKey(cp.states[1]) === E.realCanonKey(cp.states[3]);
+// ---------------- native-move flattening ----------------
+t('caseSpec: every case usable; every authored alg parses to natives + a state', () =>
+  ALL_CASES.every((c) => {
+    const spec = core.caseSpec(c);
+    return spec.ok && spec.rows.length === c.algs.length &&
+      spec.rows.every((r) => r.natives && r.natives.every((m) => Number.isInteger(m) && m >= 0 && m < 16) && r.state);
   }));
-t('casePres: every case in the sheet has a usable anchor', () =>
-  model.subsets.every((s) => s.cases.every((c) => core.casePres(c).ok)));
-t('algsForDir: prependAUF(k, core) solves the shown state, all 4 directions', () =>
-  SAMPLE.slice(0, 12).every((c) => [0, 1, 2, 3].every((d) => {
-    const st = core.stateForDir(c, d);
-    const rows = core.algsForDir(c, d);
-    if (!st || !rows.length) return false;
-    const r = rows[0];
-    const alg = r.k ? E.prependAUF(r.k, r.core) : r.core;
-    return E.algSolvesKey(alg, E.stateKey(st));
-  })));
-t('y² view: stateForDir(d+2) is the y²-sym image of stateForDir(d)', () => {
-  const y2 = E.symFromFacePerm({ U: 'U', D: 'D', F: 'B', B: 'F', R: 'L', L: 'R' }, false);
-  return SAMPLE.slice(0, 12).every((c) => {
-    const a = core.stateForDir(c, 0), b = core.stateForDir(c, 2);
-    return E.stateKey(y2.apply(a)) === E.stateKey(b);
-  });
-});
-t('firstMoveOf: agrees with the imported firstMove field on a sample', () =>
-  SAMPLE.every((c) => {
-    const rows = core.algsForDir(c, 0).filter((r) => r.a.firstMove && !r.a.suspect);
-    return rows.every((r) => core.firstMoveOf({ ...r, a: { ...r.a, firstMove: null } }) === r.a.firstMove
-      || r.a.firstMoveSheet !== undefined); // known import disagreements carry firstMoveSheet
-  }));
+t('caseSpec: memoized (same object on the second call)', () =>
+  core.caseSpec(ALL_CASES[0]) === core.caseSpec(ALL_CASES[0]));
+t('nativeMovesOf ≡ the alg\'s state effect (brackets/rotations flatten exactly)', () =>
+  ALL_CASES.every((c) => core.caseSpec(c).rows.every((r) =>
+    E.eq(foldNatives(r.natives, E.solved()), applyAlg(r.a.alg, E.solved(), r.dialect)))));
+t('nativeMovesOf: null on unparseable text, impossible bracket, or move-free alg', () =>
+  core.nativeMovesOf('Q7 zz', 'cif') === null &&
+  core.nativeMovesOf('{U,D} R', 'cif') === null &&      // opposite faces: impossible hold
+  core.nativeMovesOf("Uo T'", 'cif') === null);          // rotations only, no moves
+t('anchor alg sits at AUF offset 0 of its own case', () =>
+  ALL_CASES.every((c) => core.caseSpec(c).anchor.k === 0));
 
-// ---------------- distance table + scrambles ----------------
-console.log('building dist table (full-space BFS)…');
-const dist = buildDist(E);
-
-t('randomReachable: samples land on reachable states', () => {
-  for (let i = 0; i < 20; i++) if (dist[E.idx(core.randomReachable(dist))] < 0) return false;
-  return true;
+// ---------------- mergeMoves ----------------
+t('mergeMoves: X X → X\'; X X\' → (nothing); X X X → (nothing)', () => {
+  const U = U_CW, Up = U_CCW;
+  return core.mergeMoves([U, U]).join() === String(Up) &&
+    core.mergeMoves([U, Up]).length === 0 &&
+    core.mergeMoves([U, U, U]).length === 0;
 });
-t('masked scramble: solves to the exact target state (30 case×dir samples)', () => {
-  for (let i = 0; i < 30; i++) {
-    const c = SAMPLE[rndInt(SAMPLE.length)];
-    const st = core.stateForDir(c, rndInt(4));
-    const scr = core.maskedScramble(st, dist);
-    if (!scr) return false;
-    const got = applyWca(scr, E.solved());
-    if (E.stateKey(got) !== E.stateKey(st)) return false;
-  }
-  return true;
+t('mergeMoves: cancellation exposes the previous face (R U U\' R → R\')', () => {
+  const Rm = 2 * E.FIDX.R;
+  return core.mergeMoves([Rm, U_CW, U_CCW, Rm]).join() === String(Rm + 1);
 });
-t('masked scramble: length window [9,12] hit on ≥80% of 60 samples, never >12', () => {
-  let inWin = 0;
-  for (let i = 0; i < 60; i++) {
-    const c = SAMPLE[rndInt(SAMPLE.length)];
-    const scr = core.maskedScramble(core.stateForDir(c, rndInt(4)), dist);
-    const n = scr.split(/\s+/).length;
-    if (n > core.MASK_MAX) return false;
-    if (n >= core.MASK_MIN) inWin++;
-  }
-  return inWin >= 48;
-});
-t('masked scramble: solved target falls back to a valid (possibly short) scramble', () => {
-  const scr = core.maskedScramble(E.solved(), dist);
-  return scr !== null && E.stateKey(applyWca(scr || 'R R\'', E.solved())) === E.stateKey(E.solved());
-});
-
-// ---------------- first layer ----------------
-t('layer predicate: solved state has all 6 layers', () =>
-  E.FACES.every((f) => core.layerSolved(E.solved(), f)));
-t('layer predicate: any single native move breaks every layer', () => {
-  for (let mi = 0; mi < 8; mi++) {
-    const s = E.solved(); E.applyMoveIdx(s, mi);
-    if (core.anyLayerSolved(s)) return false;
-  }
-  return true;
-});
-t('layer seeds: 540 per face, each satisfying its own predicate', () =>
-  E.FACES.every((f) => {
-    const pool = E.enumFreeSlots(core.layerSeedSpec(f));
-    return pool.length === 540 && pool.every((st) => core.layerSolved(st, f));
-  }));
-t('layer seeds: union is deduped, reachable, and contains solved', () => {
-  const seeds = core.flSeedIndices();
-  return new Set(seeds).size === seeds.length &&
-    seeds.every((ix) => dist[ix] >= 0) &&
-    seeds.includes(E.idx(E.solved()));
-});
-
-console.log('building FL goal-distance table (multi-source BFS)…');
-const fldist = await core.buildFLDist();
-
-t('fldist: zero exactly on layer-solved states (sampled)', () => {
-  if (fldist[E.idx(E.solved())] !== 0) return false;
+t('mergeMoves: effect-preserving and same-face-free on 200 random runs', () => {
   for (let i = 0; i < 200; i++) {
-    const st = core.randomReachable(dist);
-    const z = fldist[E.idx(st)] === 0;
-    if (z !== !!core.anyLayerSolved(st)) return false;
-  }
-  return true;
-});
-t('fldist: covers the reachable space, max depth sane (≤ 11)', () => {
-  let max = 0;
-  for (let i = 0; i < E.NSLOTS; i++) {
-    if ((dist[i] >= 0) !== (fldist[i] >= 0)) return false;
-    if (fldist[i] > max) max = fldist[i];
-  }
-  console.log('    (max FL distance = ' + max + ')');
-  return max > 0 && max <= 11;
-});
-t('descend(fldist) reaches a layer-solved state in exactly fldist moves', () => {
-  for (let i = 0; i < 10; i++) {
-    const st = core.randomReachable(dist);
-    const r = core.descend(st, fldist);
-    if (!r || r.moves.length !== fldist[E.idx(st)] || !core.anyLayerSolved(r.end)) return false;
+    const seq = [];
+    for (let j = 0; j < 20; j++) {
+      const m = Math.floor(Math.random() * 16);
+      seq.push(m);
+      if (Math.random() < 0.4) seq.push(Math.random() < 0.5 ? m : m ^ 1); // engineered same-face runs
+    }
+    const merged = core.mergeMoves(seq);
+    if (!E.eq(foldNatives(seq, E.solved()), foldNatives(merged, E.solved()))) return false;
+    for (let j = 1; j < merged.length; j++) if ((merged[j] >> 1) === (merged[j - 1] >> 1)) return false;
   }
   return true;
 });
 
-// ---------------- one-look ----------------
-t('one-look: randomAtFLDist lands on the exact FL distance for every n 0..6', () => {
-  for (let n = 0; n <= 6; n++) {
-    const st = core.randomAtFLDist(fldist, n);
-    if (!st || fldist[E.idx(st)] !== n || dist[E.idx(st)] < 0) return false;
-  }
-  return true;
-});
-t('one-look: randomDLayerState samples reachable D-layer-solved states', () => {
-  for (let i = 0; i < 20; i++) {
-    const st = core.randomDLayerState();
-    if (!core.layerSolved(st, 'D') || dist[E.idx(st)] < 0) return false;
-  }
-  return true;
-});
-t('one-look: running the sequence from the preimage lands EXACTLY on Y (incl. B + rotations)', () => {
-  const SEQS = ["R U' B", "y R L' B U", "B L B' U'", "x2 R U R'", "R'", "L U L' U' B", "R R'"];
-  for (const s of SEQS) {
-    const A = applyWca(s, E.solved());
-    for (let i = 0; i < 3; i++) {
-      const Y = core.randomDLayerState();
-      const X = core.preimageOfLayer(A, Y, dist);
-      if (!X) return false;
-      const Z = applyWca(s, E.copy(X));
-      if (!E.eq(Z, Y) || !core.layerSolved(Z, 'D')) return false;
-      const scr = core.maskedScramble(X, dist); // the shown scramble reproduces X ('' ok iff X = solved)
-      if (scr == null || !E.eq(applyWca(scr || "R R'", E.solved()), X)) return false;
+// ---------------- setup scrambles ----------------
+const RNGS = [() => 0, () => 0.34, () => 0.67]; // force auf = 0 / 1 / 2
+
+t('makeDrill: every case × every AUF — scramble is plain face letters only', () =>
+  ALL_CASES.every((c) => RNGS.every((rng) => {
+    const d = core.makeDrill(c, rng);
+    return d && d.scramble.split(/\s+/).every((tok) => FACE_TOK.test(tok));
+  })));
+t('makeDrill: the scramble reproduces the shown state from solved (all cases × AUFs)', () =>
+  ALL_CASES.every((c) => RNGS.every((rng) => {
+    const d = core.makeDrill(c, rng);
+    return E.eq(applyAlg(d.scramble, E.solved()), d.state);
+  })));
+t('makeDrill: undo the AUF, run the alg in its dialect — solved (all cases × AUFs)', () =>
+  ALL_CASES.every((c) => RNGS.every((rng, k) => {
+    const d = core.makeDrill(c, rng);
+    if (d.auf !== k) return false;
+    let st = d.state;
+    if (d.auf) st = E.move(st, d.auf === 1 ? U_CCW : U_CW);
+    const spec = core.caseSpec(c);
+    return E.eq(applyAlg(spec.anchor.a.alg, st, spec.anchor.dialect), E.solved());
+  })));
+t('verifyDrill agrees (and rejects a tampered state)', () =>
+  ALL_CASES.every((c) => RNGS.every((rng) => {
+    const d = core.makeDrill(c, rng);
+    if (!core.verifyDrill(d)) return false;
+    const bad = { ...d, state: E.move(d.state, 2 * E.FIDX.R) };
+    return !core.verifyDrill(bad);
+  })));
+t('makeDrill: scramble stays merged (no adjacent same-face tokens) and short', () =>
+  ALL_CASES.every((c) => RNGS.every((rng) => {
+    const d = core.makeDrill(c, rng);
+    const toks = d.scramble.split(/\s+/).filter(Boolean);
+    for (let i = 1; i < toks.length; i++) {
+      if (toks[i].replace("'", '') === toks[i - 1].replace("'", '')) return false;
     }
+    return toks.length >= 1 && toks.length <= core.caseSpec(c).anchor.natives.length + 1;
+  })));
+t('makeDrill: AUF distribution — all three offsets appear over 100 draws', () => {
+  const seen = new Set();
+  for (let i = 0; i < 100; i++) seen.add(core.makeDrill(ALL_CASES[i % ALL_CASES.length]).auf);
+  return seen.size === 3;
+});
+t('rowAufToken: anchor row chip = the drill\'s AUF undo', () =>
+  ALL_CASES.every((c) => RNGS.every((rng) => {
+    const d = core.makeDrill(c, rng);
+    return core.rowAufToken(core.caseSpec(c).anchor, d) === AUF_UNDO[d.auf];
+  })));
+
+// ---------------- multi-alg AUF offsets (synthetic) ----------------
+t('caseSpec: a U\'-prefixed variant lands on an AUF offset; its chip solves the drill', () => {
+  const base = 'TCP 1';
+  const src = JSON_DATA.subsets.TCP.cases.find((c) => c.name === base).algs[0].alg; // B' R B R'
+  const m2 = core.buildModel({ subsets: { 'SYN-AUF': { notation: 'cif', cases: [
+    { name: 'S1', algs: [{ alg: src }, { alg: "U' " + src }] },
+  ] } } });
+  const c = m2.subsets[0].cases[0];
+  const spec = core.caseSpec(c);
+  const row = spec.rows[1];
+  if (row.k < 1) return false;                       // authored one AUF off the anchor
+  for (const rng of RNGS) {
+    const d = core.makeDrill(c, rng);
+    const tok = core.rowAufToken(row, d);            // "do this U turn, then the alg"
+    if (tok === null) return false;
+    let st = d.state;
+    if (tok === 'U') st = E.move(st, U_CW);
+    else if (tok === "U'") st = E.move(st, U_CCW);
+    if (!E.eq(applyAlg(row.a.alg, st, row.dialect), E.solved())) return false;
   }
   return true;
 });
-t('one-look: preimage honors NS-notation sequences', () => {
-  const raw = "R' b R F"; // NS letters (upper = U-layer corners, lower = D-layer)
-  const applyNs = (a, st) => E.applyParsed(E.parseAlg(E.preprocessAlg(a), 'ns'), st, null, E.makeFrames());
-  const A = applyNs(raw, E.solved());
-  const Y = core.randomDLayerState();
-  const X = core.preimageOfLayer(A, Y, dist);
-  return !!X && E.eq(applyNs(raw, E.copy(X)), Y);
+t('makeDrill: subset auf:false pins the AUF to 0', () => {
+  const src = JSON_DATA.subsets.TCP.cases[0].algs[0].alg;
+  const m2 = core.buildModel({ subsets: { 'SYN-NOAUF': { auf: false, cases: [{ name: 'S1', algs: [{ alg: src }] }] } } });
+  const c = m2.subsets[0].cases[0];
+  return RNGS.every((rng) => core.makeDrill(c, rng).auf === 0 && core.verifyDrill(core.makeDrill(c, rng)));
 });
 
-// ---------------- analysis ----------------
-t('analyze: direct lines solve; method = FL then finish, total ≥ direct', () => {
-  for (let i = 0; i < 6; i++) {
-    const st = core.randomReachable(dist);
-    const a = core.analyze(st, dist, fldist);
-    if (!a || a.direct !== dist[E.idx(st)]) return false;
-    if (!a.lines.length || a.lines.some((l) => l.moves.length !== a.direct)) return false;
-    const viaLine = applyWca(a.lines[0].alg || "R R'", E.copy(st));
-    if (a.lines[0].alg && E.stateKey(viaLine) !== E.stateKey(E.solved())) return false;
-    if (!a.method || a.method.total < a.direct) return false;
-    if (a.method.flLen !== fldist[E.idx(st)]) return false;
-    let cur = E.copy(st);
-    if (a.method.flAlg) cur = applyWca(a.method.flAlg, cur);
-    if (!core.anyLayerSolved(cur)) return false;
-    if (a.method.finishAlg) cur = applyWca(a.method.finishAlg, cur);
-    if (E.stateKey(cur) !== E.stateKey(E.solved())) return false;
-  }
-  return true;
+// ---------------- dialect plumbing (synthetic EIF) ----------------
+t('EIF dialect: letters resolve through the EIF hold (differs from CIF), drills verify', () => {
+  const text = "R B' R' B";
+  const cif = core.nativeMovesOf(text, 'cif');
+  const eif = core.nativeMovesOf(text, 'eif');
+  if (!cif || !eif || cif.join() === eif.join()) return false;   // a dropped dialect would collapse these
+  if (!E.eq(foldNatives(eif, E.solved()), applyAlg(text, E.solved(), 'eif'))) return false;
+  const m2 = core.buildModel({ subsets: { 'SYN-EIF': { notation: 'eif', cases: [{ name: 'S1', algs: [{ alg: text }] }] } } });
+  const c = m2.subsets[0].cases[0];
+  return c.dialect === 'eif' && RNGS.every((rng) => core.verifyDrill(core.makeDrill(c, rng)));
 });
-t('lineLayerSplit: split point really has a solved layer (when found)', () => {
-  for (let i = 0; i < 40; i++) {
-    const st = core.randomReachable(dist);
-    const a = core.analyze(st, dist, null);
-    if (!a || !a.lines.length) continue;
-    const split = core.lineLayerSplit(st, a.lines[0].moves);
-    if (!split) continue;
-    const cur = E.copy(st);
-    for (let n = 0; n < split.at; n++) E.applyMoveIdx(cur, a.lines[0].moves[n]);
-    if (!core.layerSolved(cur, split.face)) return false;
-  }
-  return true;
+t('per-alg notation overrides the subset dialect', () => {
+  const text = "R B' R' B";
+  const m2 = core.buildModel({ subsets: { 'SYN-OVR': { notation: 'eif', cases: [{ name: 'S1', algs: [{ alg: text, notation: 'cif' }] }] } } });
+  const spec = core.caseSpec(m2.subsets[0].cases[0]);
+  return spec.ok && spec.anchor.dialect === 'cif' &&
+    spec.anchor.natives.join() === core.nativeMovesOf(text, 'cif').join();
 });
-t('exports: DIRS/Y_PREFIX shapes', () =>
-  DIRS.length === 4 && Y_PREFIX.length === 4 && Y_PREFIX[0] === '' && Y_PREFIX[2] === 'y2');
 
-// ---------------- partial (3+2) recognition ----------------
-// (masks are raw sticker indices: trainer diagrams render in the engine's
-// pinned frame — netSVG opts.pinned — so raw position == display position)
-t('pickCorners: 2 distinct upper corners', () => {
-  for (let i = 0; i < 50; i++) {
-    const v = core.pickCorners();
-    if (v.length !== 2 || new Set(v).size !== 2) return false;
-    if (!v.every((c) => core.RECOG_CORNERS.includes(c))) return false;
-  }
-  return true;
+// ---------------- broken data degrades cleanly ----------------
+t('unusable algs: broken text is skipped for anchor; all-broken case yields no drill', () => {
+  const src = JSON_DATA.subsets.TCP.cases[0].algs[0].alg;
+  const m2 = core.buildModel({ subsets: { 'SYN-BROKEN': { cases: [
+    { name: 'S1', algs: [{ alg: 'Q7 zz' }, { alg: src }] },
+    { name: 'S2', algs: [{ alg: '{U,D} R' }] },
+  ] } } });
+  const [s1, s2] = m2.subsets[0].cases;
+  const sp1 = core.caseSpec(s1);
+  return sp1.ok && sp1.anchor === sp1.rows[1] && core.makeDrill(s1) !== null &&
+    !core.caseSpec(s2).ok && core.makeDrill(s2) === null;
 });
-t('maskForView: FL + 3 centers hides 14; +2 corners hides 8', () => {
-  const cases = model.subsets.flatMap((s) => s.cases);
-  for (let i = 0; i < 40; i++) {
-    const st = core.stateForDir(cases[rndInt(cases.length)], rndInt(4));
-    const v3 = { centers: ['U', 'F', 'L'], corners: [], fl: true };
-    if (core.maskForView(st, v3).size !== 14) return false;
-    const v5 = { centers: ['U', 'F', 'L'], corners: core.pickCorners(), fl: true };
-    if (core.maskForView(st, v5).size !== 8) return false;
-  }
-  return true;
-});
-t('maskForView: the visible stickers are exactly the view’s pieces’ raw stickers', () => {
-  const FIDX = Object.fromEntries(E.FACES.map((f, i) => [f, i]));
-  const FL_CORNERS = ['DFR', 'DBL', 'DFL', 'DBR'];
-  for (let i = 0; i < 30; i++) {
-    const c = SAMPLE[rndInt(SAMPLE.length)];
-    const st = core.stateForDir(c, rndInt(4));
-    const view = { centers: ['R', 'B', 'U'], corners: core.pickCorners(), fl: true };
-    const mask = core.maskForView(st, view);
-    const rawVisible = new Set([FIDX.D * 5]);
-    for (const f of view.centers) rawVisible.add(FIDX[f] * 5);
-    for (const k of [...view.corners, ...FL_CORNERS]) for (const g of E.FACES) {
-      const ix = E.STICKER_POS[g].indexOf(k);
-      if (ix >= 0) rawVisible.add(FIDX[g] * 5 + 1 + ix);
-    }
-    for (let p = 0; p < 30; p++) {
-      if (rawVisible.has(p) === mask.has(p)) return false; // visible <-> not masked
-    }
-  }
-  return true;
-});
-t('viewSignature: reads the FL residue iff fl is set; visible centers matter', () => {
-  const flView = { centers: ['U', 'R', 'F'], corners: [], fl: true };
-  const noFl = { centers: ['U', 'R', 'F'], corners: [], fl: false };
-  const a = E.solved();
-  const b = E.copy(a); b.fx[2] = 1; // twist DFR (an FL corner)
-  if (core.viewSignature(a, flView) === core.viewSignature(b, flView)) return false;
-  if (core.viewSignature(a, noFl) !== core.viewSignature(b, noFl)) return false;
-  const c = E.copy(a); [c.ctr[1], c.ctr[4]] = [c.ctr[4], c.ctr[1]]; // swap R and L centers
-  if (core.viewSignature(a, flView) === core.viewSignature(c, flView)) return false; // R visible
-  const d2 = E.copy(a); [d2.ctr[4], d2.ctr[5]] = [d2.ctr[5], d2.ctr[4]]; // swap L and B (both hidden)
-  return core.viewSignature(a, flView) === core.viewSignature(d2, flView);
-});
-t('centers quiz premise: NS center case is determined by FL + any 3 centers', () => {
-  const ns = model.subsets.find((s) => s.key === 'NS');
-  const quiz = ns.cases.filter((c) => c.centerPattern);
-  const combos = [];
-  const C = core.RECOG_CENTERS;
-  for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) for (let c = b + 1; c < 5; c++)
-    combos.push([C[a], C[b], C[c]]);
-  let worst = 1;
-  for (const centers of combos) {
-    const view = { centers, corners: [], fl: true };
-    const bySig = new Map();
-    for (const c of quiz) {
-      for (const d of [0, 1, 2, 3]) {
-        const s = core.viewSignature(core.stateForDir(c, d), view);
-        if (!bySig.has(s)) bySig.set(s, new Set());
-        bySig.get(s).add(c.centerPattern);
-      }
-    }
-    let pure = 0, total = 0;
-    for (const pats of bySig.values()) { total++; if (pats.size === 1) pure++; }
-    worst = Math.min(worst, pure / total);
-  }
-  console.log('    (worst 3-center combo: ' + (100 * worst).toFixed(1) + '% of views pattern-pure)');
-  return worst >= 0.5; // informational floor — ambiguity is reported in-app per round
-});
+
+// ---------------- exports ----------------
+t('exports: AUF/AUF_UNDO are inverse token pairs', () =>
+  AUF.length === 3 && AUF_UNDO.length === 3 && AUF[0] === '' && AUF_UNDO[0] === '' &&
+  AUF[1] === 'U' && AUF_UNDO[1] === "U'" && AUF[2] === "U'" && AUF_UNDO[2] === 'U');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

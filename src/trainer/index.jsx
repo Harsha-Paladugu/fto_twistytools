@@ -5,7 +5,7 @@
  * mirroring the original bundle's behavior so the build runs standalone too. */
 import React from "react";
 import { createRoot } from "react-dom/client";
-import SkewbTrainer from "./skewb-trainer.jsx";
+import FtoTrainer from "./fto-trainer.jsx";
 
 if (!window.storage) {
   window.storage = {
@@ -14,4 +14,4 @@ if (!window.storage) {
   };
 }
 
-createRoot(document.getElementById("root")).render(React.createElement(SkewbTrainer));
+createRoot(document.getElementById("root")).render(React.createElement(FtoTrainer));
