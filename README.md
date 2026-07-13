@@ -91,6 +91,14 @@ local `js/`/`css/`/`img` asset is loaded with a content-hash `?v=` query that
 is no manual version to bump. To preview locally, serve over HTTP (e.g.
 `npx serve`), not `file://`.
 
+## Firebase rules (owned by the hub repo)
+
+This repo has no `firestore.rules` or `firebase.json`. The shared `twistytools`
+Firebase project's security rules live in the hub repo,
+[twistytools.com](https://github.com/Harsha-Paladugu/twistytools.com), and
+deploy only from there: a rules deploy replaces the whole project ruleset, so
+exactly one repo may own it. Never add rules files back here.
+
 ## Tooling
 
 - **`tools/compile-sheet.mjs`** — compiles the algs JSON into `js/sheet.js` +
