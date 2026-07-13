@@ -1,4 +1,6 @@
-/* Pyraminx.net — shared account layer (auth + per-user data), site-wide.
+/* fto.twistytools.com — shared account layer (auth + per-user data), site-wide.
+ * Live-mode data is stored in the shared TwistyTools Firebase project at
+ * users/{uid}/puzzles/fto (per-puzzle progress doc, own user only).
  *
  * Exposes window.OOAccount. Auto-initializes on load, so every page that
  * includes this script (after config.js) gets a single shared sign-in session
@@ -32,6 +34,11 @@
   const state = { mode: LIVE ? 'live' : 'demo', ready: false, user: null };
   const fb = { app: null, auth: null, fs: null, A: null, F: null };
 
+  // Per-user data lives at users/{uid}/puzzles/{puzzle} in the shared
+  // TwistyTools project. The parent users/{uid} doc is a global account doc
+  // that clients never write.
+  const userDocRef = () => fb.F.doc(fb.fs, 'users', state.user.uid, 'puzzles', CFG.puzzle);
+
   /* ---------------- live (Firebase) ---------------- */
   async function initLive() {
     const base = 'https://www.gstatic.com/firebasejs/10.12.2/';
@@ -56,7 +63,7 @@
     async loadUserDoc(name) {
       if (!state.user) return null;
       try {
-        const snap = await fb.F.getDoc(fb.F.doc(fb.fs, 'users', state.user.uid));
+        const snap = await fb.F.getDoc(userDocRef());
         const data = snap.exists() ? snap.data() : null;
         return data && name in data ? data[name] : null;
       } catch (e) { return null; }
@@ -64,7 +71,7 @@
     async saveUserDoc(name, data) {
       if (!state.user) throw new Error('not signed in');
       await fb.F.setDoc(
-        fb.F.doc(fb.fs, 'users', state.user.uid),
+        userDocRef(),
         { [name]: data, updatedAt: fb.F.serverTimestamp() },
         { merge: true });
     },
