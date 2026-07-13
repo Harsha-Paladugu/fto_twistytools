@@ -161,9 +161,35 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   **closing the M1 single-T direction residue machine-exactly** —, Uv/Rv/Lv ≡
   our o-rotations, SiGN 2U ≡ Us, their lowercase wides ≡ our w tokens,
   orientation-reference solves, probe patterns). test:engine now 45 tests.
-- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 3 LANDED (2026-07-13):
-  the Algorithmic LBT set (last bottom triple, 95 cases / 120 algs) is
-  LIVE**, imported from zwegner's page by `tools/import-lbt.mjs` over the
+- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 4 LANDED (2026-07-13):
+  the 1LP set (one-look pair formation, 11 cases / 29 sequences) is LIVE**,
+  imported from the user-supplied `1LP_Rotationless_V3.pdf` by
+  `tools/import-1lp.mjs` over the committed verbatim transcription
+  `data/sources/1lp-rotationless-v3.json` (the PDF's case images are not
+  reproduced — case identity is machine-derived and cross-pinned against
+  zwegner's page instead; **author attribution pending from the user**).
+  Engine dialect grew `[Uo]`/`[Uo']` bracket rotation marks (executed as
+  the state-neutral rotation; leading = the solution respelled for a
+  Uo-rotated view, trailing = ending-orientation annotation; `(U)` paren
+  AUFs already parsed). First subset whose algs do not end step-solved as
+  their contract — a 1LP line converts its case into the TCP stage; the
+  machine contract is the **flip-sequence theorem** (ground-truth
+  §Methods): the L3T coset = closure of {U,S,H} = 4320 states, the image
+  language partitions it into 80 appearance classes of 54, structurally
+  formed = 4 appearances / 216 states with all 18 TCP states in one of
+  them, and every line maps its ENTIRE appearance class into the formed
+  family. 5 grip-respelled line pairs pinned state-identical ('ⓘ grip'
+  chips on algs.html); the "11 possible permutations" comment pinned (H on
+  zwegner group 1 → the TCP finish set, exactly 11); one exact zwegner
+  primary collision (1LP 7 = 4a.O.6, the expected compile MISFILED
+  advisory). The Parity column ships as sheet prose (machine-unmappable to
+  zwegner E/O — tested, documented). Gates: test:engine **73** green
+  (§16), test:trainer 27 green over the grown JSON (1LP drills included),
+  test:solver 19 green (the solver ignores non-finish subsets by design),
+  headless-Edge E2E 16 checks / 0 console errors, build + check:fresh
+  green. PHASE 3 (2026-07-13):
+  the Algorithmic LBT set (last bottom triple, 95 cases / 120 algs)
+  LIVE, imported from zwegner's page by `tools/import-lbt.mjs` over the
   committed snapshot `data/sources/lbt-zwegner.html` (curated algs only —
   the page's hidden "gen" dumps stay behind). Plain Streeter dialect
   (Uo/Uw/Us), zero parser work needed. First NON-last-layer set: subset
@@ -376,7 +402,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   first build seconds; both checkpoint thresholds cleared with wide margin,
   so no user decision was needed.
 - Algorithm sheet sources + formats (M3 stays open for more sheets) — the
-  case-key symmetry fold still revisits with more data. ~~The method lineup
+  case-key symmetry fold still revisits with more data.
+- **1LP sheet author attribution** (M3 phase 4 shipped with "attribution
+  pending" on algs.html — the PDF names no author; the user should supply
+  the credit line). ~~The method lineup
   the solver targets~~ **DECIDED (user, 2026-07-13): the solver follows the
   Bencisco method** (matching the supplied LBT/1L3T sheets); further methods
   would be new step decompositions over the same machinery.

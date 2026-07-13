@@ -51,6 +51,7 @@
                 a.note ? h('span', { class: 'ratetag', title: a.note, style: 'cursor:help' },
                   /working-slot/.test(a.note) ? '⚠ variant'
                     : /setup/.test(a.note) ? '⚠ setup undo'
+                    : /respelled|rotated view/.test(a.note) ? 'ⓘ grip'
                     : '⚠ final AUF') : null,
                 D.copyBtn(a.alg))),
             c.moves_note ? h('p', { class: 'sub', style: 'margin:6px 0 0;font-size:12px' }, '(' + c.moves_note + ')') : null))));

@@ -294,16 +294,19 @@ const WIDERE = /^(br|bl|[ufrldb])(2)?(')?$/;
 // sledge, H = hedge; S'/H' are their exact textual inverses. Expanded at parse
 // level, so the letters resolve through whatever hold is active at that point
 // (a sledge behind a bracket rotation is the re-gripped sledge). [U]/[U'] are
-// that dialect's pre-AUF marks and execute as the plain U move. NOTE: csTimer
-// spells whole-puzzle ROTATIONS [R] — never feed csTimer-dialect texts through
-// this parser (ground-truth §Notation); only [U]/[U'] are accepted here.
+// that dialect's pre-AUF marks and execute as the plain U move; [Uo]/[Uo'] are
+// the 1LP sheet's whole-puzzle rotation marks and execute as the (state-
+// neutral) Uo rotation. NOTE: csTimer spells whole-puzzle ROTATIONS with bare
+// letters in square brackets ([R]) — never feed csTimer-dialect texts through
+// this parser (ground-truth §Notation); only the U-letter marks above are
+// accepted here.
 const MACRO = { S: "R' L R L'", "S'": "L R' L' R", H: "R B' R' B", "H'": "B' R B R'" };
 function expandTokens(raw){
   const toks = [];
   for (const t of raw){
     let m;
     if (MACRO[t]) toks.push(...MACRO[t].split(' '));
-    else if ((m = /^\[(U'?)\]$/.exec(t))) toks.push(m[1]);
+    else if ((m = /^\[(Uo?'?)\]$/.exec(t))) toks.push(m[1]);
     else toks.push(t);
   }
   return toks;
@@ -463,6 +466,7 @@ function invertAlg(str){
   return preprocessAlg(str).split(' ').filter(Boolean).reverse()
     .map(t => t === 'T2' || t === "T2'" ? 'T2'
       : t === '[U]' ? "[U']" : t === "[U']" ? '[U]'
+      : t === '[Uo]' ? "[Uo']" : t === "[Uo']" ? '[Uo]'
       : (t.endsWith("'") ? t.slice(0,-1) : t + "'")).join(' ');
 }
 const MIRF = FSIGN.map(s => FACE_BY_S[vkey(mApply(MIRROR, s))]);  // U↔L F↔R BR↔D BL↔B

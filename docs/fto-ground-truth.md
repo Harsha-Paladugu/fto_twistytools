@@ -195,6 +195,49 @@ Skewb engine and stays until M1 deletes the code it documents).
   would change the case). Credits: zwegner (generation + curation), 360cubed
   (keyhole cases 1/2/5/6), Ben Streeter (trapped-triangles cases 33/34/37/38
   + the traditional flipping-alg cases).
+- **1LP sheet dialect (M3 phase 4, machine-verified 2026-07-13)** — the
+  user-supplied "One Look Pair Formation (1LP) Cases and Solutions" PDF
+  (V3; verbatim transcription committed as
+  `data/sources/1lp-rotationless-v3.json`; author attribution pending from
+  the user). Dialect: S/H sledge-hedge macros exactly as the 1L3T dialect
+  (the PDF defines them identically: right hedge R B' R' B, right sledge
+  R' L R L'), `(U)`/`(U')` paren AUF marks (parens already strip at parse —
+  executed as the plain move), and **`[Uo]`/`[Uo']` bracket rotation marks,
+  executed as the state-neutral Uo rotation**: a LEADING mark gives the
+  solution for a Uo-rotated view of the same case (5 of the 14 such lines
+  are pinned state-IDENTICAL to another line of their case — the same
+  physical solution re-spelled from the rotated grip; Uo-conjugation maps
+  the hedge family into the sledge family), a TRAILING mark annotates the
+  ending orientation (a rotation never changes the state, so it executes as
+  a no-op). csTimer-style `[R]`/`[Ro]` remain unparseable on purpose.
+- **1LP / pair-formation structure (M3 phase 4, machine-verified)**: the
+  L3T coset (everything below the last layer solved) is EXACTLY the closure
+  of {U, S, H} from solved = **4320 states** (bare sledge and hedge are
+  L3T-local effects; no hidden coupling — corners 12 × edges 3 × centre
+  arrangements 120). The sheet-image language (yellow = U-colored sticker,
+  blue = bottom-triangle/non-U corner sticker) partitions the coset into
+  **80 appearance classes of exactly 54**; the structurally-FORMED family
+  (each top position an upright pair — U triangle up, bottom triangle in the
+  flank — or a flipped pair — the reverse; colors ignored, which is what the
+  sheet's "neutral pair formation" means) is exactly **4 appearances = 216
+  states**, and **all 18 TCP case states share ONE appearance** (one upright
+  + two flipped pairs — the TCP set's canonical position; solved is the
+  all-upright appearance). Every 1LP sequence is machine-verified to map its
+  ENTIRE 54-state appearance class into the formed family (appearance
+  transport is facelet-functorial, so pair formation is guaranteed from
+  anything that looks like the case); the color crossings the "neutral"
+  convention allows are exactly why the finish needs the full 18-case TCP
+  set (or 2-look), as the sheet's intro says. Cross-sheet pins: zwegner's
+  1L3T page enumerates 537 = 179×3 of the 4320 (its cases are keyed at a
+  canonical grip; its 12 OLP groups fold-match the 12 appearance orbits
+  under AUF-turn + Uo-re-grip exactly); the TCP finish set (TCP ∪ solved
+  ±AUF, 57 keys) has exactly 51 zwegner-labeled members (the 16-exact TCP
+  oracle + solved); the PDF's "this OLP has only 11 possible permutations"
+  is pinned — H sends exactly 11 zwegner group-1 states into the TCP finish
+  set; exactly one 1LP line state coincides with a zwegner primary (1LP 7 =
+  4a.O.6). The sheet's Parity column (Stays/Flips) does NOT map onto
+  zwegner's E/O labels under any state-level reading tested — it ships as
+  the author's own prose, marked unverified. All pinned in test-engine §16.
 - **TCP sheet findings (machine-verified 2026-07-10)**: the TCP sheet's
   header claims EIF notation, but all 18 algs execute from the **CIF hold**
   (the community notation doc's TCP description is the accurate one). The

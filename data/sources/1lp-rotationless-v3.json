@@ -1,0 +1,95 @@
+{
+  "provenance": {
+    "title": "One Look Pair Formation (1LP) Cases and Solutions",
+    "file": "1LP_Rotationless_V3.pdf (2 pages), supplied by the site owner 2026-07-13",
+    "author": "unrecorded in the PDF — attribution pending from the site owner",
+    "transcription": "Text transcribed verbatim from the PDF's text layer 2026-07-13 (tools/import-1lp.mjs consumes this file). The case IMAGES are not reproduced: the case identities are machine-derived from the sequences instead and cross-pinned against zwegner's 1L3T page, whose OLP group labels use the same case numbering (see the importer).",
+    "notation": "H = right hedge (R B' R' B), S = right sledge (R' L R L'), matching the engine's 1L3T macros exactly. (U)/(U') are AUF turns written in parentheses (the engine strips parens; they execute as the plain move). [Uo]/[Uo'] are whole-puzzle rotation marks in square brackets — leading ones give the solution for a Uo-rotated view of the case, trailing ones annotate the ending orientation; both execute as the (state-neutral) rotation."
+  },
+  "intro": [
+    "A comprehensive sheet showing all of the unique cases for L3T pair formation and the optimal flip solutions for each. These are all rotationless and emphasize good ergonomics, making them very fast to execute.",
+    "In the images, the top layer color is denoted yellow and the bottom triangles/corner stickers are denoted blue. Each bottom triangle is in a separate triple, such that the triangles are symmetric about the vertical.",
+    "In the sequences, H is right hedge (R B' R' B) and S is right sledge (R' L R L'). H' and S' are the inverses.",
+    "Solutions are given for each puzzle orientation, as well as whether they will preserve or change the parity.",
+    "Neutral pair formation is used for these solutions; you must finish with one of 18 TCP algorithms (or 2-look)."
+  ],
+  "cases": [
+    {
+      "case": "1",
+      "sequences": ["H"],
+      "parity": "Stays",
+      "comment": "This OLP has only 11 possible permutations. I recommend learning algorithms for them; they are short and easy to recognize."
+    },
+    {
+      "case": "2",
+      "sequences": ["H U' H U [Uo]", "(U) S' U' S' U", "(U') S U S U'"],
+      "parity": "Flips",
+      "comment": "There are good solutions here for each AUF, which you can also use to force a 4-move TCP in some circumstances."
+    },
+    {
+      "case": "3",
+      "sequences": ["(U') H' U'", "[Uo] (U) S U", "[Uo'] (U) S' U [Uo]"],
+      "parity": "Stays",
+      "comment": "You can force a 4-move TCP in this case most of the time, which helps avoid the H' solution."
+    },
+    {
+      "case": "4a",
+      "sequences": ["(U) S U [Uo]", "[Uo] (U) S' U [Uo']", "[Uo'] (U) H' U [Uo']"],
+      "parity": "Flips",
+      "comment": "This case has only one unique solution for pair formation. Rotating to avoid H' is recommended."
+    },
+    {
+      "case": "4b",
+      "sequences": ["(U') S' U' [Uo']", "[Uo] (U') H' U' [Uo']", "[Uo'] (U') S U' [Uo]"],
+      "parity": "Flips",
+      "comment": "The mirror image of the previous 4a case."
+    },
+    {
+      "case": "4c",
+      "sequences": ["(U) S' U S U' [Uo]", "[Uo] (U') S' U' S U [Uo]", "[Uo'] (U) S U S' U' [Uo']"],
+      "parity": "Stays",
+      "comment": "Both U and U' AUFs work here; they have been chosen to keep the original permutation state."
+    },
+    {
+      "case": "5",
+      "sequences": ["S' U' S U [Uo']", "[Uo] (U) S' U' S' U [Uo']", "[Uo'] (U') S U S U' [Uo]"],
+      "parity": "Flips",
+      "comment": "There are many possible solutions here for each AUF, but the ones listed are considered the best for avoiding regrips."
+    },
+    {
+      "case": "6a",
+      "sequences": ["(U') S U [Uo']", "[Uo] (U') S' U", "[Uo'] (U') H' U"],
+      "parity": "Flips",
+      "comment": "This case also has only one unique PF solution. Rotating to avoid H' is recommended."
+    },
+    {
+      "case": "6b",
+      "sequences": ["(U) S' U' [Uo]", "[Uo] (U) H' U' [Uo]", "[Uo'] (U) S U'"],
+      "parity": "Flips",
+      "comment": "The mirror image of the previous 6a case."
+    },
+    {
+      "case": "6c",
+      "sequences": [],
+      "parity": null,
+      "comment": "N/A (solved)"
+    },
+    {
+      "case": "7",
+      "sequences": ["S' U' S' U' S U [Uo]"],
+      "parity": "Stays",
+      "comment": "This is three flips away from a completed PF. However you can go straight into the solution without any AUF which is nice."
+    },
+    {
+      "case": "8",
+      "sequences": ["H U H U", "(U) S' U S' U [Uo']", "(U') S U' S U' [Uo]"],
+      "parity": "Flips",
+      "comment": "Both the even/odd cases can be forced into a 4-move TCP, but the even permutation is the only case really worth learning."
+    }
+  ],
+  "footnotes": [
+    "I don't recommend learning all of these algorithmically. Think of it like intuitive vs. algorithmic F2L: better to initially learn by intuition, but useful to know optimal sequences later for improving the harder cases.",
+    "To set up the cases from a completely solved position, do H first, and then the inverse of the solution.",
+    "The solutions given are not the only solutions for each case, but are my recommended ones. I do encourage experimenting yourself with finding your own solutions."
+  ]
+}

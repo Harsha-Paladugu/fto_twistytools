@@ -4,10 +4,10 @@
     "description": "FTO algorithms grouped by subset, then by case. Face letters follow the community notation (Sonja Black's 'FTO Notation' doc + Ben Streeter's FTO Notes); {X,Y} bracket rotations, X2 ergonomic doubles and w-suffix wides are supported. Each subset declares the HOLD its algs execute from ('cif' or 'eif').",
     "notation": "streeter",
     "apostrophe": "normalized to ASCII '",
-    "status": "TCP (last layer) imported 2026-07-10; 1L3T (one-look last 3 triples) imported 2026-07-13 from zwegner’s page by tools/import-1l3t.mjs; LBT (last bottom triple) imported 2026-07-13 from zwegner’s page by tools/import-lbt.mjs.",
+    "status": "TCP (last layer) imported 2026-07-10; 1L3T (one-look last 3 triples) imported 2026-07-13 from zwegner’s page by tools/import-1l3t.mjs; LBT (last bottom triple) imported 2026-07-13 from zwegner’s page by tools/import-lbt.mjs; 1LP (one-look pair formation) imported 2026-07-13 from the user-supplied sheet by tools/import-1lp.mjs.",
     "counts": {
-      "cases": 291,
-      "algs": 389
+      "cases": 302,
+      "algs": 418
     }
   },
   "subsets": {
@@ -369,6 +369,32 @@
         {"name":"LBT 94","group":"S6 both in slot","recognition":"Both in slot, corner on top — both in slot, corner on top.","algs":[{"alg":"L' U' R B' R L' R L B U L"}]},
         {"name":"LBT 95","group":"S6 both in slot","recognition":"Both in slot, corner on top — both in slot, corner on top.","algs":[{"alg":"BL' U BL R' L R L' BL' U' BL"},{"alg":"BL' U' BL R B' R' B BL' U BL"}]},
         {"name":"LBT 96","group":"S6 both in slot","recognition":"Both in slot, corner on top — both in slot, corner on top.","algs":[{"alg":"U L U L' R B' R' B' L B' U' L'"}]}
+      ]
+    },
+    "1LP": {
+      "name": "1LP — One-Look Pair Formation",
+      "notation": "cif",
+      "notation_note": "The sheet’s dialect, all machine-verified: S/H are the sledge (R’ L R L’) and hedge (R B’ R’ B) triggers, (U)/(U’) are AUF turns written in parentheses (executed as the plain move), and [Uo]/[Uo’] are whole-puzzle rotation marks — a leading one gives the solution for a Uo-rotated view of the same case, a trailing one annotates the ending orientation (rotations never change the state). Diagrams show the exact state each case’s first sequence resolves. Every sequence is machine-verified as a correct flip sequence: from any state matching its case’s yellow/blue appearance it leaves all three pairs structurally formed, landing in the TCP stage. The parity column and comments are the sheet’s own prose.",
+      "description": "One-look pair formation for the Bencisco last layer: form the three corner-triangle pairs in a single look, then finish with one of the 18 TCP algorithms (or 2-look). Pair formation is NEUTRAL (colors are ignored while pairing), rotationless, and ergonomic. Case 6c on the sheet is the already-paired state (omitted here). Solutions are given per AUF and per puzzle orientation; parity notes say whether a sequence preserves the permutation parity.",
+      "groups": [
+        "Parity stays",
+        "Parity flips"
+      ],
+      "sources": [
+        "One Look Pair Formation (1LP) Cases and Solutions, V3 — supplied as 1LP_Rotationless_V3.pdf (transcription: data/sources/1lp-rotationless-v3.json; author attribution pending)"
+      ],
+      "cases": [
+        {"name":"1LP 1","group":"Parity stays","recognition":"This OLP has only 11 possible permutations. I recommend learning algorithms for them; they are short and easy to recognize.","moves_note":"sheet parity column: stays — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"H"}]},
+        {"name":"1LP 2","group":"Parity flips","recognition":"There are good solutions here for each AUF, which you can also use to force a 4-move TCP in some circumstances.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"H U' H U [Uo]"},{"alg":"(U) S' U' S' U"},{"alg":"(U') S U S U'"}]},
+        {"name":"1LP 3","group":"Parity stays","recognition":"You can force a 4-move TCP in this case most of the time, which helps avoid the H' solution.","moves_note":"sheet parity column: stays — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"(U') H' U'"},{"alg":"[Uo] (U) S U","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U) S' U [Uo]","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"}]},
+        {"name":"1LP 4a","group":"Parity flips","recognition":"This case has only one unique solution for pair formation. Rotating to avoid H' is recommended.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"(U) S U [Uo]"},{"alg":"[Uo] (U) S' U [Uo']","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U) H' U [Uo']","note":"same physical solution as line 1, respelled from the rotated grip its leading [Uo] mark executes — state-identical, machine-verified"}]},
+        {"name":"1LP 4b","group":"Parity flips","recognition":"The mirror image of the previous 4a case.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"(U') S' U' [Uo']"},{"alg":"[Uo] (U') H' U' [Uo']","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U') S U' [Uo]","note":"same physical solution as line 2, respelled from the rotated grip its leading [Uo] mark executes — state-identical, machine-verified"}]},
+        {"name":"1LP 4c","group":"Parity stays","recognition":"Both U and U' AUFs work here; they have been chosen to keep the original permutation state.","moves_note":"sheet parity column: stays — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"(U) S' U S U' [Uo]"},{"alg":"[Uo] (U') S' U' S U [Uo]","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U) S U S' U' [Uo']","note":"same physical solution as line 1, respelled from the rotated grip its leading [Uo] mark executes — state-identical, machine-verified"}]},
+        {"name":"1LP 5","group":"Parity flips","recognition":"There are many possible solutions here for each AUF, but the ones listed are considered the best for avoiding regrips.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"S' U' S U [Uo']"},{"alg":"[Uo] (U) S' U' S' U [Uo']","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U') S U S U' [Uo]","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"}]},
+        {"name":"1LP 6a","group":"Parity flips","recognition":"This case also has only one unique PF solution. Rotating to avoid H' is recommended.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"(U') S U [Uo']"},{"alg":"[Uo] (U') S' U","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U') H' U","note":"same physical solution as line 1, respelled from the rotated grip its leading [Uo] mark executes — state-identical, machine-verified"}]},
+        {"name":"1LP 6b","group":"Parity flips","recognition":"The mirror image of the previous 6a case.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"(U) S' U' [Uo]"},{"alg":"[Uo] (U) H' U' [Uo]","note":"solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)"},{"alg":"[Uo'] (U) S U'","note":"same physical solution as line 2, respelled from the rotated grip its leading [Uo] mark executes — state-identical, machine-verified"}]},
+        {"name":"1LP 7","group":"Parity stays","recognition":"This is three flips away from a completed PF. However you can go straight into the solution without any AUF which is nice.","moves_note":"sheet parity column: stays — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"S' U' S' U' S U [Uo]"}]},
+        {"name":"1LP 8","group":"Parity flips","recognition":"Both the even/odd cases can be forced into a 4-move TCP, but the even permutation is the only case really worth learning.","moves_note":"sheet parity column: flips — the author’s own permutation bookkeeping, carried verbatim","algs":[{"alg":"H U H U"},{"alg":"(U) S' U S' U [Uo']"},{"alg":"(U') S U' S U' [Uo]"}]}
       ]
     }
   }

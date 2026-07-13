@@ -826,5 +826,136 @@ t('LBT data: states are distinct except the two "notated differently" pairs (LBT
   assert(prim.size === 95, 'distinct primaries: ' + prim.size);
 });
 
+/* ---------- 16. 1LP sheet data (M3 ph4): machine pins for the imported set ---------- */
+const OLP = ALGDATA.subsets['1LP'];
+t("1LP dialect: (U) paren AUFs and [Uo]/[Uo'] rotation marks; csTimer [R] stays unparseable", () => {
+  assert(E.normAlg('(U)') === 'U', 'paren AUF executes as the plain move');
+  assert(E.normAlg('[Uo]') === 'Uo' && E.normAlg("[Uo']") === "Uo'", 'bracket rotation marks');
+  assert(E.normAlg("[U']") === "U'", '1L3T pre-AUF marks unchanged');
+  assert(E.parseAlg('[R]') === null && E.parseAlg('[Ro]') === null, 'csTimer-style [R]/[Ro] must not parse');
+  assert(E.invertAlg("[Uo] U [Uo']") === "[Uo] U' [Uo']", 'invertAlg maps the marks');
+  const s = E.caseStateOf('[Uo]', 'cif');
+  assert(s && E.stateKey(s) === E.stateKey(E.solved()), '[Uo] is a pure (state-neutral) rotation');
+});
+t('1LP data: 11 cases, 29 sequences, parity-column groups, solved 6c omitted', () => {
+  assert(OLP && OLP.notation === 'cif', 'subset dialect');
+  assert(OLP.cases.length === 11, 'cases: ' + OLP.cases.length);
+  const algs = OLP.cases.reduce((a, c) => a + c.algs.length, 0);
+  assert(algs === 29, 'sequences: ' + algs);
+  const stays = OLP.cases.filter(c => c.group === 'Parity stays').map(c => c.name).sort().join(',');
+  assert(stays === '1LP 1,1LP 3,1LP 4c,1LP 7', 'parity-stays cases: ' + stays);
+  assert(OLP.cases.every(c => c.group === 'Parity stays' || c.group === 'Parity flips'), 'group values');
+  eqArr(OLP.groups, ['Parity stays', 'Parity flips'], 'subset groups');
+  assert(!OLP.cases.some(c => c.name === '1LP 6c'), 'sheet case 6c = the already-paired state, omitted');
+});
+// shared 1LP machinery: the L3T coset (closure of <U,S,H>), the yellow/blue
+// appearance (the sheet images' language) and the structurally-formed family
+const olpTbl = (x) => E.effectTable(E.parseAlg(x), 'cif');
+const olpCoset = (() => {
+  const gens = ['U', "U'", 'S', "S'", 'H', "H'"].map(olpTbl);
+  const seen = new Map([[E.stateKey(E.solved()), E.solved()]]);
+  let fr = [E.solved()];
+  while (fr.length){
+    const nx = [];
+    for (const s of fr) for (const g of gens){
+      const t2 = E.applyTable(g, s), k = E.stateKey(t2);
+      if (!seen.has(k)){ seen.set(k, t2); nx.push(t2); }
+    }
+    fr = nx;
+  }
+  return seen;
+})();
+const OLP_BLUE = new Set([E.FIDX.F, E.FIDX.BR, E.FIDX.BL]);
+function olpAppearance(s){
+  const FL = E.toFacelets(s);
+  let out = '';
+  for (let i = 0; i < 72; i++){
+    const ft = E.FEAT[i], c = FL[i];
+    out += ft.t === 'e' ? '.' : c === E.FIDX.U ? 'Y' : ft.t === 'c' ? 'b' : OLP_BLUE.has(c) ? 'b' : '.';
+  }
+  return out;
+}
+function olpFormed(s){
+  const US = [0, 1, 2], FLK = [3, 7, 11];
+  for (let j = 0; j < 3; j++){
+    if (s.cp[j] > 2) return false;
+    const uY = s.ctr[US[j]] === E.FIDX.U, fY = s.ctr[FLK[j]] === E.FIDX.U;
+    if (s.co[j] ? !(!uY && fY) : !(uY && !fY)) return false;
+  }
+  return true;
+}
+t('1LP theorem: L3T coset = 4320 = 80 appearances x 54; formed family = 216 = 4 appearances; all 18 TCP states share one flipped-pair appearance', () => {
+  assert(olpCoset.size === 4320, 'coset size: ' + olpCoset.size);
+  const cls = new Map();
+  let formed = 0;
+  const formedApps = new Set();
+  for (const [, s] of olpCoset){
+    const p = olpAppearance(s);
+    cls.set(p, (cls.get(p) || 0) + 1);
+    if (olpFormed(s)){ formed++; formedApps.add(p); }
+  }
+  assert(cls.size === 80 && [...cls.values()].every(n => n === 54), 'appearance partition');
+  assert(formed === 216 && formedApps.size === 4, 'formed family: ' + formed + '/' + formedApps.size);
+  assert(formedApps.has(olpAppearance(E.solved())), 'solved is formed');
+  const tcpApps = new Set(ALGDATA.subsets.TCP.cases.map(c => olpAppearance(E.caseStateOf(c.algs[0].alg, 'cif'))));
+  assert(tcpApps.size === 1 && formedApps.has([...tcpApps][0]), 'TCP appearance');
+  assert([...tcpApps][0] !== olpAppearance(E.solved()), 'the TCP position is the two-flipped-pairs appearance, not solved');
+});
+t('1LP data: every sequence is a correct flip sequence — its entire appearance class lands structurally formed', () => {
+  const byApp = new Map();
+  for (const [, s] of olpCoset){
+    const p = olpAppearance(s);
+    if (!byApp.has(p)) byApp.set(p, []);
+    byApp.get(p).push(s);
+  }
+  for (const c of OLP.cases) for (const a of c.algs){
+    const st = E.caseStateOf(a.alg, 'cif');
+    assert(st && olpCoset.has(E.stateKey(st)), c.name + ' state must live in the L3T coset: ' + a.alg);
+    const T2 = olpTbl(a.alg);
+    for (const s of byApp.get(olpAppearance(st)))
+      assert(olpFormed(E.applyTable(T2, s)), c.name + ' breaks the flip contract: ' + a.alg);
+  }
+});
+t('1LP data: grip-respelled pairs state-identical; 24 distinct states; exactly one 1L3T primary collision (4a.O.6)', () => {
+  const key = (a) => E.stateKey(E.caseStateOf(a, 'cif'));
+  const PAIRS = { '1LP 4a': [0, 2], '1LP 4b': [1, 2], '1LP 4c': [0, 2], '1LP 6a': [0, 2], '1LP 6b': [1, 2] };
+  for (const c of OLP.cases){
+    const ks = c.algs.map(a => key(a.alg));
+    const want = PAIRS[c.name];
+    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++)
+      assert((ks[i] === ks[j]) === (!!want && want[0] === i && want[1] === j),
+        c.name + ' respelling structure changed (' + i + ',' + j + ')');
+    if (want) assert(/respelled/.test(c.algs[want[1]].note || ''), c.name + ' respelled line must carry its note');
+  }
+  const all = new Set();
+  for (const c of OLP.cases) for (const a of c.algs) all.add(key(a.alg));
+  assert(all.size === 24, 'distinct 1LP states: ' + all.size);
+  const prim1l3t = new Map(ALGDATA.subsets['1L3T'].cases.map(c => [E.stateKey(E.caseStateOf(c.algs[0].alg, 'cif')), c.name]));
+  const hits = [...all].filter(k => prim1l3t.has(k)).map(k => prim1l3t.get(k));
+  assert(hits.length === 1 && hits[0] === '4a.O.6', '1L3T primary collisions: ' + hits.join(','));
+});
+t('1LP cross-sheet: H sends exactly 11 zwegner group-1 states into the TCP finish set (the sheet\'s "11 possible permutations")', () => {
+  const U_CCW = 2 * E.FIDX.U + 1, U_CW = 2 * E.FIDX.U;
+  const P = new Set();
+  const addP = (cs) => { let s = cs; for (let k = 0; k < 3; k++){ P.add(E.stateKey(s)); s = E.move(s, U_CCW); } };
+  addP(E.solved());
+  for (const c of ALGDATA.subsets.TCP.cases) addP(E.caseStateOf(c.algs[0].alg, 'cif'));
+  const zw = new Map();
+  const addZ = (st, label) => { let s = st; for (let i = 0; i < 3; i++){ const k = E.stateKey(s); if (!zw.has(k)) zw.set(k, label); s = E.move(s, U_CW); } };
+  addZ(E.solved(), '1.E.1');
+  for (const c of ALGDATA.subsets['1L3T'].cases) addZ(E.caseStateOf(c.algs[0].alg, 'cif'), c.name);
+  assert(zw.size === 537, 'zwegner universe: ' + zw.size);
+  let pz = 0;
+  for (const k of P) if (zw.has(k)) pz++;
+  assert(pz === 51, 'TCP finish set ∩ zwegner: ' + pz + ' (the 16-exact oracle + solved, x3)');
+  const TH = olpTbl('H');
+  let n = 0;
+  for (const [k, label] of zw){
+    if (!label.startsWith('1.') || P.has(k)) continue;
+    if (P.has(E.stateKey(E.applyTable(TH, olpCoset.get(k))))) n++;
+  }
+  assert(n === 11, 'H on zwegner group 1: ' + n);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
