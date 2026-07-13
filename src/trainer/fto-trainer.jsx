@@ -342,7 +342,7 @@ export default function FtoTrainer() {
               <span className={"ychip mono" + (tok ? "" : " blank")}>{tok || ""}</span>
               <AlgText text={row.a.alg} />
               <span className="ratetag">{E.countMoves(p || []) + " moves"}</span>
-              {tok === null ? <span className="warntag" title="authored at a different orientation of this case">variant</span> : null}
+              {tok === null ? <span className="warntag" title={row.a.note || "authored at a different orientation of this case"}>variant</span> : null}
             </div>
           );
         })}

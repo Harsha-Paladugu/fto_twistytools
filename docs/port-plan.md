@@ -161,8 +161,28 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   **closing the M1 single-T direction residue machine-exactly** —, Uv/Rv/Lv ≡
   our o-rotations, SiGN 2U ≡ Us, their lowercase wides ≡ our w tokens,
   orientation-reference solves, probe patterns). test:engine now 45 tests.
-- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 1 LANDED (2026-07-10):
-  the TCP last-layer set is LIVE on algs.html.** The user supplied the
+- [~] **M3 — Sheet pipeline + Algorithms page. PHASE 2 LANDED (2026-07-13):
+  the 1L3T set (one-look last 3 triples, 178 cases / 251 algs) is LIVE**,
+  imported from zwegner's page (algs by Aedan Bryant; 6c = the TCP set, from
+  Edd Dibley's document) by the new adapter `tools/import-1l3t.mjs` over the
+  committed snapshot `data/sources/1l3t-zwegner.html`. The engine gained that
+  page's dialect: S/H sledge-hedge macros (S'/H' inverses; hold-relative,
+  dialect-aware) and `[U]`/`[U']` pre-AUF marks (executed as the move; `[R]`
+  stays unparseable — csTimer spells rotations that way), plus a strict
+  mirrorAlg (no silent passthrough). Everything machine-verified and pinned
+  (test:engine 63): every alg parses and solves an L3T-local state (region
+  pinned slot-exactly); per-case classification 221 on-orbit / 15 final-AUF-
+  short / 15 working-slot variants, each non-clean alg carrying a JSON note
+  (surfaced as hover tags on algs.html and in the trainer reveal);
+  **cross-sheet oracle: all 18 TCP alg states appear exactly among the 6c
+  algs** — two independently transcribed sources agreeing state-for-state
+  (TCP 11/12, our known post-AUF pair, land as the noted variants of
+  6c.O.6/6c.O.8). Two source algs are transcription ERRATA (they don't solve
+  last-layer states — 6b.E.5's only alg, so that case is omitted, and
+  4b.O.4's fourth) — excluded, self-checked by the importer, pinned in tests,
+  noted in the JSON. Case 1.E.1 is the solved state (no alg). Headless-Edge
+  E2E over algs.html + trainer.html with both subsets: 15 checks, 0 console
+  errors. PHASE 1 (2026-07-10): the TCP last-layer set LIVE on algs.html. The user supplied the
   community "FTO Notation" doc (Sonja Black) + the TCP sheet (New Notation,
   Diansheng/DaYan). Engine grew the notation extensions they need — a
   48-hold frame model (24 CIF + 24 EIF holds), `{X,Y}` bracket rotations

@@ -290,9 +290,27 @@ function preprocessAlg(a){
 }
 const TOKRE = /^(BR|BL|[UFRLDB])(w|s|o)?(2)?(')?$/;
 const WIDERE = /^(br|bl|[ufrldb])(2)?(')?$/;
+// Community trigger macros (zwegner/Bryant 1L3T dialect, page-defined): S =
+// sledge, H = hedge; S'/H' are their exact textual inverses. Expanded at parse
+// level, so the letters resolve through whatever hold is active at that point
+// (a sledge behind a bracket rotation is the re-gripped sledge). [U]/[U'] are
+// that dialect's pre-AUF marks and execute as the plain U move. NOTE: csTimer
+// spells whole-puzzle ROTATIONS [R] — never feed csTimer-dialect texts through
+// this parser (ground-truth §Notation); only [U]/[U'] are accepted here.
+const MACRO = { S: "R' L R L'", "S'": "L R' L' R", H: "R B' R' B", "H'": "B' R B R'" };
+function expandTokens(raw){
+  const toks = [];
+  for (const t of raw){
+    let m;
+    if (MACRO[t]) toks.push(...MACRO[t].split(' '));
+    else if ((m = /^\[(U'?)\]$/.exec(t))) toks.push(m[1]);
+    else toks.push(t);
+  }
+  return toks;
+}
 function parseAlg(str){
   const out = [];
-  const toks = preprocessAlg(str).split(' ').filter(Boolean);
+  const toks = expandTokens(preprocessAlg(str).split(' ').filter(Boolean));
   if (!toks.length) return out;
   for (const t of toks){
     let m;
@@ -443,20 +461,26 @@ function invertAlg(str){
   // on the hold at that point): returns null for bracket-containing algs.
   if (String(str).indexOf('{') >= 0) return null;
   return preprocessAlg(str).split(' ').filter(Boolean).reverse()
-    .map(t => t === 'T2' || t === "T2'" ? 'T2' : (t.endsWith("'") ? t.slice(0,-1) : t + "'")).join(' ');
+    .map(t => t === 'T2' || t === "T2'" ? 'T2'
+      : t === '[U]' ? "[U']" : t === "[U']" ? '[U]'
+      : (t.endsWith("'") ? t.slice(0,-1) : t + "'")).join(' ');
 }
 const MIRF = FSIGN.map(s => FACE_BY_S[vkey(mApply(MIRROR, s))]);  // U↔L F↔R BR↔D BL↔B
 function mirrorAlg(str){
   if (String(str).indexOf('{') >= 0) return null;   // brackets: not textually mirrorable
-  return preprocessAlg(str).split(' ').filter(Boolean).map(t => {
+  // macros/[U] expand first (their mirrors aren't in the macro alphabet); any
+  // token the mirror map doesn't recognize fails the WHOLE alg — a silent
+  // passthrough would emit a wrong mirror.
+  const out = expandTokens(preprocessAlg(str).split(' ').filter(Boolean)).map(t => {
     let m;
     if ((m = /^T(2)?(')?$/.exec(t))) return m[1] ? 'T2' : (m[2] ? 'T' : "T'");
     if ((m = TOKRE.exec(t)))
       return FACES[MIRF[FIDX[m[1]]]] + (m[2]||'') + (m[3]||'') + (m[4] ? '' : "'");
     if ((m = WIDERE.exec(t)))
       return FACES[MIRF[FIDX[m[1].toUpperCase()]]].toLowerCase() + (m[2]||'') + (m[3] ? '' : "'");
-    return t;
-  }).join(' ');
+    return null;
+  });
+  return out.some(t => t === null) ? null : out.join(' ');
 }
 function normAlg(alg){
   const p = parseAlg(alg);

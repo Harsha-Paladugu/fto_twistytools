@@ -48,6 +48,8 @@
               h('div', { class: 'algrow' },
                 algSpan(a.alg),
                 h('span', { class: 'ratetag' }, (c.moves != null ? c.moves : E.countMoves(E.parseAlg(a.alg) || [])) + ' moves'),
+                a.note ? h('span', { class: 'ratetag', title: a.note, style: 'cursor:help' },
+                  /working-slot/.test(a.note) ? '⚠ variant' : '⚠ final AUF') : null,
                 D.copyBtn(a.alg))),
             c.moves_note ? h('p', { class: 'sub', style: 'margin:6px 0 0;font-size:12px' }, '(' + c.moves_note + ')') : null))));
   }

@@ -623,5 +623,138 @@ t('TCP data: token counts match the sheet movecounts (AUF conventions noted)', (
   }
 });
 
+/* ---------- 13. notation extensions for the zwegner 1L3T dialect (M3 ph2) ---------- */
+t('macros: S/H (and inverses) expand to their page-defined triggers, state-exactly', () => {
+  const st = (a, d) => E.applyParsed(E.parseAlg(a), E.solved(), d);
+  const eqs = (a, b, d) => assert(E.eq(st(a, d), st(b, d)), a + ' vs ' + b + (d ? ' (' + d + ')' : ''));
+  eqs('S', "R' L R L'"); eqs("S'", "L R' L' R"); eqs('H', "R B' R' B"); eqs("H'", "B' R B R'");
+  assert(E.eq(st("S S'"), E.solved()), 'S S\' is the identity');
+  assert(E.eq(st("H H'"), E.solved()), 'H H\' is the identity');
+  eqs('{B,U} S', "{B,U} R' L R L'");          // macros are hold-relative
+  eqs('S', "R' L R L'", 'eif');               // and dialect-aware
+});
+t('macros: [U]/[U\'] pre-AUF marks execute as the plain move; only U is accepted', () => {
+  const st = (a) => E.applyParsed(E.parseAlg(a), E.solved());
+  assert(E.eq(st('[U]'), st('U')) && E.eq(st("[U']"), st("U'")), 'AUF marks');
+  assert(E.parseAlg('[R]') === null, '[R] must NOT parse (csTimer spells rotations that way)');
+  assert(E.countMoves(E.parseAlg('S U S')) === 9, 'movecounts count the expansion');
+  assert(E.parseAlg('{U,BR}S').length === 5, 'glued bracket splits: 1 hold + 4 moves');
+});
+t('macros: invertAlg round-trips the dialect; mirrorAlg is strict (no silent passthrough)', () => {
+  assert(E.invertAlg('[U] R') === "R' [U']", 'invert text');
+  const fwd = E.parseAlg("[U] S R"), inv = E.parseAlg(E.invertAlg("[U] S R"));
+  assert(E.eq(E.applyParsed(inv, E.applyParsed(fwd, E.solved())), E.solved()), 'invert solves');
+  assert(E.mirrorAlg('S') === "F U' F' U", 'macros mirror through their expansion');
+  assert(E.mirrorAlg('Q7 zz') === null, 'unknown tokens fail the whole mirror');
+});
+
+/* ---------- 14. 1L3T sheet data (M3 ph2): machine pins for the imported set ---------- */
+const L3TS = ALGDATA.subsets['1L3T'];
+// locality region, empirically pinned over the full sheet at import: top-three
+// corners, the three U-face edges, and centres in the top face + the tetrad-A
+// parking slots {3,6,7,11} + the six U-layer flanks on L/R/B
+const L3T_CENTRES = new Set([0, 1, 2, 3, 6, 7, 11, 12, 14, 15, 16, 22, 23]);
+const L3T_VARIANT_CENTRES = new Set([0, 1, 2, 3, 6, 7, 11]);
+const VERT_ROTS = E.ROT24.filter(g => E.faceImg(g, E.FIDX.U) === E.FIDX.U);
+function conjState(M, s){
+  const F = E.toFacelets(s), P = E.rotFaceletPerm(M), F2 = new Array(72);
+  for (let i = 0; i < 72; i++) F2[i] = E.faceImg(M, F[P[i]]);
+  return E.fromFacelets(F2);
+}
+const l3tState = (a) => E.caseStateOf(a, 'cif');
+t('1L3T data: 178 cases in 12 OLP groups, 251 algs, distinct primary states, CIF', () => {
+  assert(L3TS && L3TS.notation === 'cif', 'subset dialect');
+  assert(L3TS.cases.length === 178, 'cases: ' + L3TS.cases.length);
+  assert(L3TS.groups.length === 12 && L3TS.cases.every(c => L3TS.groups.includes(c.group)), 'OLP groups');
+  const algs = L3TS.cases.reduce((a, c) => a + c.algs.length, 0);
+  assert(algs === 251, 'algs: ' + algs);
+  const keys = new Set(L3TS.cases.map(c => E.stateKey(l3tState(c.algs[0].alg))));
+  assert(keys.size === 178, 'distinct primaries: ' + keys.size);
+});
+t('1L3T data: every alg solves an L3T-local state (corners 0-2, U edges, pinned centres)', () => {
+  const solved = E.solved();
+  for (const c of L3TS.cases) for (const a of c.algs){
+    const s = l3tState(a.alg);
+    assert(s, c.name + ' parses: ' + a.alg);
+    for (let i = 0; i < 6; i++) if (s.cp[i] !== i || s.co[i] !== 0)
+      assert(i < 3, c.name + ' corner outside the layer: ' + i);
+    for (let i = 0; i < 12; i++) if (s.ep[i] !== i)
+      assert([0, 1, 4].includes(i), c.name + ' edge outside the layer: ' + i);
+    for (let i = 0; i < 24; i++) if (s.ctr[i] !== solved.ctr[i])
+      assert(L3T_CENTRES.has(i), c.name + ' centre outside the region: ' + i);
+  }
+});
+t('1L3T data: per-case classification pinned — 221 on-orbit, 15 AUF-short, 15 variants; notes match', () => {
+  const U_CW = 2 * E.FIDX.U;
+  let clean = 0, short_ = 0, variants = 0;
+  for (const c of L3TS.cases){
+    const anchor = l3tState(c.algs[0].alg);
+    const orbit = [anchor];
+    for (let i = 0; i < 2; i++) orbit.push(E.move(orbit[orbit.length - 1], U_CW));
+    const okeys = orbit.map(E.stateKey);
+    for (const a of c.algs){
+      const s = l3tState(a.alg);
+      if (okeys.includes(E.stateKey(s))) { clean++; assert(!a.note, c.name + ' unexpected note'); continue; }
+      let post = null;
+      for (const tok of ['U', "U'"]){
+        const s2 = l3tState(a.alg + ' ' + tok);
+        if (s2 && okeys.includes(E.stateKey(s2))) { post = tok; break; }
+      }
+      if (post) { short_++; assert(/AUF short/.test(a.note || ''), c.name + ' AUF-short note missing'); continue; }
+      let variant = false;
+      outer: for (const o of orbit) for (const g of VERT_ROTS){
+        const v = conjState(g, o);
+        if (!v.cp.every((x, i) => x === s.cp[i]) || !v.co.every((x, i) => x === s.co[i])) continue;
+        if (!v.ep.every((x, i) => x === s.ep[i])) continue;
+        let ok = true;
+        for (let x = 0; x < 24; x++) if (v.ctr[x] !== s.ctr[x] && !L3T_VARIANT_CENTRES.has(x)) { ok = false; break; }
+        if (ok) { variant = true; break outer; }
+      }
+      assert(variant, c.name + ' unclassifiable alg: ' + a.alg);
+      variants++;
+      assert(/working-slot variant/.test(a.note || ''), c.name + ' variant note missing');
+    }
+  }
+  assert(clean === 221 && short_ === 15 && variants === 15, `classes ${clean}/${short_}/${variants}`);
+});
+t('1L3T data: cross-sheet oracle — TCP states appear in the 1L3T set (6c is TCP)', () => {
+  const U_CW = 2 * E.FIDX.U;
+  const pageKeys = new Set();
+  for (const c of L3TS.cases){
+    let s = l3tState(c.algs[0].alg);
+    for (let i = 0; i < 3; i++){ pageKeys.add(E.stateKey(s)); s = E.move(s, U_CW); }
+  }
+  let hits = 0;
+  for (const c of ALGDATA.subsets.TCP.cases)
+    if (pageKeys.has(E.stateKey(E.caseStateOf(c.algs[0].alg, 'cif')))) hits++;
+  assert(hits === 16, 'TCP states among 1L3T primaries mod AUF: ' + hits + ' (11/12 live in variants)');
+  // TCP 11/12 (the post-AUF-authored pair) appear EXACTLY as the noted
+  // working-slot variant algs of 6c.O.6 / 6c.O.8 — two independently
+  // transcribed sheets agreeing state-for-state
+  const t11 = E.stateKey(E.caseStateOf(ALGDATA.subsets.TCP.cases[10].algs[0].alg, 'cif'));
+  const t12 = E.stateKey(E.caseStateOf(ALGDATA.subsets.TCP.cases[11].algs[0].alg, 'cif'));
+  const find = (name) => L3TS.cases.find(c => c.name === name);
+  assert(find('6c.O.6').algs.some(a => a.note && E.stateKey(l3tState(a.alg)) === t11), 'TCP 11 == 6c.O.6 variant');
+  assert(find('6c.O.8').algs.some(a => a.note && E.stateKey(l3tState(a.alg)) === t12), 'TCP 12 == 6c.O.8 variant');
+});
+t('1L3T data: the two source errata are excluded and are provably broken', () => {
+  const ERRATA = [
+    "[U] {U,BR} BLw' B U R U' B' BLw BR' R'",   // 6b.E.5's only alg
+    "{L,U} U R U R' U' {L,BL} D' R' U' R D",    // 4b.O.4's fourth alg
+  ];
+  for (const c of L3TS.cases) for (const a of c.algs)
+    assert(!ERRATA.includes(a.alg), 'erratum leaked into the JSON: ' + a.alg);
+  assert(!L3TS.cases.some(c => c.name === '6b.E.5'), '6b.E.5 must be omitted (its only alg is broken)');
+  const solved = E.solved();
+  for (const text of ERRATA){
+    const s = l3tState(text);
+    assert(s, 'erratum should still parse');
+    let local = true;
+    for (let i = 3; i < 6; i++) if (s.cp[i] !== i || s.co[i] !== 0) local = false;
+    for (let i = 0; i < 12; i++) if (s.ep[i] !== i && ![0, 1, 4].includes(i)) local = false;
+    assert(!local, 'erratum unexpectedly solves a last-layer state — revisit the exclusion');
+  }
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

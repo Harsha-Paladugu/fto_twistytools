@@ -152,6 +152,23 @@ Skewb engine and stays until M1 deletes the code it documents).
   - **Doc erratum found**: the notation doc says wide "u is equivalent to a
     D' turn plus a 120 rotation" — machine-pinned identity is u = Uo ∘ D
     (opposite face UNPRIMED; no rotation makes the D′ version true).
+- **zwegner 1L3T dialect (M3 phase 2, machine-verified 2026-07-13)** — the
+  engine parses natively: `S` = sledge `R' L R L'`, `H` = hedge `R B' R' B`,
+  `S'`/`H'` their exact textual inverses (macros expand at parse level, so
+  they are hold-relative and dialect-aware); `[U]`/`[U']` = pre-AUF marks,
+  executed as the plain move. **`[R]`-style tokens stay unparseable on
+  purpose: csTimer spells whole-puzzle ROTATIONS with square brackets — never
+  feed csTimer-dialect texts through the engine parser.** Sheet facts, all
+  machine-pinned (test-engine §14): 179 cases (1.E.1 = solved), all alg
+  states L3T-local; ~30 algs are noted specials — 15 end one final AUF short
+  as printed, 15 are "working-slot variants" (they solve the case with the
+  unsolved below-layer triangles parked on a different face — same corners/
+  edges up to a vertical re-grip, centre diffs confined to the top face + the
+  tetrad-A parking slots {F+x, BR+x, BR+y, BL+z}); TWO source algs are
+  transcription errors that do not solve last-layer states (6b.E.5's only
+  alg; 4b.O.4's fourth) — excluded from our data, exclusion self-checked.
+  Cross-sheet oracle: all 18 TCP alg states appear EXACTLY among the 6c algs;
+  TCP 11/12 appear as the working-slot variants of 6c.O.6/6c.O.8.
 - **TCP sheet findings (machine-verified 2026-07-10)**: the TCP sheet's
   header claims EIF notation, but all 18 algs execute from the **CIF hold**
   (the community notation doc's TCP description is the accurate one). The
