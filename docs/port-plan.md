@@ -49,7 +49,7 @@ equivalents are:
 |---|---|
 | Full-state BFS dist table (`tables.js`) | Per-step pattern databases (corners, per-orbit centers, edge slices) — same IndexedDB cache layer, new table shapes |
 | `optimalSolution` (global optimal) | Per-step IDA* with PDB lower bounds; no global-optimal claim anywhere in UI copy |
-| Masked scrambles from dist fibers | Setup-based scrambles: inverse of the case state + randomized pre-moves (trainer); full-solve scrambles are ~30 random face moves. Random-state stays deferred even after M5: the method solver's ~55-move inverses are not scramble-grade (community standard ≤ 39 via xyzzy's phases, whose ~97 MB tables exceed the shipped-table budget) — revisit with the trainer full-solve mode |
+| Masked scrambles from dist fibers | Setup-based scrambles: inverse of the case state + randomized pre-moves (trainer); full-solve scrambles are ~30 random face moves. Random-state stays deferred even after M5: the method solver’s ~60-move inverses are not scramble-grade (community standard ≤ 39 via xyzzy's phases, whose ~97 MB tables exceed the shipped-table budget) — revisit with the trainer full-solve mode |
 | Uniform random reachable state | Random-move scramble (documented as such) until M5's random-state upgrade |
 | Census (oo.html) | deleted |
 
@@ -389,13 +389,38 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   IndexedDB cache, solve flow, diagrams, cached reboot < 1 s). solver.html
   un-parked (banner removed), home card updated. DEVIATIONS/deferrals:
   movecount-only metrics (as planned); **random-state trainer scrambles
-  DEFERRED** — our method solver's ~55-move inverses are not scramble-grade
+  DEFERRED** — our method solver’s ~60-move inverses are not scramble-grade
   (community standard ≤ 39 via xyzzy's 3 phases, whose 97 MB tables exceed
   the shipped-table budget); revisit when the user specs trainer full-solve
   mode (options: vendor cubing.js's scrambler, or port xyzzy's phases with
   a user checkpoint). USER validation still welcome: execute a printed
   solve or two on hardware (the Skewb junction-pinning protocol) — every
   line is engine-proved, but a physical spot-check closes the loop.
+  **REWORK (2026-07-13, post-step-trainers): the Bencisco execution hold**
+  (USER spec): after the first center the solve HOLDS IT ON BL and steps
+  t1/t2/sc/c3/c4 emit ONLY {R, U, Rw, BL} (BL = white-layer alignment),
+  then rotate back for LBT/1L3T. Machinery (ground-truth §Methods for the
+  full pins): `makeBLHold` in js/tables.js derives the 3 grips
+  (T / Uo T / Uo' T; hold-U = engine L/R/B; Rw = engine D + grip drift)
+  from the engine's own hold walk; the restricted group SEALS the first
+  center (spin-only, ≤ 1 BL realign — steps 2-4 physically cannot break
+  step 1); the PDB families A/B/C/E6/H1 were REBUILT in the restricted
+  metric over (coordinate × 3 grips), collapsed min-over-grips, with a 99
+  sentinel on restricted-unreachable coordinates (instant fail for
+  impossible junctions); full-metric H1.D kept for fc; bundle ≈ 9.1 MB,
+  IndexedDB key bumped to 'fto-pdb-v3', build ≈ 4 s. solver-core runs a
+  (state, grip) IDA* over the 8 hold tokens (same-axis runs canonicalized
+  R < Rw < BL; all 3 grips tried per step as free re-grips), caps t1 15 /
+  t2 16 / sc 18 / c3 20 / c4 20; each t1..c4 segment displays its grip
+  spell (`pre`) and verifyLine/the tests re-prove rotSpell + pre + tokens
+  per segment end-to-end. NEW GATE NUMBERS: scan 200/200 solved, 0 verify
+  failures, totals min 50 / median 62 / max 74 (avg 61.8; the ergonomic
+  move set costs ~6 moves vs the free search, still under the ~70 human
+  average), median 144 ms / p90 814 ms / max 3.3 s (≈ 30× faster — the
+  restricted-metric PDBs are far tighter); ladder 173 fixed / 27 vertical;
+  test:solver 23 green; headless-Edge E2E 15 checks / 0 console errors
+  (boot 4.4 s fresh, cached reboot instant, hold segs carry grip spells +
+  pure tokens).
 - [ ] **M6 — Accounts/Firebase (OPTIONAL — user decision).** Demo mode suffices
   until launch. If wanted: new Firebase project, auth + per-user prefs/stats
   sync only (no census collections; firestore.rules shrinks accordingly), rules

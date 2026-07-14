@@ -18,15 +18,27 @@
      5  Last bottom triple  corner 4 + slots F(4)/BL(10)  — LBT sheet algs
      6  Last 3 triples  the U layer                       — 1L3T/TCP sheet algs
 
-   Steps 1-4 are per-step IDA* over the 16 native moves (weighted on the
-   deep center steps) with max()-combined pattern-database lower bounds
-   (js/tables.js; each PDB alone is admissible, so the max is). A beam of
-   the best partial lines is kept across step junctions so early greed does
-   not hide a better total (K tunable). Steps 5-6 finish with the sheets'
-   algs verbatim, under TWO different matching semantics (see the finish
-   index below): L3T by exact state key, LBT by EFFECT — caseStateOf is the
-   single source of truth either way, so annotation subtleties (setup-undo
-   closings, AUF-short texts, working-slot variants) resolve themselves.
+   Step 1 is IDA* over the 16 native moves in the pre-rotation hold. Steps
+   2-4 run in the BENCISCO HOLD (the user's method decision, 2026-07-13):
+   the finished first center is held on the BL face and the search emits
+   ONLY the ergonomic tokens R / U / Rw / BL — BL turns being the "align
+   the white layer" moves (in this hold they are the only way the first
+   center can even move: the restricted group seals its slots, so steps
+   2-4 can never break step 1). Each of those steps is IDA* over the 8
+   hold tokens with the grip tracked (a wide R drifts the hold about the
+   R-BL axis, walkParsed semantics); the three R-axis grips are tried as
+   free re-grips at each step start, and the displayed segment carries its
+   grip's rotation spell (T / Uo T / Uo' T from js/tables.js makeBLHold).
+   Heuristics are max()-combined pattern databases measured in the SAME
+   move group (the r* families; min-over-grips, so admissible whatever
+   grip the node is in). After step 4 the human rotates back to the sheet
+   hold: steps 5-6 finish with the sheets' algs verbatim under TWO
+   different matching semantics (see the finish index below): L3T by
+   exact state key, LBT by EFFECT — caseStateOf is the single source of
+   truth either way, so annotation subtleties (setup-undo closings,
+   AUF-short texts, working-slot variants) resolve themselves. A beam of
+   the best partial lines is kept across step junctions so early greed
+   does not hide a better total (K tunable).
 
    Color neutrality = whole-puzzle pre-rotation: solving "with a different
    first center" is solving conj_g(scramble) with the fixed-region method.
@@ -45,13 +57,16 @@
 
 /* ---------- method registry (module-level: no engine dependency) ---------- */
 const METHOD_NAME = 'Bencisco';
+// caps for t1..c4 are in Bencisco-hold tokens (R/U/Rw/BL each count 1); the
+// restricted move group runs deeper than free search did — the coordinate
+// eccentricities alone reach 16-17 on the late centers (tables.js r* pins)
 const STEP_DEFS = {
   fc:  { name: 'First center',      cap: 12 },
-  t1:  { name: 'First triple',      cap: 13 },
-  t2:  { name: 'Second triple',     cap: 13 },
-  sc:  { name: 'Second center',     cap: 14 },
-  c3:  { name: 'Third center',      cap: 15 },
-  c4:  { name: 'Last center',       cap: 16 },
+  t1:  { name: 'First triple',      cap: 15 },
+  t2:  { name: 'Second triple',     cap: 16 },
+  sc:  { name: 'Second center',     cap: 18 },
+  c3:  { name: 'Third center',      cap: 20 },
+  c4:  { name: 'Last center',       cap: 20 },
   lbt: { name: 'Last bottom triple' },
   l3t: { name: 'Last 3 triples' },
 };
@@ -60,8 +75,8 @@ const DEFAULTS = {
   beam: 4, maxSolsPerStep: 3, slack: 0, budget: 1.6e7, stepBudget: 6e5, orient: 'auto',
   // per-step weighted-IDA* factors: 1 = exact; the late center steps run
   // 10+ moves deep, where exact search is intractable. Measured on the hard
-  // third-center instances: w=1.6-1.8 is ~30x faster than exact at <= +1
-  // move, while w>=2.5 is WORSE on both axes (over-pruning re-expands).
+  // third-center instances: moderate weights are ~30x faster than exact at
+  // <= +1 move, while w>=2.5 is WORSE on both axes (over-pruning re-expands).
   weights: { fc: 1, t1: 1, t2: 1, sc: 1.4, c3: 1.8, c4: 1.8 },
 };
 
@@ -97,6 +112,29 @@ function makeSolverCore(E, T, PDB, algData) {
   }
   const T1_OPTS = [{ corner: 3, aKey: '6,9', cKey: '3' }, { corner: 5, aKey: '5,8', cKey: '5' }];
 
+  /* ---------- the Bencisco hold (steps t1..c4) ---------- */
+  // First center on BL, tokens {R, U, Rw, BL} only. The grip/generator table
+  // comes from tables.js (same source the r* PDBs were BFS'd with) and is
+  // re-proved here against the engine's own reading: tracked token-by-token
+  // application must equal applyParsed of the displayed "spell + word" text
+  // for every grip — else the search would emit unexecutable lines.
+  const BL = T.makeBLHold(E);
+  (() => {
+    let x = 20260713;
+    const rnd = () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return x / 0x80000000; };
+    for (let trial = 0; trial < 60; trial++) {
+      const j0 = trial % 3;
+      let probe = E.solved();
+      for (let i = 0; i < 10; i++) probe = E.move(probe, (rnd() * 16) | 0);
+      const word = Array.from({ length: 1 + ((rnd() * 6) | 0) }, () => (rnd() * 8) | 0);
+      let s = E.copy(probe), j = j0;
+      for (const k of word) { const g = BL.gen[j][k]; s = E.move(s, g.m); j = g.nj; }
+      const text = BL.SPELLS[j0] + ' ' + word.map(k => BL.TOKS[k]).join(' ');
+      if (!E.eq(s, E.applyParsed(E.parseAlg(text), probe)))
+        throw new Error('Bencisco-hold reading mismatch at grip ' + j0 + ': ' + text);
+    }
+  })();
+
   /* ---------- goal predicates on states ---------- */
   function hexOK(s, f) {
     for (const e of HEX_EDGES[f]) if (s.ep[e] !== e) return false;
@@ -116,28 +154,34 @@ function makeSolverCore(E, T, PDB, algData) {
   // returned early once ANY component exceeds lim (the DFS only needs to
   // know whether g + w*h clears the bound — early exit skips the expensive
   // 6-edge pair lookups on most pruned nodes). h === 0 stays exact.
-  const h1 = (s, f) => PDB.H1[f][T.h1Index(s.ep, s.ctr, f, HEX_EDGES[f])];
+  //
+  // fc reads the full 16-move-metric H1.D; every other stage reads the r*
+  // families, measured in the Bencisco-hold move group itself (min over the
+  // three grips, so a lower bound whatever grip the node is in; the 99
+  // sentinel marks coordinates the restricted group cannot solve at all,
+  // which fails the step instantly instead of burning its node budget).
+  const rh1 = (s, f) => PDB.rH1[f][T.h1Index(s.ep, s.ctr, f, HEX_EDGES[f])];
   const bKeyOf = faces => HEX_FACES.filter(f => faces.includes(f)).join('');
   function stageH(stage, line) {
     switch (stage.id) {
-      case 'fc': return s => h1(s, 'D');    // exact for the D hexagon
+      case 'fc': return s => PDB.H1.D[T.h1Index(s.ep, s.ctr, 'D', HEX_EDGES.D)];
       case 't1': {
         const o = stage.opt;
         return (s, lim) => {
-          let h = PDB.C[o.cKey][T.cornerIndex(s.cp, s.co)];
+          let h = PDB.rC[o.cKey][T.cornerIndex(s.cp, s.co)];
           if (h > lim) return h;
-          const d = PDB.A[o.aKey][T.encA(s.ctr)]; if (d > h) h = d;
+          const d = PDB.rA[o.aKey][T.encA(s.ctr)]; if (d > h) h = d;
           if (h > lim) return h;
-          const e = h1(s, 'D'); return e > h ? e : h;
+          const e = rh1(s, 'D'); return e > h ? e : h;
         };
       }
       case 't2':
         return (s, lim) => {
-          let h = PDB.C['3,5'][T.cornerIndex(s.cp, s.co)];
+          let h = PDB.rC['3,5'][T.cornerIndex(s.cp, s.co)];
           if (h > lim) return h;
-          const d = PDB.A['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
+          const d = PDB.rA['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
           if (h > lim) return h;
-          const e = h1(s, 'D'); return e > h ? e : h;
+          const e = rh1(s, 'D'); return e > h ? e : h;
         };
       default: {
         // center stages: hexes done so far + the one being solved. The heavy
@@ -145,20 +189,20 @@ function makeSolverCore(E, T, PDB, algData) {
         // 6-edge tables — keeping solved hexagons while building another is
         // the real cost, and only combined coordinates see any of it.
         const faces = line.hexes.concat([stage.opt.face]);
-        const bt = PDB.B[bKeyOf(faces)];
+        const bt = PDB.rB[bKeyOf(faces)];
         const pairs = [];
         for (let i = 0; i < faces.length; i++) for (let j = i + 1; j < faces.length; j++) {
           const key = HEX_FACES.filter(f => f === faces[i] || f === faces[j]).join('');
-          pairs.push({ t: PDB.E6[key], p: T.E6_PAIRS[key] });
+          pairs.push({ t: PDB.rE6[key], p: T.E6_PAIRS[key] });
         }
         return (s, lim) => {
-          let h = PDB.C['3,5'][T.cornerIndex(s.cp, s.co)];
+          let h = PDB.rC['3,5'][T.cornerIndex(s.cp, s.co)];
           if (h > lim) return h;
-          let d = PDB.A['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
+          let d = PDB.rA['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
           if (h > lim) return h;
           d = bt[T.encB(s.ctr)]; if (d > h) h = d;
           if (h > lim) return h;
-          for (const f of faces) { d = h1(s, f); if (d > h) h = d; if (h > lim) return h; }
+          for (const f of faces) { d = rh1(s, f); if (d > h) h = d; if (h > lim) return h; }
           for (const q of pairs) { d = q.t[T.edgePlaceIndex(s.ep, q.p)]; if (d > h) h = d; if (h > lim) return h; }
           return h;
         };
@@ -177,14 +221,18 @@ function makeSolverCore(E, T, PDB, algData) {
     }
   }
 
-  /* ---------- (weighted) IDA* over the 16 native moves ---------- */
-  // canonical successor rule: never the same face twice in a row; opposite
-  // faces commute (their layers are disjoint), so only the smaller-index
-  // face may come first when adjacent. weight > 1 makes the pruning
-  // inadmissible (weighted IDA*): solutions are then near-optimal, found
-  // exponentially faster — the later center steps run 10+ moves deep where
-  // exact search is intractable, and the port plan promises optimal OR
-  // near-optimal per step. Found solutions are always goal-checked.
+  /* ---------- (weighted) IDA* ---------- */
+  // fc searches the 16 native moves; t1..c4 search the 8 Bencisco-hold
+  // tokens with the grip tracked. Canonical successor rules: native — never
+  // the same face twice in a row, opposite faces commute so only the
+  // smaller-index face may come first when adjacent; hold tokens — R, Rw
+  // and BL share the R-BL axis and commute pairwise (same-axis layers), so
+  // a same-axis run is forced strictly ascending in the order R < Rw < BL,
+  // and U never follows U. weight > 1 makes the pruning inadmissible
+  // (weighted IDA*): solutions are then near-optimal, found exponentially
+  // faster — the later center steps run 10+ moves deep where exact search
+  // is intractable, and the port plan promises optimal OR near-optimal per
+  // step. Found solutions are always goal-checked.
   const work = { nodes: 0, budget: DEFAULTS.budget, limit: Infinity, stopped: false, truncated: false };
   // preallocated per-depth node buffers: the DFS writes each child into its
   // depth's buffer instead of allocating — no GC pressure in the hot loop
@@ -230,12 +278,41 @@ function makeSolverCore(E, T, PDB, algData) {
       }
     }
   }
+  // the Bencisco-hold DFS: nodes are (state, grip); path records token
+  // indices into BL.TOKS. Only the wide tokens change grip. lastAxis 0 with
+  // lastRank r = inside an R-axis run (next same-axis token needs rank > r);
+  // lastAxis 1 = just turned U (U may not repeat).
+  function dfsBL(s, j, g, bound, lastAxis, lastRank, goal, h, w, path, sols, maxSols) {
+    if (++work.nodes > work.limit) {
+      work.stopped = true;
+      if (work.nodes > work.budget) work.truncated = true;
+      return;
+    }
+    const lim = (bound - g) / w;
+    const hh = h(s, lim);
+    if (hh > lim + 1e-9) return;
+    if (hh === 0 && goal(s)) { sols.push({ moves: path.slice(), st: E.copy(s) }); return; }
+    if (g === bound) return;
+    const t = stackNode(g);
+    for (let k = 0; k < 8; k++) {
+      const ax = BL.AXIS[k];
+      if (ax === lastAxis && (ax === 1 || BL.RANK[k] <= lastRank)) continue;
+      const gen = BL.gen[j][k];
+      moveInto(gen.m, s, t);
+      path.push(k);
+      dfsBL(t, gen.nj, g + 1, bound, ax, BL.RANK[k], goal, h, w, path, sols, maxSols);
+      path.pop();
+      if (work.stopped || sols.length >= maxSols) return;
+    }
+  }
   // stepBudget bounds THIS call's nodes: a pathological instance fails fast
   // (killing one line-option) instead of starving the whole solve. On a
   // budget stop with nothing found, one retry at a higher weight rescues
   // most hard instances (heavier pruning finds a slightly longer answer).
-  function searchStep(start, goal, h, cap, maxSols, slack, weight, stepBudget) {
-    if (goal(start)) return [{ moves: [], st: E.copy(start) }];
+  // blMode runs the hold DFS from all three grips per bound (re-grips about
+  // the R-BL axis are free between steps); each solution records its grip.
+  function searchStep(start, goal, h, cap, maxSols, slack, weight, stepBudget, blMode) {
+    if (goal(start)) return [{ moves: [], st: E.copy(start), j0: 0 }];
     const attempt = (w, budget) => {
       // with w > 1 a length-L solution may only survive the weighted pruning
       // at bounds up to ~w*L, so the bound iterates past the length cap
@@ -243,12 +320,31 @@ function makeSolverCore(E, T, PDB, algData) {
       work.stopped = false;
       const boundCap = Math.ceil(cap * w);
       const sols = [];
+      const run = bound => {
+        if (!blMode) { dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols); return; }
+        for (let j0 = 0; j0 < 3 && !work.stopped && sols.length < maxSols; j0++) {
+          const before = sols.length;
+          dfsBL(start, j0, 0, bound, -1, -1, goal, h, w, [], sols, maxSols);
+          for (let i = before; i < sols.length; i++) sols[i].j0 = j0;
+        }
+      };
       let bound = Math.max(1, h(start, Infinity));
-      for (; bound <= boundCap && !sols.length && !work.stopped; bound++)
-        dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols);
+      for (; bound <= boundCap && !sols.length && !work.stopped; bound++) run(bound);
       if (slack > 0 && sols.length && sols.length < maxSols && bound <= boundCap && !work.stopped)
-        dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols); // one extra depth
-      return sols.filter(x => x.moves.length <= cap);
+        run(bound);                            // one extra depth
+      // dedupe repeat finds: a U-less token word reads identically at every
+      // grip (grip 0, the shortest spell, wins), and the slack depth re-finds
+      // the shorter solutions on its way down
+      const seen = new Set();
+      const out = [];
+      for (const x of sols) {
+        if (x.moves.length > cap) continue;
+        const k = x.moves.join(',') + '|' + E.stateKey(x.st);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(x);
+      }
+      return out;
     };
     const w = weight || 1;
     const budget = stepBudget || Infinity;
@@ -493,17 +589,23 @@ function makeSolverCore(E, T, PDB, algData) {
             let sols = memo.get(mk);
             if (!sols) {
               sols = searchStep(line.st, stageGoal(stage, line), stageH(stage, line),
-                caps[stageId], stageSols, stageSlack, weights[stageId], stepBudget);
+                caps[stageId], stageSols, stageSlack, weights[stageId], stepBudget,
+                stageId !== 'fc');           // t1..c4 run in the Bencisco hold
               memo.set(mk, sols);
             }
             if (!sols.length) { failures.step++; continue; }
             for (const sol of sols) {
+              // fc emits native letters in the pre-rotation hold; t1..c4 emit
+              // Bencisco-hold tokens with the grip's rotation spell as `pre`
+              const seg = !sol.moves.length ? null : stageId === 'fc'
+                ? { id: stage.id, kind: 'search', label: stepLabel(stage),
+                    text: sol.moves.map(m => E.MOVES[m]).join(' '), moves: sol.moves.length }
+                : { id: stage.id, kind: 'search', label: stepLabel(stage),
+                    text: sol.moves.map(k => BL.TOKS[k]).join(' '), moves: sol.moves.length,
+                    pre: BL.SPELLS[sol.j0] };
               next.push({
                 st: sol.st,
-                segs: sol.moves.length ? line.segs.concat([{
-                  id: stage.id, kind: 'search', label: stepLabel(stage),
-                  text: sol.moves.map(m => E.MOVES[m]).join(' '), moves: sol.moves.length,
-                }]) : line.segs.slice(),
+                segs: seg ? line.segs.concat([seg]) : line.segs.slice(),
                 moves: line.moves + sol.moves.length,
                 hexes: (stageId === 'sc' || stageId === 'c3' || stageId === 'c4')
                   ? line.hexes.concat([stage.opt.face]) : line.hexes,
@@ -570,11 +672,16 @@ function makeSolverCore(E, T, PDB, algData) {
         total: l.moves, rotIdx: l.rotIdx, rotSpell: ORIENTS[l.rotIdx].spell,
         segs: l.segs, ok: false,
       };
-      const lineKey = item.rotSpell + '|' + l.segs.map(s => s.text).join('|');
+      const lineKey = item.rotSpell + '|' + l.segs.map(s => (s.pre ? s.pre + '~' : '') + s.text).join('|');
       if (seenLine.has(lineKey)) continue;
       seenLine.add(lineKey);
       item.ok = verifyLine(scr, item);
-      if (!item.ok) { verifyFailures++; continue; }   // never emit an unproved line
+      if (!item.ok) {
+        // never emit an unproved line; debug surfaces what was dropped
+        if (opts.debug) console.log('[solver debug] verify fail: '
+          + JSON.stringify(item.segs.map(s => ({ id: s.id, pre: s.pre, text: s.text }))));
+        verifyFailures++; continue;
+      }
       (byLength[item.total] = byLength[item.total] || []).push(item);
     }
     for (const L of Object.keys(byLength))
@@ -590,19 +697,22 @@ function makeSolverCore(E, T, PDB, algData) {
     return { id: en.step, kind: 'alg', label: STEP_DEFS[en.step].name, dialect: en.dialect,
              text: en.text, moves: en.moves, subset: en.subset, caseName: en.caseName, note: en.note };
   }
-  const lineText = it => [it.rotSpell, ...it.segs.map(s => s.text)].filter(Boolean).join(' ');
+  const lineText = it => [it.rotSpell, ...it.segs.map(s => (s.pre ? s.pre + ' ' : '') + s.text)]
+    .filter(Boolean).join(' ');
 
   /* ---------- the per-line proof (every displayed line, end to end) ---------- */
   // Executes the DISPLAYED text through the engine from the original
-  // scramble state: the leading rotation is re-prefixed per segment (the
-  // human re-grips to the recognition hold between algorithms — rotations
-  // have no state effect, they only set the reading frame), and the final
-  // state must be EXACTLY solved. Any false here means a bug upstream.
+  // scramble state: the leading rotation — plus the segment's own hold spell
+  // for the Bencisco-hold steps — is re-prefixed per segment (the human
+  // re-grips to the recognition hold between algorithms — rotations have no
+  // state effect, they only set the reading frame), and the final state must
+  // be EXACTLY solved. Any false here means a bug upstream.
   function verifyLine(scr, item) {
     try {
       let st = E.copy(scr);
       for (const seg of item.segs) {
-        const parsed = E.parseAlg(((item.rotSpell ? item.rotSpell + ' ' : '') + seg.text).trim());
+        const parsed = E.parseAlg(((item.rotSpell ? item.rotSpell + ' ' : '')
+          + (seg.pre ? seg.pre + ' ' : '') + seg.text).trim());
         if (!parsed) return false;
         // seg dialects are all cif today; a future EIF sheet would need its
         // own rotation-prefix reading pinned before it may join the sweep
@@ -619,7 +729,7 @@ function makeSolverCore(E, T, PDB, algData) {
   }
 
   return {
-    METHOD_NAME, STEP_DEFS, STEP_ORDER, DEFAULTS,
+    METHOD_NAME, STEP_DEFS, STEP_ORDER, DEFAULTS, BL,
     HEX_FACES, HEX_EDGES, TRIPLE_SLOTS,
     hexOK, tripleOK, lbtOK,
     searchStep, stageH, stageGoal, resetWork, work,

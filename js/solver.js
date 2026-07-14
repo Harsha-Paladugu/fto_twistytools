@@ -120,14 +120,18 @@ function onRandom() {
 function reconstruction(it) {
   const lines = [];
   if (it.rotSpell) lines.push({ mv: it.rotSpell, cmt: '// rotate the puzzle; the solve reads from this hold' });
+  let inHold = false;
   for (const seg of it.segs) {
     let cmt = '// ' + seg.label;
+    if (seg.pre && !inHold) cmt += ' · rotate: first center to BL';
+    if (!seg.pre && inHold) cmt += ' · rotate back for the sheet algs';
+    inHold = !!seg.pre;
     if (seg.caseName) cmt += ' · ' + seg.subset + ' ' + seg.caseName;
-    lines.push({ mv: seg.text, cmt, note: seg.note || null });
+    lines.push({ mv: (seg.pre ? seg.pre + '  ' : '') + seg.text, cmt, note: seg.note || null });
   }
   // one continuous line is shown only when the engine proves that flat
   // reading too (an algorithm that nets a re-grip would make it misleading)
-  const flat = [it.rotSpell, ...it.segs.map(s => s.text)].filter(Boolean).join(' ');
+  const flat = [it.rotSpell, ...it.segs.map(s => (s.pre ? s.pre + ' ' : '') + s.text)].filter(Boolean).join(' ');
   let flatOk = false;
   try {
     const p = E.parseAlg(flat);
@@ -164,7 +168,7 @@ function renderInner() {
   main.appendChild(h('section', { class: 'homeintro' },
     h('h1', null, 'Method solver'),
     h('p', { class: 'lede' },
-      'Paste a scramble and get a full Bencisco solve you can actually follow: first center, two bottom triples, the remaining centers, then the sheet algorithms for the last bottom triple and the last three triples. Every line is checked by the computer, end to end.')));
+      'Paste a scramble and get a full Bencisco solve you can actually follow: first center, then — holding that center on BL — the two bottom triples and the remaining centers using only R, U, wide R and BL turns, then rotate back for the sheet algorithms for the last bottom triple and the last three triples. Every line is checked by the computer, end to end.')));
 
   /* scramble row */
   main.appendChild(h('div', { class: 'searchrow' },
@@ -196,7 +200,7 @@ function renderInner() {
             if (Number.isInteger(v) && v >= 2 && v <= 10) { UI.beam = v; persistPrefs(); if (UI.state && UI.result) runSearch(); }
           } })),
         h('p', { class: 'opthint' },
-          'More lines explore more step alternatives (slower, sometimes shorter). Solutions are organized purely by move count; the step searches are optimal for the first center and triples and near-optimal for the later centers. No global optimum is claimed; nobody knows FTO’s God’s number.'))));
+          'More lines explore more step alternatives (slower, sometimes shorter). Solutions are organized purely by move count; after the first center every search step uses only R, U, wide R and BL turns (the Bencisco hold), optimal for the triples and near-optimal for the later centers within that move set. No global optimum is claimed; nobody knows FTO’s God’s number.'))));
   }
   main.appendChild(drawer);
 

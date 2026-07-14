@@ -317,6 +317,39 @@ The USER supplies the actual sheets; this section is context, not authority.
   engine coordinates: D hexagon → corners 3,5 triples (F2T) → L/R/B
   hexagons (SC + L2C) → LBT (corner 4) → L3T (the U layer). All pinned in
   tools/test-solver.mjs against the M3 sheet data.
+- **Bencisco execution hold (M5 rework, machine-verified 2026-07-13)**: after
+  the first center is made it is HELD ON THE BL FACE, and the first two
+  triples plus the remaining three centers are solved with only
+  **{R, U, Rw, BL}** — BL turns are the "align the white layer" moves (USER
+  method decision). Facts, all derived from the engine's hold walk
+  (`js/tables.js makeBLHold`) and pinned in tools/test-solver.mjs:
+  - Exactly **3 CIF grips** place the first-center face (engine D) at
+    position BL with engine U at position R (R and BL are opposite):
+    spelled `T`, `Uo T`, `Uo' T`; hold-U reads engine L / R / B
+    respectively. Rw reads engine D PLUS a grip drift about the R-BL axis
+    (walkParsed's wide re-hold); BL reads engine D in place — the two share
+    a state effect and differ only by the frame rotation. Re-grips among
+    the three are free between steps (rotations cost nothing).
+  - The restricted group **SEALS the first center**: engine D's 3 edge
+    slots and 3 centre slots are invariant under the reachable face effects
+    {U, D, L, R, B} (each D edge's other face is F/BR/BL — all outside the
+    group — and D's centre slots sit only in the D/F/BR/BL layers), so a
+    solved first center can only SPIN (BL/Rw), realigns in ≤ 1 move, and
+    can never be broken by the later hold steps.
+  - Inside the post-first-center invariant space every later-step
+    coordinate is fully reachable; restricted-metric eccentricities (min
+    over grips): remaining-center patterns ≤ 11, one-hexagon-exact ≤ 16,
+    hexagon-pair 6-edge placements ≤ 17, triple-centre pairs ≤ 8, corners
+    ≤ 7. Coordinates OUTSIDE the invariant space are permanently
+    unreachable (a single BR turn from solved already strands first-center
+    triangles) — the r* PDBs mark them with a 99 sentinel, which fails an
+    impossible junction instantly.
+  - Measured (200-scramble gate scan, 2026-07-13): 200/200 solved, 0
+    verify failures; totals min 50 / median 62 / max 74 (avg 61.8 — the
+    ergonomic move set costs ~6 moves over the old free search, still
+    under the ~70 human average); median 144 ms / p90 814 ms / max 3.3 s
+    (the restricted-metric PDBs prune far harder than the free-metric
+    ones did); orientation ladder 173 fixed / 27 vertical.
 - **LBT case-space semantics (M5 discovery, machine-measured)**: the LBT
   sheet's 95 cases pin only the LBT-RELEVANT features (the corner-4 piece +
   the two source triangles); the rest of the top layer is a DON'T-CARE, so

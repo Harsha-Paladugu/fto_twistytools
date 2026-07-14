@@ -1,13 +1,17 @@
 /* fto.twistytools.com — Bencisco solver tests (js/tables.js + js/solver-core.js). M5.
  *
  * The solver exit gate: coordinate codecs pinned, every pruning table
- * admissible and goal-exact, the Bencisco step regions re-derived against
- * the M3 sheet data, the orientation (conjugation + Streeter rotation
- * spelling) machinery proven, the LBT effect-matcher and L3T exact index
- * verified, and full pipelines on fixed seeds — every displayed line
- * re-proved end-to-end by applyParsed from the original scramble state.
- * The wide statistical scan (>= 200 scrambles, 0 verify failures) lives in
- * tools/solver-lab.mjs; this suite stays deterministic and CI-sized.
+ * admissible and goal-exact (the r* families in the Bencisco-hold move
+ * group {R, U, Rw, BL}, first center on BL), the hold machinery itself
+ * (grip spells, token reading, the sealed first center), the Bencisco step
+ * regions re-derived against the M3 sheet data, the orientation
+ * (conjugation + Streeter rotation spelling) machinery proven, the LBT
+ * effect-matcher and L3T exact index verified, and full pipelines on fixed
+ * seeds — every displayed line re-proved end-to-end by applyParsed from
+ * the original scramble state, the hold steps emitting ONLY the ergonomic
+ * tokens under their grip spells. The wide statistical scan (>= 200
+ * scrambles, 0 verify failures) lives in tools/solver-lab.mjs; this suite
+ * stays deterministic and CI-sized.
  *
  * Run: node tools/test-solver.mjs   (exit 0 = OK, 1 = a test failed)
  */
@@ -81,38 +85,57 @@ t('edge placement codec: round trip; orbit views survive moves', () => {
 });
 
 /* ---------- 2. pruning tables ---------- */
-t('every table: solved state at distance 0; no unreached entries', () => {
-  for (const k of Object.keys(PDB.B)) assert(PDB.B[k][T.encB(solved.ctr)] === 0, 'B[' + k + ']');
-  for (const k of Object.keys(PDB.A)) assert(PDB.A[k][T.encA(solved.ctr)] === 0, 'A[' + k + ']');
-  for (const k of Object.keys(PDB.C)) assert(PDB.C[k][T.cornerIndex(solved.cp, solved.co)] === 0, 'C[' + k + ']');
+const BL = T.makeBLHold(E);
+const readAll = (st) => [
+  ...Object.keys(PDB.rB).map(k => PDB.rB[k][T.encB(st.ctr)]),
+  ...Object.keys(PDB.rA).map(k => PDB.rA[k][T.encA(st.ctr)]),
+  ...Object.keys(PDB.rC).map(k => PDB.rC[k][T.cornerIndex(st.cp, st.co)]),
+  ...Object.keys(PDB.rE6).map(k => PDB.rE6[k][T.edgePlaceIndex(st.ep, T.E6_PAIRS[k])]),
+  ...Object.keys(PDB.rH1).map(k => PDB.rH1[k][T.h1Index(st.ep, st.ctr, k, T.HEX_EDGES[k])]),
+];
+t('every table: solved state at distance 0; no negative entries', () => {
+  for (const k of Object.keys(PDB.rB)) assert(PDB.rB[k][T.encB(solved.ctr)] === 0, 'rB[' + k + ']');
+  for (const k of Object.keys(PDB.rA)) assert(PDB.rA[k][T.encA(solved.ctr)] === 0, 'rA[' + k + ']');
+  for (const k of Object.keys(PDB.rC)) assert(PDB.rC[k][T.cornerIndex(solved.cp, solved.co)] === 0, 'rC[' + k + ']');
   for (const k of Object.keys(PDB.E3)) assert(PDB.E3[k][T.edgePlaceIndex(solved.ep, T.HEX_EDGES[k])] === 0, 'E3[' + k + ']');
-  for (const k of Object.keys(PDB.E6)) assert(PDB.E6[k][T.edgePlaceIndex(solved.ep, T.E6_PAIRS[k])] === 0, 'E6[' + k + ']');
-  for (const k of Object.keys(PDB.H1)) assert(PDB.H1[k][T.h1Index(solved.ep, solved.ctr, k, T.HEX_EDGES[k])] === 0, 'H1[' + k + ']');
-  for (const fam of [PDB.B, PDB.A, PDB.C, PDB.E3, PDB.E6, PDB.H1])
+  for (const k of Object.keys(PDB.rE6)) assert(PDB.rE6[k][T.edgePlaceIndex(solved.ep, T.E6_PAIRS[k])] === 0, 'rE6[' + k + ']');
+  assert(PDB.H1.D[T.h1Index(solved.ep, solved.ctr, 'D', T.HEX_EDGES.D)] === 0, 'H1.D');
+  for (const k of Object.keys(PDB.rH1)) assert(PDB.rH1[k][T.h1Index(solved.ep, solved.ctr, k, T.HEX_EDGES[k])] === 0, 'rH1[' + k + ']');
+  for (const fam of [PDB.rB, PDB.rA, PDB.rC, PDB.E3, PDB.rE6, PDB.H1, PDB.rH1])
     for (const k of Object.keys(fam))
-      for (let i = 0; i < fam[k].length; i += 101) assert(fam[k][i] >= 0, 'unreached entry');
+      for (let i = 0; i < fam[k].length; i += 101) {
+        const v = fam[k][i];
+        assert(v >= 0 && (v <= 40 || v === T.UNREACHED), 'bad entry ' + v);
+      }
 });
-t('every table is 1-Lipschitz along moves (BFS distance consistency)', () => {
+t('full-metric tables (E3, H1.D) are 1-Lipschitz along native moves', () => {
   for (let trial = 0; trial < 60; trial++) {
     const s = randState(20);
-    const m = (rnd() * 16) | 0;
-    const s2 = E.move(s, m);
+    const s2 = E.move(s, (rnd() * 16) | 0);
     const reads = (st) => [
-      ...Object.keys(PDB.B).map(k => PDB.B[k][T.encB(st.ctr)]),
-      ...Object.keys(PDB.A).map(k => PDB.A[k][T.encA(st.ctr)]),
-      ...Object.keys(PDB.C).map(k => PDB.C[k][T.cornerIndex(st.cp, st.co)]),
       ...Object.keys(PDB.E3).map(k => PDB.E3[k][T.edgePlaceIndex(st.ep, T.HEX_EDGES[k])]),
-      ...Object.keys(PDB.E6).map(k => PDB.E6[k][T.edgePlaceIndex(st.ep, T.E6_PAIRS[k])]),
-      ...Object.keys(PDB.H1).map(k => PDB.H1[k][T.h1Index(st.ep, st.ctr, k, T.HEX_EDGES[k])]),
+      PDB.H1.D[T.h1Index(st.ep, st.ctr, 'D', T.HEX_EDGES.D)],
     ];
     const a = reads(s), b = reads(s2);
     for (let i = 0; i < a.length; i++)
       assert(Math.abs(a[i] - b[i]) <= 1, 'jump > 1 at table #' + i + ' (' + a[i] + '->' + b[i] + ')');
   }
 });
-t('B[D] ignores D turns (own triangles identical), sees BR turns', () => {
-  assert(PDB.B.D[T.encB(E.move(solved, 2 * E.FIDX.D).ctr)] === 0, 'after D');
-  assert(PDB.B.D[T.encB(E.move(solved, 2 * E.FIDX.BR).ctr)] === 1, 'after BR');
+t('restricted tables are admissible along Bencisco-hold walks from solved', () => {
+  // solved satisfies every r* goal, so after k hold tokens each table must
+  // read <= k (min-over-grips can only under-estimate the tracked grip)
+  for (let trial = 0; trial < 60; trial++) {
+    let s = E.solved(), j = (rnd() * 3) | 0;
+    const k = 1 + ((rnd() * 10) | 0);
+    for (let i = 0; i < k; i++) { const g = BL.gen[j][(rnd() * 8) | 0]; s = E.move(s, g.m); j = g.nj; }
+    for (const v of readAll(s)) assert(v <= k, 'inadmissible: ' + v + ' > ' + k);
+  }
+});
+t('rB.D ignores D turns; a BR turn leaves the restricted group (sentinel)', () => {
+  assert(PDB.rB.D[T.encB(E.move(solved, 2 * E.FIDX.D).ctr)] === 0, 'after D');
+  // BR pulls first-center triangles out of the sealed D block — the hold
+  // move group can never bring them back, and the table says so
+  assert(PDB.rB.D[T.encB(E.move(solved, 2 * E.FIDX.BR).ctr)] === T.UNREACHED, 'after BR');
 });
 
 /* ---------- 3. the core: geometry + orientation machinery ---------- */
@@ -135,6 +158,52 @@ t('all 24 orientations have distinct spells; identity spells empty', () => {
   const spells = new Set(C.ORIENTS.map(o => o.spell));
   assert(spells.size === 24, 'distinct spells');
   assert(C.ORIENTS.some(o => o.spell === ''), 'identity present');
+});
+t('Bencisco hold: grip spells pinned; every token word reads as tracked', () => {
+  assert(C.BL.SPELLS.join('|') === "T|Uo T|Uo' T", 'spells: ' + C.BL.SPELLS.join('|'));
+  assert(C.BL.TOKS.join(' ') === "R R' U U' Rw Rw' BL BL'", 'token alphabet');
+  for (let trial = 0; trial < 40; trial++) {
+    const j0 = trial % 3;
+    const s0 = randState(12);
+    const word = Array.from({ length: 1 + ((rnd() * 7) | 0) }, () => (rnd() * 8) | 0);
+    let s = E.copy(s0), j = j0;
+    for (const k of word) { const g = C.BL.gen[j][k]; s = E.move(s, g.m); j = g.nj; }
+    const text = C.BL.SPELLS[j0] + ' ' + word.map(k => C.BL.TOKS[k]).join(' ');
+    assert(E.eq(s, E.applyParsed(E.parseAlg(text), s0)), 'reading mismatch: ' + text);
+  }
+});
+t('the hold move group seals the first center (spin-only, one BL realigns)', () => {
+  const D = E.FIDX.D;
+  for (let trial = 0; trial < 30; trial++) {
+    // any state with the D hexagon formed, walked by random hold tokens
+    let s = E.solved(), j = (rnd() * 3) | 0;
+    for (let i = 0; i < 2 + ((rnd() * 12) | 0); i++) { const g = C.BL.gen[j][(rnd() * 8) | 0]; s = E.move(s, g.m); j = g.nj; }
+    for (const e of C.HEX_EDGES.D) assert(s.ep[e] >= 9 && s.ep[e] <= 11, 'D edge escaped');
+    for (let k = 0; k < 3; k++) assert(s.ctr[3 * D + k] === D, 'D triangle escaped');
+    let ok = false;
+    for (let k = 0; k < 3 && !ok; k++) { if (C.hexOK(s, 'D')) ok = true; s = E.move(s, 2 * D); }
+    assert(ok, 'not realignable by D spins');
+  }
+});
+t('restricted t1 searchStep succeeds off spun-center states, emits hold tokens', () => {
+  for (let trial = 0; trial < 8; trial++) {
+    let s = E.solved(), j = (rnd() * 3) | 0;
+    for (let i = 0; i < 4 + ((rnd() * 8) | 0); i++) { const g = C.BL.gen[j][(rnd() * 8) | 0]; s = E.move(s, g.m); j = g.nj; }
+    const stage = { id: 't1', opt: { corner: 3, aKey: '6,9', cKey: '3' } };
+    const line = { st: s, hexes: ['D'] };
+    C.resetWork(1e8);
+    const sols = C.searchStep(s, C.stageGoal(stage, line), C.stageH(stage, line),
+      C.STEP_DEFS.t1.cap, 2, 0, 1, 1e7, true);
+    assert(sols.length > 0, 'no t1 solution');
+    for (const sol of sols) {
+      const text = sol.moves.map(k => C.BL.TOKS[k]).join(' ');
+      if (!sol.moves.length) continue;
+      assert(/^(?:R|U|Rw|BL)'?(?: (?:R|U|Rw|BL)'?)*$/.test(text), 'tokens: ' + text);
+      const replay = E.applyParsed(E.parseAlg(C.BL.SPELLS[sol.j0] + ' ' + text), s);
+      assert(E.eq(replay, sol.st), 'replay mismatch');
+      assert(C.stageGoal(stage, line)(replay), 'goal fails');
+    }
+  }
 });
 
 /* ---------- 4. the finish index ---------- */
@@ -190,7 +259,8 @@ t('three fixed scrambles solve end to end; every emitted line is machine-proved'
       // independent replay of the DISPLAYED line, exactly as a human reads it
       let st = E.copy(s);
       for (const seg of it.segs) {
-        const p = E.parseAlg(((it.rotSpell ? it.rotSpell + ' ' : '') + seg.text).trim());
+        const p = E.parseAlg(((it.rotSpell ? it.rotSpell + ' ' : '')
+          + (seg.pre ? seg.pre + ' ' : '') + seg.text).trim());
         assert(p, 'segment parses: ' + seg.text);
         st = E.applyParsed(p, st, seg.dialect || 'cif');
       }
@@ -200,6 +270,16 @@ t('three fixed scrambles solve end to end; every emitted line is machine-proved'
       for (let i = 1; i < order.length; i++) assert(order[i] > order[i - 1], 'step order');
       // totals add up: segment moves sum to the badge total
       assert(it.segs.reduce((a, sg) => a + sg.moves, 0) === it.total, 'movecount adds up');
+      // t1..c4 live in the Bencisco hold: ergonomic tokens + a grip spell;
+      // fc and the sheet finishes read from the line's own hold, no pre
+      for (const seg of it.segs) {
+        if (['t1', 't2', 'sc', 'c3', 'c4'].includes(seg.id)) {
+          assert(/^(?:R|U|Rw|BL)'?(?: (?:R|U|Rw|BL)'?)*$/.test(seg.text), 'hold tokens only: ' + seg.text);
+          assert(C.BL.SPELLS.includes(seg.pre), 'grip spell present');
+        } else {
+          assert(!seg.pre, 'no grip spell outside the hold steps');
+        }
+      }
     }
   }
 });
@@ -214,7 +294,8 @@ t('a rotated orientation produces a proven line (the conjugation sweep end to en
     assert(it.rotSpell !== '', 'rotated spell');
     let st = E.copy(s);
     for (const seg of it.segs)
-      st = E.applyParsed(E.parseAlg((it.rotSpell + ' ' + seg.text).trim()), st, seg.dialect || 'cif');
+      st = E.applyParsed(E.parseAlg((it.rotSpell + ' ' + (seg.pre ? seg.pre + ' ' : '') + seg.text).trim()),
+        st, seg.dialect || 'cif');
     assert(E.eq(st, solved), 'rotated replay solves');
     provenRotated = true;
     break;

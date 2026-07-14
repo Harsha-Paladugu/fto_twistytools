@@ -69,7 +69,7 @@ function solveOne(scrText, show) {
       (res.truncated ? ', TRUNCATED' : ''));
     if (it.rotSpell) console.log('    rotate: ' + it.rotSpell);
     for (const seg of it.segs)
-      console.log('    ' + seg.label.padEnd(26) + seg.text +
+      console.log('    ' + seg.label.padEnd(26) + (seg.pre ? seg.pre + '  ' : '') + seg.text +
         (seg.caseName ? '   // ' + seg.subset + ' ' + seg.caseName : '') +
         (seg.note ? '  [' + seg.note + ']' : ''));
   }

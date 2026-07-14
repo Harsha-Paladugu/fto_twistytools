@@ -18,28 +18,46 @@
  *   - edge placement: positions of k specific edge pieces among 12 slots,
  *     12·11·…·(13-k); the solver uses k=3 (one hexagon's edges, 1,320).
  *
- * Tables built here (Int8 distances, BFS from every goal state over all 16
- * native moves — the move set is closed under inverse, so BFS-from-goals is
- * distance-to-goal):
- *   B[faces]  8 goal sets 'D','DL','DR','DB','DLR','DLB','DRB','DLRB' —
- *             patterns whose slots on those faces show the face's own color.
- *   A[slots]  '6,9' / '5,8' (single bottom-triple pairs, corner 3 / corner 5
- *             first) and '5,6,8,9' (both F2T pairs).
- *   C[set]    corner goal sets '3', '5', '3,5' over the full 11,520.
- *   E3[face]  D/L/R/B hexagon edge triples over 1,320 placements.
- *   E6[pair]  hexagon-pair 6-edge placements over 665,280 — strong lower
- *             bounds for the third/fourth center steps, where keeping two
- *             solved hexagons while building another is the whole cost.
- *   H1[face]  one-hexagon EXACT tables (3-edge placement x face-color mask,
- *             1,320 x 220 = 290,400) — couple a hexagon's edges and centres.
- * Total ≈ 7.6 MB, cached in IndexedDB ('fto-tables' / 'fto-pdb-v2'); first
- * build ≈ 10-20 s (transient move tables, freed afterwards) — inside the
+ * MOVE GROUPS. The first-center step searches the 16 native moves, but every
+ * later search step (triples, remaining centers) runs in the BENCISCO HOLD:
+ * the first center held on the BL face, move group {R, U, Rw, BL} (the
+ * user's method decision, 2026-07-13 — BL turns are the "align the white
+ * layer" moves). makeBLHold(E) derives that machinery from the engine's own
+ * hold walk: the 3 CIF grips with first-center-at-BL / working-face-at-R
+ * (spelled T / Uo T / Uo' T; hold-U reads engine L / R / B), and the 8-token
+ * generator table (token -> native move + next grip; Rw = engine D plus a
+ * grip drift, BL = engine D in place). Machine-verified consequence, pinned
+ * in tools/test-solver.mjs: the restricted group SEALS the first center —
+ * engine D's edge and centre slots are invariant (only BL spins them), so a
+ * solved first center can never be broken by the later steps, and every
+ * later-step coordinate stays fully reachable inside that invariant space.
+ *
+ * Tables built here (Int8 distances, BFS from every goal state; the move set
+ * is closed under inverse, so BFS-from-goals is distance-to-goal). The r*
+ * families are BFS over (coordinate x 3 grips) under the 8 hold tokens,
+ * collapsed to min-over-grips (admissible for any grip); entries the
+ * restricted group cannot connect to the goal hold the sentinel 99 — a
+ * junction reading 99 is restricted-unsolvable and fails fast:
+ *   rB[faces]  8 goal sets 'D','DL',…,'DLRB' — orbit-B patterns whose slots
+ *              on those faces show the face's own color.
+ *   rA[slots]  '6,9' / '5,8' (single bottom-triple pairs) and '5,6,8,9'.
+ *   rC[set]    corner goal sets '3', '5', '3,5' over the full 11,520.
+ *   rE6[pair]  hexagon-pair 6-edge placements over 665,280.
+ *   rH1[face]  one-hexagon EXACT tables (3-edge placement x face-color mask,
+ *              1,320 x 220 = 290,400) — couple a hexagon's edges and centres.
+ *   H1.D       the first-center table, full 16-move metric (fc's heuristic).
+ *   E3[face]   full-metric hexagon edge triples (data-quality gauge; the
+ *              search itself no longer reads them).
+ * Total ≈ 9.6 MB, cached in IndexedDB ('fto-tables' / 'fto-pdb-v3'); first
+ * build ≈ 10-20 s (transient move tables, freed afterwards; the restricted
+ * BFS are near-instant — their reachable sets are small) — inside the
  * ~10 MB / ~30 s budget, so no user checkpoint (docs/port-plan.md M5).
  */
 (function () {
   const module = { exports: {} };
   const DB_NAME = 'fto-tables', STORE = 't';
-  const KEY_PDB = 'fto-pdb-v2';
+  const KEY_PDB = 'fto-pdb-v3';
+  const UNREACHED = 99;   // restricted-group sentinel: cannot reach the goal
 
   // ---------------- IndexedDB (best-effort cache) ----------------
   function openDB() {
@@ -233,6 +251,50 @@
   const NMASK = 220;
   const NH1 = NE3 * NMASK;                 // 290,400: one-hexagon exact space
 
+  // ---------------- the Bencisco hold (first center on BL) ----------------
+  // Everything here is DERIVED from the engine's own hold walk and asserted;
+  // a geometry change throws at load. The three grips are the CIF holds with
+  // the first-center face (engine D) at position BL and engine U at position
+  // R (R and BL are opposite faces); they differ by the R-axis spin, which is
+  // exactly what a wide R drifts (walkParsed's holdAfterRot). Grip order is
+  // pinned so grip 0 ('T', the shortest spell) is canonical: hold-U reads
+  // engine L / R / B at grips 0 / 1 / 2.
+  const BL_SPELLS = ['T', 'Uo T', "Uo' T"];
+  const BL_TOKS = ['R', "R'", 'U', "U'", 'Rw', "Rw'", 'BL', "BL'"];
+  // same-axis canonicalization for the search: R/Rw/BL share the R-BL axis
+  // (rank 0/1/2 — commuting runs are forced ascending); U is its own axis.
+  const BL_AXIS = [0, 0, 1, 1, 0, 0, 0, 0];
+  const BL_RANK = [0, 0, -1, -1, 1, 1, 2, 2];
+  function makeBLHold(E) {
+    const holdOf = spell => E.walkParsed(E.parseAlg(spell), () => {});
+    const holds = BL_SPELLS.map(holdOf);
+    const keyOf = h => h.join(',');
+    const idx = new Map(holds.map((h, i) => [keyOf(h), i]));
+    const gen = holds.map((h, j) => {
+      if (h[E.FIDX.BL] !== E.FIDX.D || h[E.FIDX.R] !== E.FIDX.U)
+        throw new Error('BL hold ' + j + ' misplaced: ' + h);
+      return BL_TOKS.map(tok => {
+        const fired = [];
+        const end = E.walkParsed(E.parseAlg(BL_SPELLS[j] + ' ' + tok), m => fired.push(m));
+        if (fired.length !== 1) throw new Error('BL token ' + tok + ' fired ' + fired.length + ' moves');
+        const nj = idx.get(keyOf(end));
+        if (nj === undefined) throw new Error('BL token ' + tok + ' leaves the hold family');
+        return { m: fired[0], nj };
+      });
+    });
+    // pin the load-bearing facts: R reads engine U, BL reads engine D, only
+    // the wide changes grip, and hold-U reads engine L/R/B by grip
+    const wantU = [E.FIDX.L, E.FIDX.R, E.FIDX.B];
+    for (let j = 0; j < 3; j++) {
+      if (gen[j][0].m !== 2 * E.FIDX.U || gen[j][6].m !== 2 * E.FIDX.D)
+        throw new Error('BL hold reading mismatch at grip ' + j);
+      if (gen[j][2].m !== 2 * wantU[j]) throw new Error('BL hold-U mismatch at grip ' + j);
+      for (let k = 0; k < 8; k++)
+        if ((gen[j][k].nj !== j) !== (k === 4 || k === 5)) throw new Error('BL grip drift mismatch');
+    }
+    return { SPELLS: BL_SPELLS, TOKS: BL_TOKS, AXIS: BL_AXIS, RANK: BL_RANK, holds, gen };
+  }
+
   // ---------------- builders ----------------
   // BFS over an explicit transition table: 16 moves, Int8 distances, multi-
   // source (dist 0 for every goal). Unreached stays -1 (cannot happen for the
@@ -255,6 +317,39 @@
       frontier = nf;
     }
     return dist;
+  }
+  // BFS under the Bencisco-hold move group: nodes are (coordinate, grip),
+  // edges follow the 8-token generator table over the same native transition
+  // table, then collapse to min-over-grips (a lower bound whatever grip the
+  // search is actually in). Coordinates the restricted group cannot connect
+  // to the goal get the UNREACHED sentinel — reading one at a junction means
+  // "this step is impossible from here", which prunes instantly.
+  function bfsTableBL(n, next, goals, bl) {
+    const dist = new Int8Array(n * 3).fill(-1);
+    let frontier = [];
+    for (const g of goals) for (let j = 0; j < 3; j++) { dist[g * 3 + j] = 0; frontier.push(g * 3 + j); }
+    let d = 0;
+    while (frontier.length) {
+      const nf = [];
+      for (const s of frontier) {
+        const c = (s / 3) | 0, j = s % 3;
+        const row = c * 16;
+        for (let k = 0; k < 8; k++) {
+          const g = bl.gen[j][k];
+          const t = next[row + g.m] * 3 + g.nj;
+          if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
+        }
+      }
+      d++;
+      frontier = nf;
+    }
+    const out = new Int8Array(n).fill(UNREACHED);
+    for (let c = 0; c < n; c++) {
+      let best = UNREACHED;
+      for (let j = 0; j < 3; j++) { const v = dist[c * 3 + j]; if (v >= 0 && v < best) best = v; }
+      out[c] = best;
+    }
+    return out;
   }
 
   // transient orbit move table: next[ix*16+m] over 369,600 patterns
@@ -357,70 +452,40 @@
   // one-hexagon EXACT tables: (face's 3 edges placement) x (face color mask
   // over its orbit) -> 290,400. This couples edges and centres of a single
   // hexagon, which the independent families cannot (their max() misses the
-  // break-and-restore interaction entirely).
-  function buildH1(E, face, edges) {
-    const fi = { D: 6, L: 4, R: 5, B: 7 }[face];
-    const ie = invEdgePerms(E);
+  // break-and-restore interaction entirely). The e3-x-mask transitions are
+  // face-independent (only the goal cell differs), so they are materialized
+  // once (transient ~19 MB Int32) and every H1 BFS — the first-center full-
+  // metric one and the four restricted ones — walks the same table.
+  function h1Next(E, mE3) {
     const xp = E.moveTables.map(t => {     // orbit-B slot pull perm
       const p = new Array(12);
       for (let i = 0; i < 12; i++) p[i] = t.xperm[12 + i] - 12;
       return p;
     });
-    // precompute mask transitions (220 x 16) and edge3 transitions (1320 x 16)
     const mNext = new Int32Array(NMASK * 16);
-    {
-      const pat = new Array(12);
-      for (let p0 = 0; p0 < 12; p0++) for (let p1 = p0 + 1; p1 < 12; p1++) for (let p2 = p1 + 1; p2 < 12; p2++) {
-        pat.fill(0); pat[p0] = 1; pat[p1] = 1; pat[p2] = 1;
-        const ix = maskIndex(p0, p1, p2);
-        for (let m = 0; m < 16; m++) {
-          const q = xp[m];
-          let a = -1, b = -1, c = -1;
-          for (let i = 0; i < 12; i++) if (pat[q[i]]) { if (a < 0) a = i; else if (b < 0) b = i; else c = i; }
-          mNext[ix * 16 + m] = maskIndex(a, b, c);
-        }
+    const pat = new Array(12);
+    for (let p0 = 0; p0 < 12; p0++) for (let p1 = p0 + 1; p1 < 12; p1++) for (let p2 = p1 + 1; p2 < 12; p2++) {
+      pat.fill(0); pat[p0] = 1; pat[p1] = 1; pat[p2] = 1;
+      const ix = maskIndex(p0, p1, p2);
+      for (let m = 0; m < 16; m++) {
+        const q = xp[m];
+        let a = -1, b = -1, c = -1;
+        for (let i = 0; i < 12; i++) if (pat[q[i]]) { if (a < 0) a = i; else if (b < 0) b = i; else c = i; }
+        mNext[ix * 16 + m] = maskIndex(a, b, c);
       }
     }
-    const eNext = new Int32Array(NE3 * 16);
-    {
-      const np = new Array(3);
-      for (let ix = 0; ix < NE3; ix++) {
-        const pos = edgePlaceUnrank(ix, 3);
-        for (let m = 0; m < 16; m++) {
-          const q = ie[m];
-          for (let i = 0; i < 3; i++) np[i] = q[pos[i]];
-          let v = 0, base = 12;
-          for (let i = 0; i < 3; i++) {
-            let r = np[i];
-            for (let j = 0; j < i; j++) if (np[j] < np[i]) r--;
-            v = v * base + r; base--;
-          }
-          eNext[ix * 16 + m] = v;
-        }
-      }
-    }
-    // combined BFS over e3 x mask
+    const next = new Int32Array(NH1 * 16);
+    for (let e = 0; e < NE3; e++)
+      for (let mk = 0; mk < NMASK; mk++)
+        for (let m = 0; m < 16; m++)
+          next[(e * NMASK + mk) * 16 + m] = mE3[e * 16 + m] * NMASK + mNext[mk * 16 + m];
+    return next;
+  }
+  function h1GoalIx(face, edges) {
+    const fi = { D: 6, L: 4, R: 5, B: 7 }[face];
     const home = Array.from({ length: 12 }, (_, i) => i);
-    const goalE = edgePlaceIndex(home, edges);
     const k0 = 3 * (fi - 4);               // orbit-B block of the face
-    const goalM = maskIndex(k0, k0 + 1, k0 + 2);
-    const dist = new Int8Array(NH1).fill(-1);
-    let frontier = [goalE * NMASK + goalM];
-    dist[frontier[0]] = 0;
-    let d = 0;
-    while (frontier.length) {
-      const nf = [];
-      for (const s of frontier) {
-        const e = (s / NMASK) | 0, mk = s % NMASK;
-        for (let m = 0; m < 16; m++) {
-          const t = eNext[e * 16 + m] * NMASK + mNext[mk * 16 + m];
-          if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
-        }
-      }
-      d++;
-      frontier = nf;
-    }
-    return dist;
+    return edgePlaceIndex(home, edges) * NMASK + maskIndex(k0, k0 + 1, k0 + 2);
   }
   function h1Index(ep, ctr, face, edges) { // solver-side index into H1[face]
     const fi = { D: 6, L: 4, R: 5, B: 7 }[face];
@@ -449,7 +514,7 @@
       E6_PAIRS[fs[i] + fs[j]] = HEX_EDGES[fs[i]].concat(HEX_EDGES[fs[j]]).sort((a, b) => a - b);
   }
   const NTBL = B_SETS.length + Object.keys(A_SETS).length + Object.keys(C_SETS).length
-    + 2 * Object.keys(HEX_EDGES).length + Object.keys(E6_PAIRS).length;
+    + 3 * Object.keys(HEX_EDGES).length + Object.keys(E6_PAIRS).length + 1;
 
   function bFaceWants(faces) {
     const wants = [];
@@ -463,26 +528,27 @@
   async function buildPDBs(E, report, tick) {
     const rep = (stage, n, tot) => { if (report) report(stage, n, tot); };
     const yieldNow = tick || null;
-    const out = { B: {}, A: {}, C: {}, E3: {}, E6: {}, H1: {} };
+    const bl = makeBLHold(E);
+    const out = { rB: {}, rA: {}, rC: {}, E3: {}, rE6: {}, H1: {}, rH1: {} };
 
     rep('mtab', 0, 4);
     const mB = await buildOrbitMtable(E, 'B', yieldNow ? async (n, t) => { rep('mtab', n / t, 4); await yieldNow(); } : null);
     let done = 0;
     for (const faces of B_SETS) {
-      out.B[faces] = bfsTable(NPAT, mB, orbitGoals('B', bFaceWants(faces.split(''))));
+      out.rB[faces] = bfsTableBL(NPAT, mB, orbitGoals('B', bFaceWants(faces.split(''))), bl);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
     rep('mtab', 2, 4);
     const mA = await buildOrbitMtable(E, 'A', yieldNow ? async (n, t) => { rep('mtab', 2 + n / t, 4); await yieldNow(); } : null);
     for (const key of Object.keys(A_SETS)) {
-      out.A[key] = bfsTable(NPAT, mA, orbitGoals('A', A_SETS[key]));
+      out.rA[key] = bfsTableBL(NPAT, mA, orbitGoals('A', A_SETS[key]), bl);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
     const mC = buildCornerMtable(E);
     for (const key of Object.keys(C_SETS)) {
-      out.C[key] = bfsTable(NCORNER, mC, cornerGoals(C_SETS[key]));
+      out.rC[key] = bfsTableBL(NCORNER, mC, cornerGoals(C_SETS[key]), bl);
       rep('bfs', ++done, NTBL);
     }
     const mE3 = await buildEdgeMtable(E, 3, yieldNow);
@@ -497,12 +563,16 @@
     const mE6 = await buildEdgeMtable(E, 6, yieldNow ? async () => { rep('mtab', 3.5, 4); await yieldNow(); } : null);
     for (const key of Object.keys(E6_PAIRS)) {
       // goal: both hexagons' 6 edges home (one placement index)
-      out.E6[key] = bfsTable(NE6, mE6, [edgePlaceIndex(home, E6_PAIRS[key])]);
+      out.rE6[key] = bfsTableBL(NE6, mE6, [edgePlaceIndex(home, E6_PAIRS[key])], bl);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
+    const hN = h1Next(E, mE3);
+    out.H1.D = bfsTable(NH1, hN, [h1GoalIx('D', HEX_EDGES.D)]);
+    rep('bfs', ++done, NTBL);
+    if (yieldNow) await yieldNow();
     for (const f of Object.keys(HEX_EDGES)) {
-      out.H1[f] = buildH1(E, f, HEX_EDGES[f]);
+      out.rH1[f] = bfsTableBL(NH1, hN, [h1GoalIx(f, HEX_EDGES[f])], bl);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
@@ -510,36 +580,36 @@
   }
 
   // browser entry: cache the Int8 tables in IndexedDB, rebuild on miss
+  const PDB_FAMS = [
+    ['rB', B_SETS, NPAT], ['rA', Object.keys(A_SETS), NPAT], ['rC', Object.keys(C_SETS), NCORNER],
+    ['E3', Object.keys(HEX_EDGES), NE3], ['rE6', Object.keys(E6_PAIRS), NE6],
+    ['H1', ['D'], NH1], ['rH1', Object.keys(HEX_EDGES), NH1],
+  ];
   async function loadOrBuildPDBs(E, report, tick) {
     const cached = await idbGet(KEY_PDB);
-    if (cached && cached.v === KEY_PDB && cached.B && cached.A && cached.C && cached.E3 && cached.E6 && cached.H1) {
+    if (cached && cached.v === KEY_PDB && PDB_FAMS.every(([fam]) => cached[fam])) {
       try {
-        const out = { B: {}, A: {}, C: {}, E3: {}, E6: {}, H1: {} };
-        for (const k of B_SETS) out.B[k] = new Int8Array(cached.B[k]);
-        for (const k of Object.keys(A_SETS)) out.A[k] = new Int8Array(cached.A[k]);
-        for (const k of Object.keys(C_SETS)) out.C[k] = new Int8Array(cached.C[k]);
-        for (const k of Object.keys(HEX_EDGES)) out.E3[k] = new Int8Array(cached.E3[k]);
-        for (const k of Object.keys(E6_PAIRS)) out.E6[k] = new Int8Array(cached.E6[k]);
-        for (const k of Object.keys(HEX_EDGES)) out.H1[k] = new Int8Array(cached.H1[k]);
-        if (Object.values(out.B).every(t => t.length === NPAT) &&
-            Object.values(out.A).every(t => t.length === NPAT) &&
-            Object.values(out.C).every(t => t.length === NCORNER) &&
-            Object.values(out.E3).every(t => t.length === NE3) &&
-            Object.values(out.E6).every(t => t.length === NE6) &&
-            Object.values(out.H1).every(t => t.length === NH1)) {
+        const out = {};
+        let ok = true;
+        for (const [fam, keys, n] of PDB_FAMS) {
+          out[fam] = {};
+          for (const k of keys) {
+            out[fam][k] = new Int8Array(cached[fam][k]);
+            if (out[fam][k].length !== n) ok = false;
+          }
+        }
+        if (ok) {
           if (report) report('cache', 1, 1);
           return out;
         }
       } catch (e) { /* fall through to rebuild */ }
     }
     const out = await buildPDBs(E, report, tick);
-    const payload = { v: KEY_PDB, B: {}, A: {}, C: {}, E3: {}, E6: {}, H1: {} };
-    for (const k of Object.keys(out.B)) payload.B[k] = out.B[k].buffer;
-    for (const k of Object.keys(out.A)) payload.A[k] = out.A[k].buffer;
-    for (const k of Object.keys(out.C)) payload.C[k] = out.C[k].buffer;
-    for (const k of Object.keys(out.E3)) payload.E3[k] = out.E3[k].buffer;
-    for (const k of Object.keys(out.E6)) payload.E6[k] = out.E6[k].buffer;
-    for (const k of Object.keys(out.H1)) payload.H1[k] = out.H1[k].buffer;
+    const payload = { v: KEY_PDB };
+    for (const [fam] of PDB_FAMS) {
+      payload[fam] = {};
+      for (const k of Object.keys(out[fam])) payload[fam][k] = out[fam][k].buffer;
+    }
     idbPut(KEY_PDB, payload);
     return out;
   }
@@ -701,13 +771,13 @@
   }
 
   module.exports = {
-    idbGet, idbPut, idbDel, KEY_PDB,
+    idbGet, idbPut, idbDel, KEY_PDB, UNREACHED,
     NPAT, NCORNER, NE3, NE6, NMASK, NH1, B_SETS, A_SETS, C_SETS, HEX_EDGES, E6_PAIRS,
     maskIndex, maskOfColor, h1Index,
     encPattern, decPattern, encA, encB,
     permRank, evenPermUnrank, cornerIndex, cornerUnpack,
     edgePlaceIndex, edgePlaceUnrank,
-    buildPDBs, loadOrBuildPDBs, buildFirstCenter,
+    makeBLHold, buildPDBs, loadOrBuildPDBs, buildFirstCenter,
   };
   window.OOTables = module.exports;
 })();
