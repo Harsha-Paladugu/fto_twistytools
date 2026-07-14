@@ -302,8 +302,12 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   specced).
   **STEP TRAINERS v1 (2026-07-13, post-M5): the First center mode is LIVE**
   — the first Bencisco step-by-step trainer (the user's spec this session:
-  scramble → find the white center in the optimal move count → reveal the
-  optimal solutions, difficulty chosen against God's number). The goal is
+  scramble → solve the white center → report how many moves it took →
+  learn whether you matched the optimal → reveal the optimal solutions,
+  difficulty chosen against God's number). NO timer: the interaction is a
+  self-reported move-count picker checked against the exact optimal
+  (green if matched, red if not), with an optimal-solve rate tracked per
+  counting method. The goal is
   placement-neutral and machine-derived: the white hexagon on ANY tetrad-A
   face in one of the 12 rotation-valid formations (the 12 mirror formations
   are false solves at exactly God's number — surfaced in the UI copy;
@@ -326,8 +330,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   drill and every displayed solution re-proved on full states, tamper
   rejection); the derivation adversarially verified by 3 independent
   workflow agents (a second BFS with a different encoding reproduced the
-  histograms digit for digit); headless-Edge E2E 21 checks / 0 console
-  errors; build + check:fresh green. Next step trainers (triples, second
+  histograms digit for digit); headless-Edge E2E 24 checks / 0 console
+  errors (both verdict paths, the optimal-solve-rate table, and a
+  build-effect deadlock regression); build + check:fresh green. Next step
+  trainers (triples, second
   center, …) follow this pattern: a coordinate + goal set in tables.js, a
   drill layer in the core, a mode chip.
 - [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step

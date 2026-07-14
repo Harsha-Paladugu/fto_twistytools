@@ -77,6 +77,8 @@ export default function FtoTrainer() {
   const [fcStatus, setFcStatus] = useState("idle");   // idle | building | ready | error
   const [fcMetric, setFcMetric] = useState("token");  // token: slice turns count as 1
   const [fcTarget, setFcTarget] = useState(0);        // 0 = any, else exact optimal length
+  const [fcStats, setFcStats] = useState({});         // metric -> { n, opt } (persisted)
+  const [fcSession, setFcSession] = useState([]);     // recent [{ count, more, optimal, correct }]
 
   const model = () => modelRef.current;
   const subsetOn = useCallback((key) => {
@@ -124,6 +126,14 @@ export default function FtoTrainer() {
             if (typeof d.setupOpen === "boolean") setSetupOpen(d.setupOpen);
             if (["token", "native"].includes(d.fcMetric)) setFcMetric(d.fcMetric);
             if (Number.isInteger(d.fcTarget) && d.fcTarget >= 0 && d.fcTarget <= 7) setFcTarget(d.fcTarget);
+            if (d.fcStats && typeof d.fcStats === "object") {
+              const fs = {};
+              for (const k of ["token", "native"]) {
+                const st = d.fcStats[k];
+                if (st && typeof st.n === "number" && typeof st.opt === "number") fs[k] = { n: st.n, opt: st.opt };
+              }
+              setFcStats(fs);
+            }
             if (d.caseStats && typeof d.caseStats === "object") {
               const cs = {};
               for (const [k, st] of Object.entries(d.caseStats)) {
@@ -156,10 +166,10 @@ export default function FtoTrainer() {
     try {
       window.storage.set(STORE_KEY, JSON.stringify({
         subsetSel, groupSel, caseOff: [...caseOff], caseKnown: [...caseKnown],
-        scope, mode, setupOpen, caseStats, fcMetric, fcTarget, ...over,
+        scope, mode, setupOpen, caseStats, fcMetric, fcTarget, fcStats, ...over,
       })).catch(() => {});
     } catch (e) {}
-  }, [subsetSel, groupSel, caseOff, caseKnown, scope, mode, setupOpen, caseStats, fcMetric, fcTarget]);
+  }, [subsetSel, groupSel, caseOff, caseKnown, scope, mode, setupOpen, caseStats, fcMetric, fcTarget, fcStats]);
   useEffect(() => {
     if (!loadedStore.current) return;
     clearTimeout(saveTimer.current);
@@ -260,9 +270,11 @@ export default function FtoTrainer() {
     if (!ready) return;
     const modeSwitch = genMode.current !== mode;
     genMode.current = mode;
+    // First center has no timer: any regeneration (new metric/target, or the
+    // build landing) resets to a fresh scramble awaiting an answer.
+    if (mode === "fc") { setPhase("ready"); setLast(null); nextFc(); return; }
     if (modeSwitch || phase === "running") { setPhase("ready"); setLast(null); }
-    if (mode === "fc") nextFc();
-    else if (mode === "drill") nextDrill();
+    if (mode === "drill") nextDrill();
     else startRecap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, mode, entries, fcStatus, fcMetric, fcTarget]);
@@ -303,6 +315,35 @@ export default function FtoTrainer() {
     startTimer();
   }, [ready, phase, startTimer, stopTimer]);
 
+  // ---------- first-center answer flow (no timer: self-reported move count) ----------
+  // The buttons offered for a drill whose optimal is `opt`: the optimal itself
+  // and a few above, then an "opt+4 or more" bucket. There is no below-optimal
+  // button — the optimal is proven, so you cannot legitimately beat it.
+  const fcAnswerButtons = (opt) => {
+    const out = [];
+    for (let k = 0; k <= 3; k++) out.push({ count: opt + k, label: String(opt + k), more: false });
+    out.push({ count: opt + 4, label: opt + 4 + "+", more: true });
+    return out;
+  };
+  const answerFc = (count, more) => {
+    const d = current;
+    if (!d || d.kind !== "fc" || phase === "stopped") return;
+    const correct = !more && count === d.optimal;
+    setLast({ drill: d, answer: count, more: !!more, optimal: d.optimal, correct });
+    setPhase("stopped");
+    setFcStats((s) => {
+      const prev = s[d.metric] || { n: 0, opt: 0 };
+      return { ...s, [d.metric]: { n: prev.n + 1, opt: prev.opt + (correct ? 1 : 0) } };
+    });
+    setFcSession((ss) => [...ss.slice(-49), { count, more: !!more, optimal: d.optimal, correct }]);
+  };
+  const revealFc = () => {                       // "I'm stuck" — show solutions, not an attempt
+    if (!current || current.kind !== "fc" || phase === "stopped") return;
+    setLast({ drill: current, answer: null, more: false, optimal: current.optimal, correct: false });
+    setPhase("stopped");
+  };
+  const advanceFc = () => { setPhase("ready"); setLast(null); nextFc(); };
+
   // ---------- keyboard ----------
   useEffect(() => {
     const down = (e) => {
@@ -310,6 +351,18 @@ export default function FtoTrainer() {
       const tag = e.target && e.target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (caseBrowser) { if (e.code === "Escape") setCaseBrowser(null); return; }
+      if (mode === "fc") {
+        if (phase === "stopped") {
+          if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); advanceFc(); }
+          return;
+        }
+        const dm = /^(?:Digit|Numpad)([0-9])$/.exec(e.code);
+        if (dm && current && current.kind === "fc") {
+          const d = +dm[1], opt = current.optimal;
+          if (d >= opt) { e.preventDefault(); answerFc(d >= opt + 4 ? opt + 4 : d, d >= opt + 4); }
+        }
+        return;   // First center never drives the timer
+      }
       if (phase === "stopped" && e.code === "KeyK" && last && last.drill.kind !== "fc") {
         e.preventDefault();
         const k = last.drill.uid;
@@ -321,7 +374,7 @@ export default function FtoTrainer() {
     };
     window.addEventListener("keydown", down);
     return () => window.removeEventListener("keydown", down);
-  }, [phase, trigger, stopTimer, last, caseBrowser]);
+  }, [phase, trigger, stopTimer, last, caseBrowser, mode, current]);
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
   useEffect(() => { if (phase !== "running") cancelAnimationFrame(raf.current); }, [phase]);
@@ -374,8 +427,10 @@ export default function FtoTrainer() {
   const resetStats = () => {
     setCaseStats({});
     setSession([]);
+    setFcStats({});
+    setFcSession([]);
     setLast(null);
-    persist({ caseStats: {} });
+    persist({ caseStats: {}, fcStats: {} });
   };
 
   // ---------- alg list for a finished drill ----------
@@ -560,7 +615,8 @@ export default function FtoTrainer() {
                 <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
                   Scramble with white on top, then build the white center: the three white-sticker
                   edges plus the three white triangles, grouped into a hexagon around any face where
-                  white can live. The move count shown with each scramble is exact. Try to hit it.
+                  white can live. Each scramble shows its exact optimal length as the target. Solve it,
+                  then pick how many moves you used to see whether you matched the optimal.
                   God&apos;s number for this step is {fcMetric === "native" ? "7 face turns" : "6 moves counting a slice turn as one"}
                   {fcMetric === "native" ? "" : " (7 in pure face turns)"}: no scramble ever needs more.
                 </div>
@@ -648,18 +704,55 @@ export default function FtoTrainer() {
                 : "Couldn’t generate a scramble — try other cases."}
             </div>
           </div>
+        ) : current.kind === "fc" ? (
+          <div className="stage" style={{ cursor: "default" }}>
+            <div className="stagegrid">
+              <div className="scramble">{current.scramble}</div>
+              <Net state={current.state} w={240} />
+            </div>
+            <div className="hint" style={{ marginTop: 6 }}>
+              solve the white center — target <strong>{current.optimal}</strong> move{current.optimal === 1 ? "" : "s"}
+              {current.metric === "native" ? " (face turns)" : ""}
+            </div>
+            {phase === "stopped" && last ? (
+              <>
+                <div style={{
+                  margin: "12px auto 4px", padding: "8px 14px", borderRadius: 8, textAlign: "center",
+                  fontWeight: 600, maxWidth: 460,
+                  background: last.answer == null ? "rgba(120,130,150,.16)" : last.correct ? "rgba(39,151,90,.18)" : "rgba(207,77,68,.16)",
+                  color: last.answer == null ? "inherit" : last.correct ? "#38b06e" : "#e46a60",
+                }}>
+                  {last.answer == null
+                    ? "The optimal is " + last.optimal + " move" + (last.optimal === 1 ? "" : "s") + ". Here’s how."
+                    : last.correct
+                    ? "Correct — " + last.answer + " move" + (last.answer === 1 ? "" : "s") + " is optimal."
+                    : last.more
+                    ? "Not optimal — the best is " + last.optimal + "."
+                    : "Not optimal — you used " + last.answer + ", the best is " + last.optimal + "."}
+                </div>
+                <div className="analysis" onPointerDown={(e) => e.stopPropagation()}>
+                  <FcSolutions drill={last.drill} />
+                </div>
+                <button className="restart" onClick={advanceFc}>Next scramble</button>
+              </>
+            ) : (
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <div className="hint" style={{ marginBottom: 8 }}>How many moves did your solve take?</div>
+                <div className="chips" style={{ justifyContent: "center" }}>
+                  {fcAnswerButtons(current.optimal).map((b) => (
+                    <button key={b.count} className="mode" onClick={() => answerFc(b.count, b.more)}>{b.label}</button>
+                  ))}
+                </div>
+                <button className="preset" style={{ marginTop: 10 }} onClick={revealFc}>I’m stuck — show the solutions</button>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="stage" onPointerDown={(e) => { e.preventDefault(); trigger(); }}>
             <div className="stagegrid">
               <div className="scramble">{current.scramble}</div>
               <Net state={current.state} w={240} />
             </div>
-            {current.kind === "fc" && (
-              <div className="hint" style={{ marginTop: 6 }}>
-                white center in <strong>{current.optimal}</strong> move{current.optimal === 1 ? "" : "s"}
-                {current.metric === "native" ? " (face turns)" : ""}
-              </div>
-            )}
             <div className={"timer" + (phase === "running" ? " running" : "")}>{fmt(elapsed)}</div>
             {phase === "stopped" && last ? (
               <div className="reveal" onPointerDown={(e) => e.stopPropagation()}>
@@ -698,6 +791,48 @@ export default function FtoTrainer() {
         )}
 
         {/* ---------- stats + session ---------- */}
+        {mode === "fc" ? (
+        <div className="panelrow">
+          <div className="card">
+            <h3>Optimal-solve rate</h3>
+            {(() => {
+              const rows = ["token", "native"].filter((k) => fcStats[k] && fcStats[k].n)
+                .map((k) => ({ k, ...fcStats[k] }));
+              if (!rows.length) return <div className="empty">Solve a few and your optimal-solve rate lands here, split by counting method.</div>;
+              return (
+                <table>
+                  <thead><tr><th>Counting</th><th>Solves</th><th>Optimal</th><th>Rate</th></tr></thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.k}>
+                        <td className="name">{r.k === "native" ? "face turns" : "slice = 1 move"}</td>
+                        <td className="mono">{r.n}</td>
+                        <td className="mono">{r.opt}</td>
+                        <td className="mono">{Math.round((100 * r.opt) / r.n)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
+          <div className="card">
+            <h3>Session</h3>
+            {fcSession.length === 0 ? (
+              <div className="empty">Each solve lands here — green if you matched the optimal.</div>
+            ) : (
+              <div className="times">
+                {fcSession.slice(-24).map((r, i) => (
+                  <span key={i} className="timepill" title={"optimal was " + r.optimal}
+                    style={{ "--cdot": r.correct ? "#27975a" : "#cf4d44" }}>
+                    {r.correct ? "✓ " + r.count : (r.more ? r.count + "+" : r.count)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        ) : (
         <div className="panelrow">
           <div className="card">
             <h3>Drill stats</h3>
@@ -761,6 +896,7 @@ export default function FtoTrainer() {
             )}
           </div>
         </div>
+        )}
 
         {caseBrowser && <CaseBrowser subKey={caseBrowser} />}
       </div>
