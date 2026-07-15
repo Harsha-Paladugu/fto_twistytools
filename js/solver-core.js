@@ -28,7 +28,9 @@
    hold tokens with the grip tracked (a wide R drifts the hold about the
    R-BL axis, walkParsed semantics); the three R-axis grips are tried as
    free re-grips at each step start, and the displayed segment carries its
-   grip's rotation spell (T / Uo T / Uo' T from js/tables.js makeBLHold).
+   grip's rotation spell ({L,R} / {R,B} / {B,L} from js/tables.js
+   makeBLHold — the site's {X,Y} re-orientation brackets, user decision
+   2026-07-14).
    Heuristics are max()-combined pattern databases measured in the SAME
    move group (the r* families; min-over-grips, so admissible whatever
    grip the node is in). After step 4 the human rotates back to the sheet
@@ -43,8 +45,8 @@
    Color neutrality = whole-puzzle pre-rotation: solving "with a different
    first center" is solving conj_g(scramble) with the fixed-region method.
    conj_g is physical rotation of the sticker arrangement (test-engine's
-   conjState); the displayed line starts with that rotation spelled in
-   Streeter tokens, and the engine's 48-hold frame walk reads every later
+   conjState); the displayed line starts with that rotation spelled as a
+   single {X,Y} bracket, and the engine's 48-hold frame walk reads every later
    letter through it — the init self-check pins that this reading equals the
    conjugation algebra, and every displayed line is re-proved end-to-end by
    applyParsed from the original scramble state (verifyLine; the M5 exit
@@ -445,37 +447,27 @@ function makeSolverCore(E, T, PDB, algData) {
     return out;
   }
 
-  /* ---------- orientations: conjugation + Streeter rotation spelling ---------- */
+  /* ---------- orientations: conjugation + {X,Y} bracket spelling ---------- */
   function conjState(M, s) {                    // physical rotation of the arrangement
     const F = E.toFacelets(s), P = E.rotFaceletPerm(M), F2 = new Array(72);
     for (let i = 0; i < 72; i++) F2[i] = E.faceImg(M, F[P[i]]);
     return E.fromFacelets(F2);
   }
-  // spell every CIF hold reachable by rotation tokens (all 24), shortest first
+  // spell every CIF hold as one {X,Y} re-orientation bracket (the site's
+  // rotation convention, user decision 2026-07-14): from the identity hold
+  // the bracket's letters ARE the faces the hold puts at U and F, so the
+  // spell is direct — one token per re-orientation, identity spells empty.
+  // Each spell is re-proved through the engine's own hold walk.
   const SPELL_BY_HOLD = (() => {
-    const toks = [];
-    for (const f of FACES) toks.push(f + 'o', f + "o'");
-    toks.push('T', "T'", 'T2');
     const seen = new Map();                     // hold key -> spell
     const holdOf = spell => E.walkParsed(E.parseAlg(spell), () => {});
-    seen.set([0, 1, 2, 3, 4, 5, 6, 7].join(','), '');
-    for (const a of toks) {
-      const k = holdOf(a).join(',');
-      if (!seen.has(k)) seen.set(k, a);
-    }
-    outer:
-    for (const a of toks) for (const b of toks) {
-      if (seen.size >= 24) break outer;
-      const k = holdOf(a + ' ' + b).join(',');
-      if (!seen.has(k)) seen.set(k, a + ' ' + b);
-    }
-    if (seen.size < 24) {                       // two holds need three tokens
-      outer3:
-      for (const a of toks) for (const b of toks) for (const c of toks) {
-        if (seen.size >= 24) break outer3;
-        const k = holdOf(a + ' ' + b + ' ' + c).join(',');
-        if (!seen.has(k)) seen.set(k, a + ' ' + b + ' ' + c);
-      }
+    for (const M of E.ROT24) {
+      const hold = [0, 1, 2, 3, 4, 5, 6, 7].map(p => E.faceImg(E.mInv(M), p));
+      const spell = (hold[0] === FIDX.U && hold[1] === FIDX.F)
+        ? '' : '{' + FACES[hold[0]] + ',' + FACES[hold[1]] + '}';
+      if (spell && holdOf(spell).join(',') !== hold.join(','))
+        throw new Error('bracket spell does not reproduce its hold: ' + spell);
+      seen.set(hold.join(','), spell);
     }
     if (seen.size !== 24) throw new Error('rotation spelling: expected 24 holds, got ' + seen.size);
     return seen;

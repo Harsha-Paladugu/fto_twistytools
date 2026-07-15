@@ -5,7 +5,7 @@
  * group {R, U, Rw, BL}, first center on BL), the hold machinery itself
  * (grip spells, token reading, the sealed first center), the Bencisco step
  * regions re-derived against the M3 sheet data, the orientation
- * (conjugation + Streeter rotation spelling) machinery proven, the LBT
+ * (conjugation + {X,Y} bracket spelling) machinery proven, the LBT
  * effect-matcher and L3T exact index verified, and full pipelines on fixed
  * seeds — every displayed line re-proved end-to-end by applyParsed from
  * the original scramble state, the hold steps emitting ONLY the ergonomic
@@ -160,7 +160,7 @@ t('all 24 orientations have distinct spells; identity spells empty', () => {
   assert(C.ORIENTS.some(o => o.spell === ''), 'identity present');
 });
 t('Bencisco hold: grip spells pinned; every token word reads as tracked', () => {
-  assert(C.BL.SPELLS.join('|') === "T|Uo T|Uo' T", 'spells: ' + C.BL.SPELLS.join('|'));
+  assert(C.BL.SPELLS.join('|') === '{L,R}|{R,B}|{B,L}', 'spells: ' + C.BL.SPELLS.join('|'));
   assert(C.BL.TOKS.join(' ') === "R R' U U' Rw Rw' BL BL'", 'token alphabet');
   for (let trial = 0; trial < 40; trial++) {
     const j0 = trial % 3;

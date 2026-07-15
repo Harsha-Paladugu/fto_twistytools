@@ -421,6 +421,24 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   test:solver 23 green; headless-Edge E2E 15 checks / 0 console errors
   (boot 4.4 s fresh, cached reboot instant, hold segs carry grip spells +
   pure tokens).
+- [x] **Rotation display cutover (2026-07-14, user decision): the {X,Y}
+  re-orientation bracket system site-wide** (ground-truth §Notation has the
+  full pin). Every displayed/stored rotation is now a single `{X,Y}` bracket;
+  `o`/`T` spellings remain parse-level input aliases (no engine change).
+  Landed: `tools/lib/bracketize.mjs` (move-for-move-verifying respeller) +
+  LBT/1LP importer reruns (56 texts converted — LBT `Uo`/`Uo'` →
+  `{U,BR}`/`{U,BL}`, 1LP `[Uo]`/`[Uo']` marks → the same brackets with
+  leading/trailing semantics kept in the notes; TCP/1L3T were already
+  bracket-native; independent sweep re-proved all 418 shipped algs
+  move-for-move against the previous texts); solver-core SPELL_BY_HOLD
+  rewritten to the direct bracket construction (one token per conjugation
+  pre-rotation, init-asserted through the hold walk); tables.js
+  `BL_SPELLS = {L,R} / {R,B} / {B,L}` (the old T / Uo T / Uo' T grips);
+  solver.js scramble-help copy. Trainer needed no code change (the
+  first-center reveal emits face/slice tokens only; sheet texts flow from
+  the JSON). Gates: build + check green, test:engine 73 / test:render 7 /
+  test:trainer 40 / test:solver 23 green, solver-lab --scan 200 PASS,
+  headless-Edge E2E 0 console errors.
 - [ ] **M6 — Accounts/Firebase (OPTIONAL — user decision).** Demo mode suffices
   until launch. If wanted: new Firebase project, auth + per-user prefs/stats
   sync only (no census collections; firestore.rules shrinks accordingly), rules
@@ -457,7 +475,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   CCW, no doubles; `w` wide; `s` slice (spelled with U/R/F/L only); `o` face
   rotations; `T` 90° front-vertex rotation (ground-truth §Notation quotes the
   rules). M1 still owes the direction-encoding pin against Twizzle before any
-  test vectors or alg text are recorded.
+  test vectors or alg text are recorded. **AMENDED (user, 2026-07-14):
+  rotations DISPLAY as `{X,Y}` re-orientation brackets site-wide** — the
+  o/T rotation spellings stay input aliases only (see the rotation display
+  cutover entry in §Status).
 - ~~Pruning tables: build-in-browser vs ship precomputed binaries~~
   **RESOLVED (M5, 2026-07-13): build-in-browser** — ≈ 7.6 MB IndexedDB-cached,
   first build seconds; both checkpoint thresholds cleared with wide margin,

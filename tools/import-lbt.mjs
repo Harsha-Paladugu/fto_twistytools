@@ -3,9 +3,15 @@
  * Source: data/sources/lbt-zwegner.html (SVG-stripped snapshot of
  * https://zwegner.github.io/cubing/fto/lbt-algs.html — see the header comment
  * there for provenance). Dialect: plain Streeter CIF — Uo rotations, Uw/BLw/
- * BRw wides, Us slices; no S/H macros, no brackets, no [U] marks. Only the
- * CURATED algs are imported; the page's hidden "raw dump of all generated
- * algs" (class="gen") is deliberately left behind.
+ * BRw wides, Us slices; no S/H macros, no [U] marks. Only the CURATED algs
+ * are imported; the page's hidden "raw dump of all generated algs"
+ * (class="gen") is deliberately left behind.
+ *
+ * Rotation respelling (site convention, user decision 2026-07-14): the page's
+ * Uo/Uo' rotation tokens are rewritten as {X,Y} re-orientation brackets
+ * (Uo = {U,BR}, Uo' = {U,BL}) via tools/lib/bracketize.mjs, which re-proves
+ * each rewrite move-for-move (same fired native sequence, same final hold).
+ * Everything below verifies the CONVERTED texts — they are what ships.
  *
  * LBT = the Bencisco method's Last Bottom Triple: the bottom-left slot
  * between the F and BL faces — corner slot 4 + centre slots F(4) and BL(10).
@@ -42,6 +48,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { bracketize } from './lib/bracketize.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -119,7 +126,9 @@ for (const c of cases) {
   c.rows = [];
   if (c.num === SOLVED_CASE) continue;
   if (!c.algs.length) fail('case ' + c.num + ' has no algs');
-  for (const text of c.algs) {
+  for (const source of c.algs) {
+    let text;
+    try { text = bracketize(E, source, 'cif'); } catch (e) { fail('case ' + c.num + ': ' + e.message); }
     stats.algs++;
     const s = stateOf(text);
     if (!s) fail('case ' + c.num + ': unparseable alg: ' + text);
@@ -129,9 +138,9 @@ for (const c of cases) {
       c.rows.push({ alg: text, state: s });
     } else {
       // must be a leading-setup alg: net frame rotation about the U axis
-      // (identity when a pure Uo prefix cancels the wide's rotation, as in
-      // case 6's "Uo' Uw ..."), closed by the textual inverse of its first
-      // wide/slice token
+      // (identity when a pure U-axis rotation prefix cancels the wide's
+      // rotation, as in case 6's "{U,BL} Uw ..."), closed by the textual
+      // inverse of its first wide/slice token
       const hold = E.walkParsed(E.parseAlg(text), () => {}, 'cif');
       const g = E.ROT24.find((r) => [0, 1, 2, 3, 4, 5, 6, 7].every((p) => hold[p] === E.faceImg(r, p)));
       if (!g || E.faceImg(g, E.FIDX.U) !== E.FIDX.U)
@@ -205,7 +214,7 @@ J.subsets.LBT = {
   name: 'LBT — Last Bottom Triple (Algorithmic)',
   notation: 'cif',
   auf: false,
-  notation_note: "zwegner's page dialect is plain Streeter notation, all machine-verified: Uo rotations, Uw/BLw/BRw wides, Us slices. 21 algs are written with a leading Uw/Us setup whose restore the page leaves implicit — as printed they end one wide/slice turn short of solved, and each carries a note with the machine-verified closing token (hover the tag). Diagrams show the exact state the first alg solves; the whole last layer is junk at this step, so top-layer content is arbitrary. Trainer scrambles reproduce each alg's exact state, with AUF randomization off (a U pre-turn would change the case).",
+  notation_note: "zwegner's page dialect is plain Streeter notation (Uw/BLw/BRw wides, Us slices), all machine-verified. The page's Uo/Uo' rotation tokens are respelled here as {X,Y} re-orientation brackets ({U,BR} = Uo, {U,BL} = Uo') — the site's rotation convention; each respelling is machine-verified move-for-move identical to the page's text. 21 algs are written with a leading Uw/Us setup whose restore the page leaves implicit — as printed they end one wide/slice turn short of solved, and each carries a note with the machine-verified closing token (hover the tag). Diagrams show the exact state the first alg solves; the whole last layer is junk at this step, so top-layer content is arbitrary. Trainer scrambles reproduce each alg's exact state, with AUF randomization off (a U pre-turn would change the case).",
   description: 'Algorithmic LBT: the Bencisco method’s last bottom triple (the corner and two triangles of the bottom-left slot, between the F and BL faces) solved in one look no matter where the pieces are. 95 cases plus the already-solved case (the page’s case 21, omitted here), in six sections by corner location, subdivided into groups of four: a case, its mirror, and the same two with the corner flipped. Case numbers match zwegner’s page.',
   groups: GROUPS,
   sources: [
@@ -220,7 +229,7 @@ J.subsets.LBT = {
 const totalCases = Object.values(J.subsets).reduce((a, s) => a + s.cases.length, 0);
 const totalAlgs = Object.values(J.subsets).reduce((a, s) => a + s.cases.reduce((b, c) => b + c.algs.length, 0), 0);
 J.meta.counts = { cases: totalCases, algs: totalAlgs };
-J.meta.status = 'TCP (last layer) imported 2026-07-10; 1L3T (one-look last 3 triples) imported 2026-07-13 from zwegner’s page by tools/import-1l3t.mjs; LBT (last bottom triple) imported 2026-07-13 from zwegner’s page by tools/import-lbt.mjs.';
+J.meta.status = 'TCP (last layer) imported 2026-07-10; 1L3T (one-look last 3 triples) imported 2026-07-13 from zwegner’s page by tools/import-1l3t.mjs; LBT (last bottom triple) imported 2026-07-13 from zwegner’s page by tools/import-lbt.mjs; 1LP (one-look pair formation) imported 2026-07-13 from the user-supplied sheet by tools/import-1lp.mjs; rotations respelled site-wide as {X,Y} re-orientation brackets 2026-07-14 (tools/lib/bracketize.mjs, machine-verified move-for-move).';
 
 // ---- stable serialization: pretty meta/subset scalars, one line per case ----
 function serialize(j) {

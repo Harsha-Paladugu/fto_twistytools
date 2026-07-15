@@ -100,7 +100,7 @@ function onSolve() {
   const txt = $('#scr-in').value.trim();
   if (!txt) return;
   const parsed = E.parseAlg(txt);
-  if (!parsed) { toast('We couldn’t read that scramble. Use the site notation (U F R L D B BR BL, w/s/o suffixes, T).'); return; }
+  if (!parsed) { toast('We couldn’t read that scramble. Use the site notation (U F R L D B BR BL, w/s suffixes, {X,Y} rotations).'); return; }
   UI.scramble = txt;
   UI.state = E.applyParsed(parsed, E.solved());
   UI.result = null; UI.showAll = new Set(); UI.moreLens = false;

@@ -24,7 +24,8 @@
  * user's method decision, 2026-07-13 — BL turns are the "align the white
  * layer" moves). makeBLHold(E) derives that machinery from the engine's own
  * hold walk: the 3 CIF grips with first-center-at-BL / working-face-at-R
- * (spelled T / Uo T / Uo' T; hold-U reads engine L / R / B), and the 8-token
+ * (spelled {L,R} / {R,B} / {B,L} — the site's {X,Y} re-orientation brackets;
+ * hold-U reads engine L / R / B), and the 8-token
  * generator table (token -> native move + next grip; Rw = engine D plus a
  * grip drift, BL = engine D in place). Machine-verified consequence, pinned
  * in tools/test-solver.mjs: the restricted group SEALS the first center —
@@ -257,9 +258,10 @@
   // the first-center face (engine D) at position BL and engine U at position
   // R (R and BL are opposite faces); they differ by the R-axis spin, which is
   // exactly what a wide R drifts (walkParsed's holdAfterRot). Grip order is
-  // pinned so grip 0 ('T', the shortest spell) is canonical: hold-U reads
-  // engine L / R / B at grips 0 / 1 / 2.
-  const BL_SPELLS = ['T', 'Uo T', "Uo' T"];
+  // pinned so grip 0 ('{L,R}', the old T grip) is canonical: hold-U reads
+  // engine L / R / B at grips 0 / 1 / 2. Spells are the site's {X,Y}
+  // re-orientation brackets (user decision 2026-07-14) — one token per grip.
+  const BL_SPELLS = ['{L,R}', '{R,B}', '{B,L}'];
   const BL_TOKS = ['R', "R'", 'U', "U'", 'Rw', "Rw'", 'BL', "BL'"];
   // same-axis canonicalization for the search: R/Rw/BL share the R-BL axis
   // (rank 0/1/2 — commuting runs are forced ascending); U is its own axis.

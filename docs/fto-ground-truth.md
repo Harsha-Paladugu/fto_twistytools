@@ -152,6 +152,27 @@ Skewb engine and stays until M1 deletes the code it documents).
   - **Doc erratum found**: the notation doc says wide "u is equivalent to a
     D' turn plus a 120 rotation" — machine-pinned identity is u = Uo ∘ D
     (opposite face UNPRIMED; no rotation makes the D′ version true).
+- **ROTATION DISPLAY DECIDED (user, 2026-07-14): the `{X,Y}` re-orientation
+  bracket system, site-wide.** Every rotation the site DISPLAYS or STORES —
+  sheet texts in `data/fto_algs.json`, the solver's conjugation pre-rotations
+  and Bencisco grip spells, any future surface — is written as a single
+  `{X,Y}` bracket (face at position X → the U position, face at position Y →
+  the F position; all 48 holds are reachable, so every re-orientation is
+  exactly one token). The `o`/`T` spellings remain PARSE-LEVEL INPUT ALIASES:
+  the engine's internal letters, parser and normAlg are unchanged, and
+  `[Uo]`-mark/`T` parsing is kept for source fidelity — the conversion is a
+  display/data convention, not an engine change. CIF equivalences in live use
+  (the notation doc's own bracket table, machine-verified): Uo = {U,BR},
+  Uo' = {U,BL}, T = {L,R}; the solver grips T / Uo T / Uo' T = {L,R} /
+  {R,B} / {B,L}. Data conversion: `tools/lib/bracketize.mjs` rewrites
+  importer texts and re-proves each rewrite move-for-move (same fired native
+  sequence AND same final hold, else it throws; rotation-shaped tokens
+  outside its map also throw). 56 texts across LBT/1LP converted (TCP and
+  1L3T were already bracket-native); an independent old-vs-new sweep
+  verified all 418 shipped algs move-for-move; solver spells come from the
+  direct bracket construction in solver-core's SPELL_BY_HOLD (identity
+  spells empty) and tables.js BL_SPELLS, both init-asserted through the
+  engine's own hold walk.
 - **zwegner 1L3T dialect (M3 phase 2, machine-verified 2026-07-13)** — the
   engine parses natively: `S` = sledge `R' L R L'`, `H` = hedge `R B' R' B`,
   `S'`/`H'` their exact textual inverses (macros expand at parse level, so
@@ -171,7 +192,8 @@ Skewb engine and stays until M1 deletes the code it documents).
   TCP 11/12 appear as the working-slot variants of 6c.O.6/6c.O.8.
 - **zwegner LBT sheet (M3 phase 3, machine-verified 2026-07-13)** — plain
   Streeter dialect (Uo rotations, Uw/BLw/BRw wides, Us slices; no S/H macros,
-  no brackets, no [U] marks — zero parser work). LBT = Bencisco's Last Bottom
+  no [U] marks — zero parser work; since 2026-07-14 the page's Uo/Uo' tokens
+  ship respelled as {U,BR}/{U,BL} brackets, see the rotation-display bullet). LBT = Bencisco's Last Bottom
   Triple: the bottom-left slot between the F and BL faces = corner slot 4 +
   centre slots F(4)/BL(10) in engine numbering. **LBT-locality = the 1L3T
   region ∪ that slot** (after LBT exactly the last-layer region remains — the
@@ -203,7 +225,10 @@ Skewb engine and stays until M1 deletes the code it documents).
   (the PDF defines them identically: right hedge R B' R' B, right sledge
   R' L R L'), `(U)`/`(U')` paren AUF marks (parens already strip at parse —
   executed as the plain move), and **`[Uo]`/`[Uo']` bracket rotation marks,
-  executed as the state-neutral Uo rotation**: a LEADING mark gives the
+  executed as the state-neutral Uo rotation** (since 2026-07-14 the marks
+  ship respelled as {U,BR}/{U,BL} brackets — see the rotation-display
+  bullet; the leading/trailing semantics below carry over verbatim): a
+  LEADING mark gives the
   solution for a Uo-rotated view of the same case (5 of the 14 such lines
   are pinned state-IDENTICAL to another line of their case — the same
   physical solution re-spelled from the rotated grip; Uo-conjugation maps
@@ -325,7 +350,8 @@ The USER supplies the actual sheets; this section is context, not authority.
   (`js/tables.js makeBLHold`) and pinned in tools/test-solver.mjs:
   - Exactly **3 CIF grips** place the first-center face (engine D) at
     position BL with engine U at position R (R and BL are opposite):
-    spelled `T`, `Uo T`, `Uo' T`; hold-U reads engine L / R / B
+    spelled `{L,R}`, `{R,B}`, `{B,L}` (the pre-2026-07-14 o/T spellings
+    were `T`, `Uo T`, `Uo' T`); hold-U reads engine L / R / B
     respectively. Rw reads engine D PLUS a grip drift about the R-BL axis
     (walkParsed's wide re-hold); BL reads engine D in place — the two share
     a state effect and differ only by the frame rotation. Re-grips among

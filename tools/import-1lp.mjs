@@ -11,6 +11,14 @@
  * leading ones respell the solution for a Uo-rotated view, trailing ones
  * annotate the ending orientation).
  *
+ * Rotation respelling (site convention, user decision 2026-07-14): the PDF's
+ * [Uo]/[Uo'] marks are rewritten as {X,Y} re-orientation brackets
+ * ([Uo] = {U,BR}, [Uo'] = {U,BL}) via tools/lib/bracketize.mjs, which
+ * re-proves each rewrite move-for-move (same fired native sequence, same
+ * final hold — a mark and a bare rotation execute identically). Everything
+ * below verifies the CONVERTED texts — they are what ships; the leading/
+ * trailing semantics carry over verbatim into the per-line notes.
+ *
  * What 1LP is (machine-established this import, see test-engine §16):
  * pair formation = the step before TCP. A line does NOT solve the puzzle from
  * a mid-solve state; it converts its case into a state whose top-layer pairs
@@ -54,6 +62,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { bracketize } from './lib/bracketize.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -175,7 +184,11 @@ if (pInZw !== 51) fail('TCP finish set ∩ zwegner = ' + pInZw + ' (expected 51:
 
 // ---- verify every line ----
 const lines = [];
-for (const c of sheet.cases) c.sequences.forEach((text, i) => lines.push({ pdfCase: c.case, idx: i, text }));
+for (const c of sheet.cases) c.sequences.forEach((source, i) => {
+  let text;
+  try { text = bracketize(E, source, 'cif'); } catch (e) { fail(c.case + ': ' + e.message); }
+  lines.push({ pdfCase: c.case, idx: i, text });
+});
 for (const l of lines) {
   const p = E.parseAlg(l.text);
   if (!p) fail(l.pdfCase + ': unparseable: ' + l.text);
@@ -241,12 +254,13 @@ if (zwExact !== 1) fail('expected exactly 1 exact zwegner-primary collision, got
 
 // ---- assemble the subset ----
 const noteFor = (c, i, l) => {
+  const lead = (l.text.match(/^\{U,(?:BR|BL)\}/) || [])[0];
   const want = RESPELL[c.case];
   if (want && i === want[1]) {
-    return 'same physical solution as line ' + (want[0] + 1) + ', respelled from the rotated grip its leading [Uo] mark executes — state-identical, machine-verified';
+    return 'same physical solution as line ' + (want[0] + 1) + ', respelled from the rotated grip its leading ' + lead + ' rotation executes — state-identical, machine-verified';
   }
-  if (/^\[Uo'?\]/.test(l.text)) {
-    return 'solution for the Uo-rotated view of the case — the leading [Uo] mark executes as a whole-puzzle rotation (state-neutral re-grip)';
+  if (lead) {
+    return 'solution for a rotated view of the case — the leading ' + lead + ' executes as a whole-puzzle rotation (state-neutral re-grip)';
   }
   return null;
 };
@@ -270,7 +284,7 @@ if (outCases.length !== 11) fail('expected 11 imported cases, got ' + outCases.l
 J.subsets['1LP'] = {
   name: '1LP — One-Look Pair Formation',
   notation: 'cif',
-  notation_note: 'The sheet’s dialect, all machine-verified: S/H are the sledge (R’ L R L’) and hedge (R B’ R’ B) triggers, (U)/(U’) are AUF turns written in parentheses (executed as the plain move), and [Uo]/[Uo’] are whole-puzzle rotation marks — a leading one gives the solution for a Uo-rotated view of the same case, a trailing one annotates the ending orientation (rotations never change the state). Diagrams show the exact state each case’s first sequence resolves. Every sequence is machine-verified as a correct flip sequence: from any state matching its case’s yellow/blue appearance it leaves all three pairs structurally formed, landing in the TCP stage. The parity column and comments are the sheet’s own prose.',
+  notation_note: 'The sheet’s dialect, all machine-verified: S/H are the sledge (R’ L R L’) and hedge (R B’ R’ B) triggers, and (U)/(U’) are AUF turns written in parentheses (executed as the plain move). The sheet’s [Uo]/[Uo’] whole-puzzle rotation marks are respelled here as {X,Y} re-orientation brackets ({U,BR} = Uo, {U,BL} = Uo’) — the site’s rotation convention; each respelling is machine-verified move-for-move identical. A leading rotation gives the solution for a rotated view of the same case, a trailing one annotates the ending orientation (rotations never change the state). Diagrams show the exact state each case’s first sequence resolves. Every sequence is machine-verified as a correct flip sequence: from any state matching its case’s yellow/blue appearance it leaves all three pairs structurally formed, landing in the TCP stage. The parity column and comments are the sheet’s own prose.',
   description: 'One-look pair formation for the Bencisco last layer: form the three corner-triangle pairs in a single look, then finish with one of the 18 TCP algorithms (or 2-look). Pair formation is NEUTRAL (colors are ignored while pairing), rotationless, and ergonomic. Case 6c on the sheet is the already-paired state (omitted here). Solutions are given per AUF and per puzzle orientation; parity notes say whether a sequence preserves the permutation parity.',
   groups: ['Parity stays', 'Parity flips'],
   sources: [
@@ -283,7 +297,7 @@ J.subsets['1LP'] = {
 const totalCases = Object.values(J.subsets).reduce((a, s) => a + s.cases.length, 0);
 const totalAlgs = Object.values(J.subsets).reduce((a, s) => a + s.cases.reduce((b, c) => b + c.algs.length, 0), 0);
 J.meta.counts = { cases: totalCases, algs: totalAlgs };
-J.meta.status = 'TCP (last layer) imported 2026-07-10; 1L3T (one-look last 3 triples) imported 2026-07-13 from zwegner’s page by tools/import-1l3t.mjs; LBT (last bottom triple) imported 2026-07-13 from zwegner’s page by tools/import-lbt.mjs; 1LP (one-look pair formation) imported 2026-07-13 from the user-supplied sheet by tools/import-1lp.mjs.';
+J.meta.status = 'TCP (last layer) imported 2026-07-10; 1L3T (one-look last 3 triples) imported 2026-07-13 from zwegner’s page by tools/import-1l3t.mjs; LBT (last bottom triple) imported 2026-07-13 from zwegner’s page by tools/import-lbt.mjs; 1LP (one-look pair formation) imported 2026-07-13 from the user-supplied sheet by tools/import-1lp.mjs; rotations respelled site-wide as {X,Y} re-orientation brackets 2026-07-14 (tools/lib/bracketize.mjs, machine-verified move-for-move).';
 
 // ---- stable serialization (same shape as import-1l3t/import-lbt) ----
 function serialize(j) {
