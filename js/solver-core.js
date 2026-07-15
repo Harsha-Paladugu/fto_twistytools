@@ -18,50 +18,66 @@
      5  Last bottom triple  corner 4 + slots F(4)/BL(10)  — LBT sheet algs
      6  Last 3 triples  the U layer                       — 1L3T/TCP sheet algs
 
-   Step 1 is IDA* over the 16 native moves in the pre-rotation hold. Steps
-   2-4 run in the BENCISCO HOLD (the user's method decision, 2026-07-13):
-   the finished first center is held on the BL face and the search emits
-   ONLY the ergonomic tokens R / U / Rw / BL — BL turns being the "align
-   the white layer" moves (in this hold they are the only way the first
-   center can even move: the restricted group seals its slots, so steps
-   2-4 can never break step 1). Each of those steps is IDA* over the 8
-   hold tokens with the grip tracked (a wide R drifts the hold about the
-   R-BL axis, walkParsed semantics); the three R-axis grips are tried as
-   free re-grips at each step start, and the displayed segment carries its
-   grip's rotation spell ({L,R} / {R,B} / {B,L} from js/tables.js
-   makeBLHold — the site's {X,Y} re-orientation brackets, user decision
-   2026-07-14).
-   Heuristics are max()-combined pattern databases measured in the SAME
-   move group (the r* families; min-over-grips, so admissible whatever
-   grip the node is in). After step 4 the human rotates back to the sheet
-   hold: steps 5-6 finish with the sheets' algs verbatim under TWO
-   different matching semantics (see the finish index below): L3T by
-   exact state key, LBT by EFFECT — caseStateOf is the single source of
-   truth either way, so annotation subtleties (setup-undo closings,
-   AUF-short texts, working-slot variants) resolve themselves. A beam of
-   the best partial lines is kept across step junctions so early greed
-   does not hide a better total (K tunable).
+   Step 1 is IDA* over the 16 native moves in the pre-rotation hold, and
+   the pre-rotation ALWAYS maps the WHITE material onto the method's D
+   region (user spec 2026-07-14): the solve builds the white center first,
+   every time. Steps 2-4 run in the BENCISCO HOLD (user decisions
+   2026-07-13/14): the finished white center is held on the BL face.
+   The TRIPLE steps (t1/t2) emit R / U / Rw tokens (user refinement
+   2026-07-14: "I want the triples to be solved with R U Rw moves"); the
+   CENTER steps (sc/c3/c4) add the BL token. Both alphabets stay inside
+   the sealed move group, so steps 2-4 physically cannot break the first
+   center. BOTH step kinds may re-grip for FREE mid-word — a rotation
+   about the R-BL axis, fused to the U turn that needs it and printed as
+   one {X,Y} bracket ({F,BR} or {BR,U}) — and the canonicalization bans
+   every Rw<->BL adjacency, so a re-grip can never be spelled as a
+   redundant token pair like Rw BL' (user report 2026-07-14: rotate
+   instead). Each hold step is IDA* with the grip tracked (a wide R
+   drifts the hold about the R-BL axis, walkParsed semantics); the three
+   R-axis grips are tried as free re-grips at each step start. The search
+   anchors those grips at the recognition hold ({L,R} / {R,B} / {B,L},
+   js/tables.js makeBLHold), but the DISPLAYED segment carries a RELATIVE
+   re-grip: the one {X,Y} bracket, read at the hold the previous tokens
+   actually leave (wide drift included), that lands the segment's grip —
+   or nothing when the human is already holding it right (respellLine;
+   physical-loop finding, user 2026-07-14). Heuristics are max()-combined
+   pattern databases: every hold step reads the r* families, measured in
+   the sealed group's own 10-native-move metric — EXACTLY the token
+   metric once re-grips are free (each of engine {U,D,L,R,B}± is one
+   token from every grip), so the bounds are admissible and tight; 99 =
+   restricted-unsolvable, an instant fail. After step 4 the human rotates
+   back to the sheet hold: steps 5-6 finish with the sheets' algs verbatim
+   under TWO different matching semantics (see the finish index below):
+   L3T by exact state key, LBT by EFFECT — caseStateOf is the single
+   source of truth either way, so annotation subtleties (setup-undo
+   closings, AUF-short texts, working-slot variants) resolve themselves.
+   A beam of the best partial lines is kept across step junctions so early
+   greed does not hide a better total (K tunable).
 
-   Color neutrality = whole-puzzle pre-rotation: solving "with a different
-   first center" is solving conj_g(scramble) with the fixed-region method.
-   conj_g is physical rotation of the sticker arrangement (test-engine's
-   conjState); the displayed line starts with that rotation spelled as a
-   single {X,Y} bracket, and the engine's 48-hold frame walk reads every later
-   letter through it — the init self-check pins that this reading equals the
-   conjugation algebra, and every displayed line is re-proved end-to-end by
-   applyParsed from the original scramble state (verifyLine; the M5 exit
-   gate). Between segments the solver assumes the standard re-grip (each alg
-   is read from the recognition hold, i.e. the leading rotation again), which
-   verifyLine models by re-prefixing the rotation tokens per segment.
+   There is NO color neutrality (user spec 2026-07-14: white first, every
+   time). The whole-puzzle pre-rotation freedom is exactly the 3 spins
+   about the white axis — the rotations mapping engine U to engine D,
+   spelled {D,L} / {D,R} / {D,B} — which re-anchor WHICH triples/centers
+   the method meets when (the LBT dead-end rescue). conj_g is physical
+   rotation of the sticker arrangement (test-engine's conjState); the
+   displayed line starts with that rotation spelled as a single {X,Y}
+   bracket, and the engine's 48-hold frame walk reads every later letter
+   through it — the init self-check pins that this reading equals the
+   conjugation algebra. The whole printed line is ONE CONTINUOUS engine
+   text: junction re-grips (including the ones compensating wide-move hold
+   drift) are printed explicitly as relative {X,Y} brackets, and verifyLine
+   re-proves the exact flat text end-to-end by applyParsed from the original
+   scramble state (the M5 exit gate) — what you read is what you turn.
 
    Movecount-only metrics (family precedent); rotations are free. No global
    optimality is claimed anywhere (FTO God's number is unknown). */
 
 /* ---------- method registry (module-level: no engine dependency) ---------- */
 const METHOD_NAME = 'Bencisco';
-// caps for t1..c4 are in Bencisco-hold tokens (R/U/Rw/BL each count 1); the
-// restricted move group runs deeper than free search did — the coordinate
-// eccentricities alone reach 16-17 on the late centers (tables.js r* pins)
+// caps for t1..c4 are in Bencisco-hold tokens (each turn counts 1; re-grips
+// are free rotations); the restricted center group runs deeper than free
+// search did — the coordinate eccentricities alone reach 16-17 on the late
+// centers (tables.js r* pins)
 const STEP_DEFS = {
   fc:  { name: 'First center',      cap: 12 },
   t1:  { name: 'First triple',      cap: 15 },
@@ -115,23 +131,93 @@ function makeSolverCore(E, T, PDB, algData) {
   const T1_OPTS = [{ corner: 3, aKey: '6,9', cKey: '3' }, { corner: 5, aKey: '5,8', cKey: '5' }];
 
   /* ---------- the Bencisco hold (steps t1..c4) ---------- */
-  // First center on BL, tokens {R, U, Rw, BL} only. The grip/generator table
-  // comes from tables.js (same source the r* PDBs were BFS'd with) and is
-  // re-proved here against the engine's own reading: tracked token-by-token
-  // application must equal applyParsed of the displayed "spell + word" text
-  // for every grip — else the search would emit unexecutable lines.
+  // First center on BL. Two alphabets over the same grip machinery (user
+  // specs 2026-07-14): the TRIPLE steps use {R, U, Rw} ("solve the triples
+  // with R U Rw"); the CENTER steps add BL (state-wise Rw's twin — same
+  // engine D turn, no drift). Both may re-grip for free mid-word, fused to
+  // the U turn that needs it (the search's composite codes below). The
+  // grip/generator table comes from tables.js (same source the PDBs were
+  // BFS'd with) and is re-proved here against the engine's own reading:
+  // tracked token-by-token application must equal applyParsed of the
+  // displayed "spell + word" text for every grip — else the search would
+  // emit unexecutable lines.
   const BL = T.makeBLHold(E);
+  const CENTER_TOKS = [0, 1, 2, 3, 4, 5, 6, 7];   // R R' U U' Rw Rw' BL BL'
+  const TRIPLE_TOKS = [0, 1, 2, 3, 4, 5];         // R R' U U' Rw Rw'
+  // mode.bl: BL is in the alphabet, so re-grip composites that merely
+  // respell an Rw/BL twin are banned as duplicates (see dfsBL).
+  // mode.regripCost: a composite's SEARCH cost (its displayed movecount is
+  // always 1 — the fused U turn; rotations are free in the metric). The
+  // extra unit is a reading penalty: plain spellings win unless a re-grip
+  // saves a real move, which keeps the words mostly rotation-free (the
+  // measured rate is ~0.7 mid-word re-grips per triple / ~0.4 per center;
+  // raising a mode's cost to 3 halves its rate but was measured to cost
+  // ~2.5 moves per solve through the junction cascade — a bad trade).
+  // NOTE pure {R,U,Rw} cannot re-grip at all (net grip drift and net
+  // engine-D power are locked together through Rw), so the composites must
+  // stay AVAILABLE in triple mode for full reachability.
+  const MODES = {
+    center: { toks: CENTER_TOKS, bl: true, regripCost: 2 },
+    triple: { toks: TRIPLE_TOKS, bl: false, regripCost: 2 },
+  };
+  // mid-word re-grips: the single {X,Y} bracket, read at grip j's hold,
+  // that lands grip t — the same relative-bracket convention respellLine
+  // applies at segment junctions. ({F,BR} spins forward, {BR,U} backward —
+  // the same letters at every grip; pinned in tools/test-solver.mjs.)
+  const REGRIP = BL.holds.map((hj, j) => BL.holds.map((ht, t) => t === j ? ''
+    : '{' + FACES[hj.indexOf(ht[0])] + ',' + FACES[hj.indexOf(ht[1])] + '}'));
+  // path codes: 0..7 index BL.TOKS; 100 + 2t + d is "re-grip to grip t,
+  // then U (d=0) / U' (d=1)" — the free rotation fused to the hold-U turn
+  // that needs it. pathToText renders a code word started at grip j0 into
+  // the exact token stream a human reads; pathStep is the tracked
+  // application the init check below proves equal to the engine's own
+  // reading of that text.
+  function pathToText(j0, moves) {
+    let j = j0;
+    const out = [];
+    for (const k of moves) {
+      if (k >= 100) {
+        const t = (k - 100) >> 1;
+        out.push(REGRIP[j][t], BL.TOKS[2 + ((k - 100) & 1)]);
+        j = t;
+      } else {
+        out.push(BL.TOKS[k]);
+        j = BL.gen[j][k].nj;
+      }
+    }
+    return { text: out.join(' '), jEnd: j };
+  }
+  const pathStep = (j, k) => k >= 100
+    ? { m: BL.gen[(k - 100) >> 1][2 + ((k - 100) & 1)].m, nj: (k - 100) >> 1 }
+    : BL.gen[j][k];
   (() => {
+    for (let j = 0; j < 3; j++) for (let t = 0; t < 3; t++) {
+      if (t === j) continue;
+      const end = E.walkParsed(E.parseAlg(BL.SPELLS[j] + ' ' + REGRIP[j][t]), () => {});
+      if (end.join(',') !== BL.holds[t].join(','))
+        throw new Error('re-grip bracket does not land its grip: ' + REGRIP[j][t]);
+    }
     let x = 20260713;
     const rnd = () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return x / 0x80000000; };
     for (let trial = 0; trial < 60; trial++) {
       const j0 = trial % 3;
       let probe = E.solved();
       for (let i = 0; i < 10; i++) probe = E.move(probe, (rnd() * 16) | 0);
-      const word = Array.from({ length: 1 + ((rnd() * 6) | 0) }, () => (rnd() * 8) | 0);
       let s = E.copy(probe), j = j0;
-      for (const k of word) { const g = BL.gen[j][k]; s = E.move(s, g.m); j = g.nj; }
-      const text = BL.SPELLS[j0] + ' ' + word.map(k => BL.TOKS[k]).join(' ');
+      const word = [];
+      for (let n = 1 + ((rnd() * 6) | 0); n > 0; n--) {
+        let k;
+        if (rnd() < 0.25) {                    // a re-grip fused to a U turn
+          let t = (rnd() * 3) | 0; if (t === j) t = (t + 1) % 3;
+          k = 100 + 2 * t + ((rnd() * 2) | 0);
+        } else k = (rnd() * 8) | 0;
+        const g = pathStep(j, k);
+        s = E.move(s, g.m); j = g.nj;
+        word.push(k);
+      }
+      const pt = pathToText(j0, word);
+      if (pt.jEnd !== j) throw new Error('pathToText grip walk diverged');
+      const text = BL.SPELLS[j0] + ' ' + pt.text;
       if (!E.eq(s, E.applyParsed(E.parseAlg(text), probe)))
         throw new Error('Bencisco-hold reading mismatch at grip ' + j0 + ': ' + text);
     }
@@ -157,33 +243,34 @@ function makeSolverCore(E, T, PDB, algData) {
   // know whether g + w*h clears the bound — early exit skips the expensive
   // 6-edge pair lookups on most pruned nodes). h === 0 stays exact.
   //
-  // fc reads the full 16-move-metric H1.D; every other stage reads the r*
-  // families, measured in the Bencisco-hold move group itself (min over the
-  // three grips, so a lower bound whatever grip the node is in; the 99
+  // fc reads the full 16-move-metric H1.D. Every hold stage (triples AND
+  // centers) reads the r* families, measured in the sealed group's own
+  // 10-native-move metric — with free re-grips that IS the token metric
+  // (each of engine {U,D,L,R,B}± costs one token from every grip), so the
+  // bounds are exact-for-the-metric and admissible in every grip. The 99
   // sentinel marks coordinates the restricted group cannot solve at all,
-  // which fails the step instantly instead of burning its node budget).
+  // which fails the step instantly instead of burning its node budget.
+  // (The D hexagon is invariant under the whole group, so the triples
+  // need no hexagon table — hexOK('D') can never regress mid-step.)
   const rh1 = (s, f) => PDB.rH1[f][T.h1Index(s.ep, s.ctr, f, HEX_EDGES[f])];
+  const fh1 = s => PDB.H1.D[T.h1Index(s.ep, s.ctr, 'D', HEX_EDGES.D)];
   const bKeyOf = faces => HEX_FACES.filter(f => faces.includes(f)).join('');
   function stageH(stage, line) {
     switch (stage.id) {
-      case 'fc': return s => PDB.H1.D[T.h1Index(s.ep, s.ctr, 'D', HEX_EDGES.D)];
+      case 'fc': return s => fh1(s);
       case 't1': {
         const o = stage.opt;
         return (s, lim) => {
           let h = PDB.rC[o.cKey][T.cornerIndex(s.cp, s.co)];
           if (h > lim) return h;
-          const d = PDB.rA[o.aKey][T.encA(s.ctr)]; if (d > h) h = d;
-          if (h > lim) return h;
-          const e = rh1(s, 'D'); return e > h ? e : h;
+          const d = PDB.rA[o.aKey][T.encA(s.ctr)]; return d > h ? d : h;
         };
       }
       case 't2':
         return (s, lim) => {
           let h = PDB.rC['3,5'][T.cornerIndex(s.cp, s.co)];
           if (h > lim) return h;
-          const d = PDB.rA['5,6,8,9'][T.encA(s.ctr)]; if (d > h) h = d;
-          if (h > lim) return h;
-          const e = rh1(s, 'D'); return e > h ? e : h;
+          const d = PDB.rA['5,6,8,9'][T.encA(s.ctr)]; return d > h ? d : h;
         };
       default: {
         // center stages: hexes done so far + the one being solved. The heavy
@@ -224,17 +311,15 @@ function makeSolverCore(E, T, PDB, algData) {
   }
 
   /* ---------- (weighted) IDA* ---------- */
-  // fc searches the 16 native moves; t1..c4 search the 8 Bencisco-hold
-  // tokens with the grip tracked. Canonical successor rules: native — never
-  // the same face twice in a row, opposite faces commute so only the
-  // smaller-index face may come first when adjacent; hold tokens — R, Rw
-  // and BL share the R-BL axis and commute pairwise (same-axis layers), so
-  // a same-axis run is forced strictly ascending in the order R < Rw < BL,
-  // and U never follows U. weight > 1 makes the pruning inadmissible
-  // (weighted IDA*): solutions are then near-optimal, found exponentially
-  // faster — the later center steps run 10+ moves deep where exact search
-  // is intractable, and the port plan promises optimal OR near-optimal per
-  // step. Found solutions are always goal-checked.
+  // fc searches the 16 native moves; t1..c4 search their mode's hold
+  // tokens plus free re-grip composites, with the grip tracked. Canonical
+  // successor rules: native — never the same face twice in a row, opposite
+  // faces commute so only the smaller-index face may come first when
+  // adjacent; hold codes — see dfsBL. weight > 1 makes the pruning
+  // inadmissible (weighted IDA*): solutions are then near-optimal, found
+  // exponentially faster — the later center steps run 10+ moves deep where
+  // exact search is intractable, and the port plan promises optimal OR
+  // near-optimal per step. Found solutions are always goal-checked.
   const work = { nodes: 0, budget: DEFAULTS.budget, limit: Infinity, stopped: false, truncated: false };
   // preallocated per-depth node buffers: the DFS writes each child into its
   // depth's buffer instead of allocating — no GC pressure in the hot loop
@@ -280,11 +365,22 @@ function makeSolverCore(E, T, PDB, algData) {
       }
     }
   }
-  // the Bencisco-hold DFS: nodes are (state, grip); path records token
-  // indices into BL.TOKS. Only the wide tokens change grip. lastAxis 0 with
-  // lastRank r = inside an R-axis run (next same-axis token needs rank > r);
-  // lastAxis 1 = just turned U (U may not repeat).
-  function dfsBL(s, j, g, bound, lastAxis, lastRank, goal, h, w, path, sols, maxSols) {
+  // the Bencisco-hold DFS: nodes are (state, grip); path records the codes
+  // pathToText renders (plain tokens and re-grip-fused U composites); only
+  // the wide tokens and re-grips change grip. lastTok carries the previous
+  // code for the canonical successor rules:
+  //   - R-axis runs hold at most one R±, then one D-layer token (Rw±/BL±):
+  //     rank strictly ascends, and since rank(Rw) === rank(BL) every
+  //     Rw<->BL adjacency is banned — a re-grip can never be spelled as a
+  //     redundant token pair (Rw BL' etc.), and D-doubles respell as the
+  //     single inverse token (face turns have order 3).
+  //   - a plain U never follows a U-axis code (same grip = same engine
+  //     face); a composite's U is at a NEW grip, so it may.
+  //   - composites never start a word (the step-start grip loop covers
+  //     every grip), and in center mode never duplicate an in-alphabet
+  //     twin: after Rw± the BL± spelling covers them, and after BL± the
+  //     target matching Rw's drift is exactly "Rw± then plain U".
+  function dfsBL(s, j, g, bound, lastTok, goal, h, w, path, sols, maxSols, mode) {
     if (++work.nodes > work.limit) {
       work.stopped = true;
       if (work.nodes > work.budget) work.truncated = true;
@@ -294,27 +390,53 @@ function makeSolverCore(E, T, PDB, algData) {
     const hh = h(s, lim);
     if (hh > lim + 1e-9) return;
     if (hh === 0 && goal(s)) { sols.push({ moves: path.slice(), st: E.copy(s) }); return; }
-    if (g === bound) return;
+    if (g >= bound) return;
     const t = stackNode(g);
-    for (let k = 0; k < 8; k++) {
-      const ax = BL.AXIS[k];
-      if (ax === lastAxis && (ax === 1 || BL.RANK[k] <= lastRank)) continue;
+    for (const k of mode.toks) {
+      if (lastTok >= 100) {
+        if (BL.AXIS[k] === 1) continue;                  // U after a composite's U
+      } else if (lastTok >= 0 && BL.AXIS[k] === BL.AXIS[lastTok]) {
+        if (BL.AXIS[k] === 1) continue;                  // U never follows U
+        if (BL.RANK[k] <= BL.RANK[lastTok]) continue;    // R-axis runs ascend
+      }
       const gen = BL.gen[j][k];
       moveInto(gen.m, s, t);
       path.push(k);
-      dfsBL(t, gen.nj, g + 1, bound, ax, BL.RANK[k], goal, h, w, path, sols, maxSols);
+      dfsBL(t, gen.nj, g + 1, bound, k, goal, h, w, path, sols, maxSols, mode);
       path.pop();
       if (work.stopped || sols.length >= maxSols) return;
+    }
+    // free re-grips carry mode.regripCost in the SEARCH (the fused U turn
+    // plus a reading penalty for the rotation): plain spellings win unless
+    // a re-grip saves that many real moves, and the displayed movecount
+    // still counts the composite as its one turn (rotations are free)
+    if (g + mode.regripCost <= bound && lastTok !== -1 && !(mode.bl && (lastTok === 4 || lastTok === 5))) {
+      const blDrift = mode.bl && (lastTok === 6 || lastTok === 7) ? BL.gen[j][lastTok - 2].nj : -1;
+      for (let tg = 0; tg < 3; tg++) {
+        if (tg === j || tg === blDrift) continue;
+        for (let d = 0; d < 2; d++) {
+          const gen = BL.gen[tg][2 + d];
+          moveInto(gen.m, s, t);
+          path.push(100 + 2 * tg + d);
+          dfsBL(t, tg, g + mode.regripCost, bound, 100 + 2 * tg + d, goal, h, w, path, sols, maxSols, mode);
+          path.pop();
+          if (work.stopped || sols.length >= maxSols) return;
+        }
+      }
     }
   }
   // stepBudget bounds THIS call's nodes: a pathological instance fails fast
   // (killing one line-option) instead of starving the whole solve. On a
   // budget stop with nothing found, one retry at a higher weight rescues
   // most hard instances (heavier pruning finds a slightly longer answer).
-  // blMode runs the hold DFS from all three grips per bound (re-grips about
-  // the R-BL axis are free between steps); each solution records its grip.
-  function searchStep(start, goal, h, cap, maxSols, slack, weight, stepBudget, blMode) {
+  // holdMode ('center' | 'triple' | falsy for the native DFS) picks the
+  // token alphabet and runs the hold DFS from all three grips per bound
+  // (re-grips about the R-BL axis are free between steps); each solution
+  // records its grip.
+  function searchStep(start, goal, h, cap, maxSols, slack, weight, stepBudget, holdMode) {
     if (goal(start)) return [{ moves: [], st: E.copy(start), j0: 0 }];
+    const mode = holdMode ? MODES[holdMode === true ? 'center' : holdMode] : null;
+    if (holdMode && !mode) throw new Error('unknown hold mode ' + holdMode);
     const attempt = (w, budget) => {
       // with w > 1 a length-L solution may only survive the weighted pruning
       // at bounds up to ~w*L, so the bound iterates past the length cap
@@ -323,10 +445,10 @@ function makeSolverCore(E, T, PDB, algData) {
       const boundCap = Math.ceil(cap * w);
       const sols = [];
       const run = bound => {
-        if (!blMode) { dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols); return; }
+        if (!mode) { dfs(start, 0, bound, -1, goal, h, w, [], sols, maxSols); return; }
         for (let j0 = 0; j0 < 3 && !work.stopped && sols.length < maxSols; j0++) {
           const before = sols.length;
-          dfsBL(start, j0, 0, bound, -1, -1, goal, h, w, [], sols, maxSols);
+          dfsBL(start, j0, 0, bound, -1, goal, h, w, [], sols, maxSols, mode);
           for (let i = before; i < sols.length; i++) sols[i].j0 = j0;
         }
       };
@@ -345,6 +467,14 @@ function makeSolverCore(E, T, PDB, algData) {
         if (seen.has(k)) continue;
         seen.add(k);
         out.push(x);
+      }
+      // among equal-length words prefer the fewest mid-word re-grips: the
+      // rotations are free in the metric, but the human reads every bracket
+      // (user refinement 2026-07-14 — triples especially should be plain
+      // R / U / Rw whenever an equal-length spelling exists)
+      if (mode) {
+        const regrips = x => { let n = 0; for (const k of x.moves) if (k >= 100) n++; return n; };
+        out.sort((a, b) => a.moves.length - b.moves.length || regrips(a) - regrips(b));
       }
       return out;
     };
@@ -496,10 +626,19 @@ function makeSolverCore(E, T, PDB, algData) {
       if (!E.eq(b, c)) throw new Error('orientation reading mismatch for spell "' + o.spell + '"');
     }
   })();
+  // WHITE FIRST, EVERY TIME (user spec 2026-07-14): the only admissible
+  // pre-rotations are the 3 that map the white (engine U) material onto the
+  // method's D region — the spins about the white axis, spelled {D,L} /
+  // {D,R} / {D,B}. Their freedom is which triples/centers the method meets
+  // when (the LBT dead-end rescue). The old names keep their ladder roles:
+  // fixed = the primary anchor, vertical = all 3 spins, full = all 3 again
+  // (the auto ladder passes wider search options on that last rung).
+  const WHITE_ORIENTS = ORIENTS.map((o, i) => (E.faceImg(o.M, FIDX.U) === FIDX.D ? i : -1)).filter(i => i >= 0);
+  if (WHITE_ORIENTS.length !== 3) throw new Error('white-first anchors: expected 3, got ' + WHITE_ORIENTS.length);
   const ORIENT_SETS = {
-    fixed: () => [ORIENTS.findIndex(o => o.spell === '')],
-    vertical: () => ORIENTS.map((o, i) => (E.faceImg(o.M, FIDX.U) === FIDX.U ? i : -1)).filter(i => i >= 0),
-    full: () => ORIENTS.map((_, i) => i),
+    fixed: () => WHITE_ORIENTS.slice(0, 1),
+    vertical: () => WHITE_ORIENTS.slice(),
+    full: () => WHITE_ORIENTS.slice(),
   };
 
   /* ---------- the pipeline ---------- */
@@ -517,7 +656,7 @@ function makeSolverCore(E, T, PDB, algData) {
     }
   }
   const stepLabel = (stage) => {
-    if (stage.id === 'fc') return STEP_DEFS.fc.name + ' (D)';
+    if (stage.id === 'fc') return STEP_DEFS.fc.name + ' (white)';
     if (stage.id === 't1' || stage.id === 't2')
       return STEP_DEFS[stage.id].name + ' (corner ' + (stage.opt.corner === 3 ? 'back' : 'right') + ')';
     return STEP_DEFS[stage.id].name + ' (' + stage.opt.face + ')';
@@ -526,10 +665,12 @@ function makeSolverCore(E, T, PDB, algData) {
   // search(state, opts) -> { byLength, best, truncated, work, failures, orientUsed }
   // opts: { orient:'auto'|'fixed'|'vertical'|'full'|[rotIdx], beam, caps:{id:int},
   //         slack, budget, stepBudget, weights, maxSolsPerStep }
-  // 'auto' (default) is a ladder: the fixed frame solves ~24/25 scrambles in
-  // a few seconds; the rare LBT source dead-ends (both source triangles
-  // trapped on side slots no sheet alg reaches — measured) are retried with
-  // the vertical pre-rotations, then a trimmed full 24-orientation sweep.
+  // 'auto' (default) is a ladder over the 3 white anchors: the primary
+  // anchor solves the vast majority of scrambles; the rare LBT source
+  // dead-ends (both source triangles trapped on side slots no sheet alg
+  // reaches — measured) are retried with the other two spins, then all 3
+  // again with a wider search (the white-first replacement for the old
+  // 24-orientation sweep: the first center's color is never given up).
   function search(scr, opts) {
     opts = opts || {};
     const orientOpt = opts.orient || DEFAULTS.orient;
@@ -541,7 +682,8 @@ function makeSolverCore(E, T, PDB, algData) {
       };
       let res = search(scr, { ...opts, orient: 'fixed' });
       if (res.best == null) res = carry(search(scr, { ...opts, orient: 'vertical' }), res);
-      if (res.best == null) res = carry(search(scr, { ...opts, orient: 'full', beam: 2, maxSolsPerStep: 2 }), res);
+      if (res.best == null) res = carry(search(scr, { ...opts, orient: 'full',
+        beam: Math.max(opts.beam || DEFAULTS.beam, 6), maxSolsPerStep: 5, slack: 1 }), res);
       return res;
     }
     const caps = {};
@@ -582,18 +724,20 @@ function makeSolverCore(E, T, PDB, algData) {
             if (!sols) {
               sols = searchStep(line.st, stageGoal(stage, line), stageH(stage, line),
                 caps[stageId], stageSols, stageSlack, weights[stageId], stepBudget,
-                stageId !== 'fc');           // t1..c4 run in the Bencisco hold
+                stageId === 'fc' ? null                              // native letters
+                  : (stageId === 't1' || stageId === 't2') ? 'triple' : 'center');
               memo.set(mk, sols);
             }
             if (!sols.length) { failures.step++; continue; }
             for (const sol of sols) {
               // fc emits native letters in the pre-rotation hold; t1..c4 emit
-              // Bencisco-hold tokens with the grip's rotation spell as `pre`
+              // Bencisco-hold tokens (either kind may carry mid-word re-grip
+              // brackets) with the grip's rotation spell as `pre`
               const seg = !sol.moves.length ? null : stageId === 'fc'
                 ? { id: stage.id, kind: 'search', label: stepLabel(stage),
                     text: sol.moves.map(m => E.MOVES[m]).join(' '), moves: sol.moves.length }
                 : { id: stage.id, kind: 'search', label: stepLabel(stage),
-                    text: sol.moves.map(k => BL.TOKS[k]).join(' '), moves: sol.moves.length,
+                    text: pathToText(sol.j0, sol.moves).text, moves: sol.moves.length,
                     pre: BL.SPELLS[sol.j0] };
               next.push({
                 st: sol.st,
@@ -664,7 +808,8 @@ function makeSolverCore(E, T, PDB, algData) {
         total: l.moves, rotIdx: l.rotIdx, rotSpell: ORIENTS[l.rotIdx].spell,
         segs: l.segs, ok: false,
       };
-      const lineKey = item.rotSpell + '|' + l.segs.map(s => (s.pre ? s.pre + '~' : '') + s.text).join('|');
+      respellLine(item);                        // relative junction re-grips (clones segs)
+      const lineKey = item.rotSpell + '|' + item.segs.map(s => (s.pre ? s.pre + '~' : '') + s.text).join('|');
       if (seenLine.has(lineKey)) continue;
       seenLine.add(lineKey);
       item.ok = verifyLine(scr, item);
@@ -692,25 +837,50 @@ function makeSolverCore(E, T, PDB, algData) {
   const lineText = it => [it.rotSpell, ...it.segs.map(s => (s.pre ? s.pre + ' ' : '') + s.text)]
     .filter(Boolean).join(' ');
 
+  /* ---------- continuous respell: the printed line is ONE engine text ---------- */
+  // The search anchors each hold segment at the recognition hold (both the
+  // line's rotation and the grip spell BL.SPELLS[j0] read from identity),
+  // but a human executes the printed tokens IN ORDER, carrying every
+  // re-orientation forward — including the hold drift of wide moves
+  // (walkParsed semantics, the sheets' own convention). Physical-loop
+  // finding (user, 2026-07-14): identity-anchored spells made the printed
+  // junctions wrong under that continuous execution. So before a line is
+  // emitted, each segment's `pre` is respelled RELATIVE to the hold the
+  // previous tokens actually leave: the one {X,Y} bracket, read at that
+  // hold, that lands the segment's intended absolute hold — or no token at
+  // all when the human is already holding it right. lineText(item) is then
+  // a single continuous engine-valid text and verifyLine proves exactly
+  // that text: what you read is what you turn.
+  const holdOfText = t => t ? E.walkParsed(E.parseAlg(t), () => {}) : [0, 1, 2, 3, 4, 5, 6, 7];
+  function respellLine(item) {
+    let acc = item.rotSpell || '';
+    item.segs = item.segs.map(seg => {
+      const intended = holdOfText(((item.rotSpell || '') + ' ' + (seg.pre || '')).trim());
+      const current = holdOfText(acc);
+      const out = { ...seg };
+      delete out.pre;
+      if (current.join(',') !== intended.join(',')) {
+        const x = current.indexOf(intended[0]), y = current.indexOf(intended[1]);
+        out.pre = '{' + FACES[x] + ',' + FACES[y] + '}';
+      }
+      acc = (acc + ' ' + (out.pre ? out.pre + ' ' : '') + seg.text).trim();
+      return out;
+    });
+  }
+
   /* ---------- the per-line proof (every displayed line, end to end) ---------- */
   // Executes the DISPLAYED text through the engine from the original
-  // scramble state: the leading rotation — plus the segment's own hold spell
-  // for the Bencisco-hold steps — is re-prefixed per segment (the human
-  // re-grips to the recognition hold between algorithms — rotations have no
-  // state effect, they only set the reading frame), and the final state must
-  // be EXACTLY solved. Any false here means a bug upstream.
+  // scramble state as ONE CONTINUOUS reading — the exact token stream a
+  // human follows, respelled junction re-grips included — and the final
+  // state must be EXACTLY solved. Any false here means a bug upstream.
   function verifyLine(scr, item) {
     try {
-      let st = E.copy(scr);
-      for (const seg of item.segs) {
-        const parsed = E.parseAlg(((item.rotSpell ? item.rotSpell + ' ' : '')
-          + (seg.pre ? seg.pre + ' ' : '') + seg.text).trim());
-        if (!parsed) return false;
-        // seg dialects are all cif today; a future EIF sheet would need its
-        // own rotation-prefix reading pinned before it may join the sweep
-        st = E.applyParsed(parsed, st, seg.dialect || 'cif');
-      }
-      return E.eq(st, SOLVED);
+      // all live sheet subsets are CIF; a future EIF subset would need its
+      // own continuous-reading pin before it may join the sweep
+      if (item.segs.some(sg => (sg.dialect || 'cif') !== 'cif')) return false;
+      const parsed = E.parseAlg(lineText(item));
+      if (!parsed) return false;
+      return E.eq(E.applyParsed(parsed, E.copy(scr)), SOLVED);
     } catch (e) { return false; }
   }
 
@@ -723,6 +893,7 @@ function makeSolverCore(E, T, PDB, algData) {
   return {
     METHOD_NAME, STEP_DEFS, STEP_ORDER, DEFAULTS, BL,
     HEX_FACES, HEX_EDGES, TRIPLE_SLOTS,
+    CENTER_TOKS, TRIPLE_TOKS, REGRIP, pathToText, WHITE_ORIENTS,
     hexOK, tripleOK, lbtOK,
     searchStep, stageH, stageGoal, resetWork, work,
     finishIndex, lbtCandidates, conjState, ORIENTS, ORIENT_SETS,

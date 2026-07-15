@@ -1,17 +1,23 @@
 /* fto.twistytools.com — Bencisco solver tests (js/tables.js + js/solver-core.js). M5.
  *
  * The solver exit gate: coordinate codecs pinned, every pruning table
- * admissible and goal-exact (the r* families in the Bencisco-hold move
- * group {R, U, Rw, BL}, first center on BL), the hold machinery itself
- * (grip spells, token reading, the sealed first center), the Bencisco step
- * regions re-derived against the M3 sheet data, the orientation
- * (conjugation + {X,Y} bracket spelling) machinery proven, the LBT
- * effect-matcher and L3T exact index verified, and full pipelines on fixed
- * seeds — every displayed line re-proved end-to-end by applyParsed from
- * the original scramble state, the hold steps emitting ONLY the ergonomic
- * tokens under their grip spells. The wide statistical scan (>= 200
- * scrambles, 0 verify failures) lives in tools/solver-lab.mjs; this suite
- * stays deterministic and CI-sized.
+ * admissible and goal-exact (the r* families in the sealed hold group's
+ * own 10-native-move metric — the token metric once re-grips are free —
+ * first center on BL), the hold machinery itself (grip spells, token
+ * reading incl. the re-grip-fused U composites, the sealed group, the
+ * structural ban on redundant Rw/BL re-grip pairs), WHITE-FIRST
+ * orientation policy (the 3 white anchors {D,L}/{D,R}/{D,B}; every solve
+ * builds the white center first — cross-pinned against the trainer's
+ * placement-neutral first-center goal set), the Bencisco step regions
+ * re-derived against the M3 sheet data, the orientation (conjugation +
+ * {X,Y} bracket spelling) machinery proven, the LBT effect-matcher and
+ * L3T exact index verified, and full pipelines on fixed seeds — every
+ * displayed line re-proved end-to-end by applyParsed from the original
+ * scramble state, the hold steps emitting ONLY their step's ergonomic
+ * tokens (triples {R,U,Rw}, centers + BL, either with rare {X,Y}
+ * re-grips) under their grip spells. The wide statistical scan (>= 200
+ * scrambles, 0 verify failures) lives in tools/solver-lab.mjs; this
+ * suite stays deterministic and CI-sized.
  *
  * Run: node tools/test-solver.mjs   (exit 0 = OK, 1 = a test failed)
  */
@@ -101,6 +107,10 @@ t('every table: solved state at distance 0; no negative entries', () => {
   for (const k of Object.keys(PDB.rE6)) assert(PDB.rE6[k][T.edgePlaceIndex(solved.ep, T.E6_PAIRS[k])] === 0, 'rE6[' + k + ']');
   assert(PDB.H1.D[T.h1Index(solved.ep, solved.ctr, 'D', T.HEX_EDGES.D)] === 0, 'H1.D');
   for (const k of Object.keys(PDB.rH1)) assert(PDB.rH1[k][T.h1Index(solved.ep, solved.ctr, k, T.HEX_EDGES[k])] === 0, 'rH1[' + k + ']');
+  // the restricted families carry BOTH triple steps' keys and the center
+  // steps' combined keys (the triples run inside the sealed group again)
+  assert(Object.keys(PDB.rA).sort().join('|') === '5,6,8,9|5,8|6,9', 'rA keys');
+  assert(Object.keys(PDB.rC).sort().join('|') === '3|3,5|5', 'rC keys');
   for (const fam of [PDB.rB, PDB.rA, PDB.rC, PDB.E3, PDB.rE6, PDB.H1, PDB.rH1])
     for (const k of Object.keys(fam))
       for (let i = 0; i < fam[k].length; i += 101) {
@@ -121,14 +131,48 @@ t('full-metric tables (E3, H1.D) are 1-Lipschitz along native moves', () => {
       assert(Math.abs(a[i] - b[i]) <= 1, 'jump > 1 at table #' + i + ' (' + a[i] + '->' + b[i] + ')');
   }
 });
-t('restricted tables are admissible along Bencisco-hold walks from solved', () => {
-  // solved satisfies every r* goal, so after k hold tokens each table must
-  // read <= k (min-over-grips can only under-estimate the tracked grip)
+t('the sealed move set is the 10 moves of engine {U, L, R, D, B}', () => {
+  assert(BL.SEALED_MOVES.length === 10, 'count');
+  const faces = [...new Set(BL.SEALED_MOVES.map(m => m >> 1))].map(f => E.FACES[f]).sort().join(',');
+  assert(faces === 'B,D,L,R,U', 'faces: ' + faces);
+});
+t('restricted tables are admissible along hold walks (composites cost 2)', () => {
+  // solved satisfies every r* goal; the tables are min-over-grips of the
+  // search's own cost metric (tokens 1, re-grip composites 2), so after a
+  // walk of total cost k every table must read <= k, whatever grip the
+  // walk started in
   for (let trial = 0; trial < 60; trial++) {
-    let s = E.solved(), j = (rnd() * 3) | 0;
-    const k = 1 + ((rnd() * 10) | 0);
-    for (let i = 0; i < k; i++) { const g = BL.gen[j][(rnd() * 8) | 0]; s = E.move(s, g.m); j = g.nj; }
+    let s = E.solved(), j = (rnd() * 3) | 0, k = 0;
+    for (let n = 1 + ((rnd() * 8) | 0); n > 0; n--) {
+      if (rnd() < 0.25) {                      // re-grip composite: cost 2
+        let tg = (rnd() * 3) | 0; if (tg === j) tg = (tg + 1) % 3;
+        s = E.move(s, BL.gen[tg][2 + ((rnd() * 2) | 0)].m); j = tg; k += 2;
+      } else {
+        const g = BL.gen[j][(rnd() * 8) | 0];
+        s = E.move(s, g.m); j = g.nj; k += 1;
+      }
+    }
     for (const v of readAll(s)) assert(v <= k, 'inadmissible: ' + v + ' > ' + k);
+  }
+});
+t('restricted tables are 2-Lipschitz along sealed moves; sentinels are closed', () => {
+  // one sealed move changes any r* read by at most its worst-grip cost —
+  // 1 for the R-BL axis faces (engine U/D: one token from every grip), 2
+  // for the hold-U faces (engine L/R/B: a composite from the wrong grip) —
+  // and can never cross the sentinel boundary (the reachable set is closed
+  // under the group)
+  const uAxis = new Set([2 * E.FIDX.U, 2 * E.FIDX.U + 1, 2 * E.FIDX.D, 2 * E.FIDX.D + 1]);
+  for (let trial = 0; trial < 60; trial++) {
+    const s = randState(20);
+    const m = BL.SEALED_MOVES[(rnd() * 10) | 0];
+    const lip = uAxis.has(m) ? 1 : 2;
+    const s2 = E.move(s, m);
+    const a = readAll(s), b = readAll(s2);
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] === T.UNREACHED || b[i] === T.UNREACHED)
+        assert(a[i] === b[i], 'sentinel not closed at table #' + i);
+      else assert(Math.abs(a[i] - b[i]) <= lip, 'jump > ' + lip + ' at table #' + i);
+    }
   }
 });
 t('rB.D ignores D turns; a BR turn leaves the restricted group (sentinel)', () => {
@@ -159,20 +203,70 @@ t('all 24 orientations have distinct spells; identity spells empty', () => {
   assert(spells.size === 24, 'distinct spells');
   assert(C.ORIENTS.some(o => o.spell === ''), 'identity present');
 });
-t('Bencisco hold: grip spells pinned; every token word reads as tracked', () => {
+t('Bencisco hold: grip spells pinned; words (re-grip composites incl.) read as tracked', () => {
   assert(C.BL.SPELLS.join('|') === '{L,R}|{R,B}|{B,L}', 'spells: ' + C.BL.SPELLS.join('|'));
   assert(C.BL.TOKS.join(' ') === "R R' U U' Rw Rw' BL BL'", 'token alphabet');
+  // random words over the full alphabet, re-grip-fused U composites
+  // included: tracked application must equal the engine's reading of the
+  // exact rendered text (mid-word {X,Y} brackets and all)
   for (let trial = 0; trial < 40; trial++) {
     const j0 = trial % 3;
     const s0 = randState(12);
-    const word = Array.from({ length: 1 + ((rnd() * 7) | 0) }, () => (rnd() * 8) | 0);
     let s = E.copy(s0), j = j0;
-    for (const k of word) { const g = C.BL.gen[j][k]; s = E.move(s, g.m); j = g.nj; }
-    const text = C.BL.SPELLS[j0] + ' ' + word.map(k => C.BL.TOKS[k]).join(' ');
+    const word = [];
+    for (let n = 1 + ((rnd() * 7) | 0); n > 0; n--) {
+      let k;
+      if (rnd() < 0.25) {                      // a re-grip fused to a U turn
+        let tg = (rnd() * 3) | 0; if (tg === j) tg = (tg + 1) % 3;
+        k = 100 + 2 * tg + ((rnd() * 2) | 0);
+        const g = C.BL.gen[tg][2 + ((k - 100) & 1)];
+        s = E.move(s, g.m); j = tg;
+      } else {
+        k = (rnd() * 8) | 0;
+        const g = C.BL.gen[j][k];
+        s = E.move(s, g.m); j = g.nj;
+      }
+      word.push(k);
+    }
+    const pt = C.pathToText(j0, word);
+    assert(pt.jEnd === j, 'grip walk diverged');
+    const text = C.BL.SPELLS[j0] + ' ' + pt.text;
     assert(E.eq(s, E.applyParsed(E.parseAlg(text), s0)), 'reading mismatch: ' + text);
   }
 });
-t('the hold move group seals the first center (spin-only, one BL realigns)', () => {
+t("a re-grip is one bracket, never a token pair: Rw BL' = {F,BR}, Rw' BL = {BR,U}", () => {
+  // the user's 2026-07-14 report machine-pinned: the token pair Rw BL'
+  // changes NO state (engine D then D'), only the grip — the search bans
+  // every Rw<->BL adjacency (equal ranks) and spells re-grips as brackets
+  assert(T.makeBLHold(E).RANK.join() === '0,0,-1,-1,1,1,1,1', 'rank table');
+  for (let j = 0; j < 3; j++) {
+    const probe = randState(15);
+    for (const [pair, tok] of [["Rw BL'", 4], ["Rw' BL", 5]]) {
+      const a = E.applyParsed(E.parseAlg(C.BL.SPELLS[j] + ' ' + pair), probe);
+      assert(E.eq(a, probe), pair + ' must not change the state');
+      const tgt = C.BL.gen[j][tok].nj;         // the pair's net re-grip target
+      const viaPair = E.walkParsed(E.parseAlg(C.BL.SPELLS[j] + ' ' + pair), () => {});
+      const viaBracket = E.walkParsed(E.parseAlg(C.BL.SPELLS[j] + ' ' + C.REGRIP[j][tgt]), () => {});
+      assert(viaPair.join() === viaBracket.join(), pair + ' lands the bracket hold');
+    }
+  }
+  // the relative bracket letters are grip-independent: {F,BR} forward,
+  // {BR,U} backward (what solutions display for a mid-word re-grip)
+  for (let j = 0; j < 3; j++) {
+    assert(C.REGRIP[j][(j + 1) % 3] === '{F,BR}', 'forward bracket at grip ' + j);
+    assert(C.REGRIP[j][(j + 2) % 3] === '{BR,U}', 'backward bracket at grip ' + j);
+  }
+});
+t('white first, every time: the 3 anchors are exactly the U-to-D rotations', () => {
+  assert(C.ORIENT_SETS.fixed().length === 1, 'one primary anchor');
+  assert(C.ORIENT_SETS.vertical().length === 3 && C.ORIENT_SETS.full().length === 3, 'three spins');
+  assert(C.WHITE_ORIENTS.length === 3, 'anchor count');
+  const spells = C.WHITE_ORIENTS.map(i => C.ORIENTS[i].spell).sort().join('|');
+  assert(spells === '{D,B}|{D,L}|{D,R}', 'anchor spells: ' + spells);
+  for (const i of C.WHITE_ORIENTS)
+    assert(E.faceImg(C.ORIENTS[i].M, E.FIDX.U) === E.FIDX.D, 'anchor maps white home to the D region');
+});
+t('the center move group seals the first center (spin-only, one BL realigns)', () => {
   const D = E.FIDX.D;
   for (let trial = 0; trial < 30; trial++) {
     // any state with the D hexagon formed, walked by random hold tokens
@@ -185,7 +279,30 @@ t('the hold move group seals the first center (spin-only, one BL realigns)', () 
     assert(ok, 'not realignable by D spins');
   }
 });
-t('restricted t1 searchStep succeeds off spun-center states, emits hold tokens', () => {
+// a hold-step word: the mode's plain tokens (triples R/U/Rw, centers + BL)
+// with an optional {X,Y} re-grip bracket immediately before a U turn —
+// nothing else, and never an Rw/BL adjacency in either order (the redundant
+// re-grip pair the canonicalization bans)
+function assertHoldWord(text, withBL) {
+  const parts = text.split(' ');
+  const tok = withBL ? /^(?:R|U|Rw|BL)'?$/ : /^(?:R|U|Rw)'?$/;
+  let last = '';
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (/^\{(?:BR|BL|[UFRLDB]),(?:BR|BL|[UFRLDB])\}$/.test(p)) {
+      assert(/^U'?$/.test(parts[i + 1] || ''), 're-grip not before a U: ' + text);
+      last = '';
+      continue;
+    }
+    assert(tok.test(p), 'hold token: ' + p + ' in ' + text);
+    const a = p.replace(/'$/, ''), b = last.replace(/'$/, '');
+    assert(!((a === 'Rw' && b === 'BL') || (a === 'BL' && b === 'Rw')),
+      'Rw/BL adjacency: ' + text);
+    last = p;
+  }
+}
+const assertTripleWord = text => assertHoldWord(text, false);
+t('triple-mode t1 searchStep solves spun-center states with R/U/Rw words', () => {
   for (let trial = 0; trial < 8; trial++) {
     let s = E.solved(), j = (rnd() * 3) | 0;
     for (let i = 0; i < 4 + ((rnd() * 8) | 0); i++) { const g = C.BL.gen[j][(rnd() * 8) | 0]; s = E.move(s, g.m); j = g.nj; }
@@ -193,16 +310,36 @@ t('restricted t1 searchStep succeeds off spun-center states, emits hold tokens',
     const line = { st: s, hexes: ['D'] };
     C.resetWork(1e8);
     const sols = C.searchStep(s, C.stageGoal(stage, line), C.stageH(stage, line),
-      C.STEP_DEFS.t1.cap, 2, 0, 1, 1e7, true);
+      C.STEP_DEFS.t1.cap, 2, 0, 1, 1e7, 'triple');
     assert(sols.length > 0, 'no t1 solution');
     for (const sol of sols) {
-      const text = sol.moves.map(k => C.BL.TOKS[k]).join(' ');
       if (!sol.moves.length) continue;
-      assert(/^(?:R|U|Rw|BL)'?(?: (?:R|U|Rw|BL)'?)*$/.test(text), 'tokens: ' + text);
+      const text = C.pathToText(sol.j0, sol.moves).text;
+      assertTripleWord(text);
       const replay = E.applyParsed(E.parseAlg(C.BL.SPELLS[sol.j0] + ' ' + text), s);
       assert(E.eq(replay, sol.st), 'replay mismatch');
       assert(C.stageGoal(stage, line)(replay), 'goal fails');
     }
+  }
+});
+t('the whole hold alphabet seals the first center: no triple/center word can break it', () => {
+  // both step alphabets (tokens AND the re-grip composites) live inside
+  // the sealed group, so mid-word the D hexagon can only spin — walk random
+  // words over the full code set and check the D block never leaks
+  const D = E.FIDX.D;
+  for (let trial = 0; trial < 30; trial++) {
+    let s = E.solved(), j = (rnd() * 3) | 0;
+    for (let i = 0; i < 2 + ((rnd() * 12) | 0); i++) {
+      if (rnd() < 0.25) {                      // re-grip composite
+        let tg = (rnd() * 3) | 0; if (tg === j) tg = (tg + 1) % 3;
+        s = E.move(s, C.BL.gen[tg][2 + ((rnd() * 2) | 0)].m); j = tg;
+      } else {
+        const g = C.BL.gen[j][(rnd() * 8) | 0];
+        s = E.move(s, g.m); j = g.nj;
+      }
+    }
+    for (const e of C.HEX_EDGES.D) assert(s.ep[e] >= 9 && s.ep[e] <= 11, 'D edge escaped');
+    for (let k = 0; k < 3; k++) assert(s.ctr[3 * D + k] === D, 'D triangle escaped');
   }
 });
 
@@ -245,7 +382,9 @@ const SCRAMBLES = [
   "U L D' B R' F BL' U' BR D L' R' B U' F' BL R D' U' B' L F R' BR' D U B L' F' D",
   "BL' F R' U' D B L BR' F' U R D' B' L' U' F BL R' B D U' L' F' R BR B' U' D L F'",
 ];
+const FC = T.buildFirstCenter(E);   // the trainer's placement-neutral white goal set
 t('three fixed scrambles solve end to end; every emitted line is machine-proved', () => {
+  const whiteSpells = new Set(C.WHITE_ORIENTS.map(i => C.ORIENTS[i].spell));
   for (const scrText of SCRAMBLES) {
     const parsed = E.parseAlg(scrText);
     assert(parsed, 'scramble parses');
@@ -256,51 +395,62 @@ t('three fixed scrambles solve end to end; every emitted line is machine-proved'
     assert(res.best < 90, 'sane total: ' + res.best);
     for (const it of res.byLength[res.best]) {
       assert(it.ok, 'ok flag');
-      // independent replay of the DISPLAYED line, exactly as a human reads it
-      let st = E.copy(s);
-      for (const seg of it.segs) {
-        const p = E.parseAlg(((it.rotSpell ? it.rotSpell + ' ' : '')
-          + (seg.pre ? seg.pre + ' ' : '') + seg.text).trim());
-        assert(p, 'segment parses: ' + seg.text);
-        st = E.applyParsed(p, st, seg.dialect || 'cif');
-      }
-      assert(E.eq(st, solved), 'independent replay solves');
+      // white first, every time: the line's pre-rotation is a white anchor,
+      // and executing it plus the first-center segment forms the WHITE
+      // hexagon in the trainer's placement-neutral goal set (cross-pin)
+      assert(whiteSpells.has(it.rotSpell), 'white anchor: ' + it.rotSpell);
+      const fcSeg = it.segs.find(sg => sg.id === 'fc');
+      const upTo = [it.rotSpell, fcSeg ? fcSeg.text : ''].filter(Boolean).join(' ');
+      const afterFc = E.applyParsed(E.parseAlg(upTo), E.copy(s));
+      assert(FC.goalSet.has(FC.coordOf(afterFc)), 'white center formed after fc');
+      // independent replay of the DISPLAYED line, exactly as a human reads
+      // it: ONE continuous text — junction re-grips (wide-drift compensation
+      // included) are printed tokens, not a hidden reset convention
+      const p = E.parseAlg(C.lineText(it));
+      assert(p, 'line parses: ' + C.lineText(it));
+      assert(E.eq(E.applyParsed(p, E.copy(s)), solved), 'continuous replay solves');
       // segments follow the Bencisco step order
       const order = it.segs.map(sg => STEP_ORDER.indexOf(sg.id));
       for (let i = 1; i < order.length; i++) assert(order[i] > order[i - 1], 'step order');
       // totals add up: segment moves sum to the badge total
       assert(it.segs.reduce((a, sg) => a + sg.moves, 0) === it.total, 'movecount adds up');
-      // t1..c4 live in the Bencisco hold: ergonomic tokens + a grip spell;
-      // fc and the sheet finishes read from the line's own hold, no pre
+      // t1..c4 live in the Bencisco hold: the TRIPLE steps emit {R,U,Rw}
+      // words, the CENTER steps add BL, and either may carry a rare {X,Y}
+      // re-grip bracket immediately before a U turn — never an Rw/BL
+      // adjacency (the banned redundant pair). Every pre is a single
+      // relative {X,Y} bracket (or absent when the previous segment
+      // already leaves the right hold); entering the hold always re-grips;
+      // fc reads plain natives in the line's own hold, never a pre
+      const BRK = /^\{(?:BR|BL|[UFRLDB]),(?:BR|BL|[UFRLDB])\}$/;
+      let firstHold = true;
       for (const seg of it.segs) {
-        if (['t1', 't2', 'sc', 'c3', 'c4'].includes(seg.id)) {
-          assert(/^(?:R|U|Rw|BL)'?(?: (?:R|U|Rw|BL)'?)*$/.test(seg.text), 'hold tokens only: ' + seg.text);
-          assert(C.BL.SPELLS.includes(seg.pre), 'grip spell present');
-        } else {
-          assert(!seg.pre, 'no grip spell outside the hold steps');
+        assert(seg.pre === undefined || BRK.test(seg.pre), 'pre is one bracket: ' + seg.pre);
+        if (['t1', 't2'].includes(seg.id)) {
+          assertHoldWord(seg.text, false);
+          if (firstHold) { assert(seg.pre, 'hold entry re-grips'); firstHold = false; }
+        } else if (['sc', 'c3', 'c4'].includes(seg.id)) {
+          assertHoldWord(seg.text, true);
+          if (firstHold) { assert(seg.pre, 'hold entry re-grips'); firstHold = false; }
+        } else if (seg.id === 'fc') {
+          assert(!seg.pre, 'fc carries no pre');
         }
       }
     }
   }
 });
-t('a rotated orientation produces a proven line (the conjugation sweep end to end)', () => {
+t('every white anchor produces a proven line (the conjugation sweep end to end)', () => {
   const s = E.applyParsed(E.parseAlg(SCRAMBLES[0]), E.solved());
-  const vert = C.ORIENT_SETS.vertical().filter(i => C.ORIENTS[i].spell !== '');
-  let provenRotated = false;
-  for (const oi of vert) {
+  let proven = 0;
+  for (const oi of C.ORIENT_SETS.vertical()) {
     const res = C.search(s, { orient: [oi] });
     if (res.best == null) continue;
     const it = res.byLength[res.best][0];
-    assert(it.rotSpell !== '', 'rotated spell');
-    let st = E.copy(s);
-    for (const seg of it.segs)
-      st = E.applyParsed(E.parseAlg((it.rotSpell + ' ' + (seg.pre ? seg.pre + ' ' : '') + seg.text).trim()),
-        st, seg.dialect || 'cif');
-    assert(E.eq(st, solved), 'rotated replay solves');
-    provenRotated = true;
-    break;
+    assert(it.rotSpell === C.ORIENTS[oi].spell, 'anchor spell');
+    const st = E.applyParsed(E.parseAlg(C.lineText(it)), E.copy(s));
+    assert(E.eq(st, solved), 'anchored replay solves');
+    proven++;
   }
-  assert(provenRotated, 'no rotated orientation solved scramble 0 — investigate');
+  assert(proven >= 2, 'at least two anchors solve scramble 0: ' + proven);
 });
 t('verifyLine rejects tampered lines', () => {
   const s = E.applyParsed(E.parseAlg(SCRAMBLES[0]), E.solved());

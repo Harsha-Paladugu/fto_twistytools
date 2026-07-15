@@ -342,40 +342,97 @@ The USER supplies the actual sheets; this section is context, not authority.
   engine coordinates: D hexagon → corners 3,5 triples (F2T) → L/R/B
   hexagons (SC + L2C) → LBT (corner 4) → L3T (the U layer). All pinned in
   tools/test-solver.mjs against the M3 sheet data.
-- **Bencisco execution hold (M5 rework, machine-verified 2026-07-13)**: after
-  the first center is made it is HELD ON THE BL FACE, and the first two
-  triples plus the remaining three centers are solved with only
-  **{R, U, Rw, BL}** — BL turns are the "align the white layer" moves (USER
-  method decision). Facts, all derived from the engine's hold walk
-  (`js/tables.js makeBLHold`) and pinned in tools/test-solver.mjs:
+- **Bencisco execution hold (M5 rework 2026-07-13, revised 2026-07-14,
+  refined 2026-07-15, machine-verified)**: the solve builds the **WHITE
+  center first, every time** (USER spec 2026-07-14 — no color neutrality),
+  then HOLDS IT ON THE BL FACE. The step move sets (USER specs 2026-07-14
+  + the 2026-07-15 refinement "I want the triples to be solved with
+  R U Rw moves"): the **center steps (sc/c3/c4) use {R, U, Rw, BL}**; the
+  **triple steps (t1/t2) use {R, U, Rw}** — both inside the sealed group —
+  and EITHER may re-grip mid-word for free, the rotation fused to the U
+  turn that needs it and printed as one {X,Y} bracket ({F,BR} spinning
+  forward / {BR,U} backward — the same letters at every grip). A re-grip
+  is NEVER spelled as a token pair: `Rw BL'` (engine D then D′ — no state
+  change, pure re-grip) is banned outright by the search canonicalization
+  (USER report 2026-07-15: "it would be better to just rotate by doing a
+  {F, BR}"), along with every other Rw/BL adjacency (D-doubles respell as
+  the single inverse token — face turns have order 3). In the search
+  metric a composite costs 2 (its turn + a reading penalty; displayed
+  movecount counts only the turn), so plain spellings win unless the
+  rotation saves a real move — measured ~0.7 mid-word re-grips per triple
+  and ~0.4 per center. The old insert-with-{B,U} triple shape (2026-07-14)
+  is RETIRED, and with it the hold's B tokens. Facts, all derived from the
+  engine's hold walk (`js/tables.js makeBLHold`) and pinned in
+  tools/test-solver.mjs:
+  - White-first = whole-puzzle pre-rotation: exactly **3 rotations map the
+    white (engine U) material onto the method's D region** — the spins
+    about the white axis, spelled `{D,L}` / `{D,R}` / `{D,B}`. They are the
+    ONLY admissible pre-rotations (the old fixed → vertical → full-24
+    ladder collapsed onto them; the last auto rung re-runs all three with a
+    wider beam instead of surrendering the color). Every emitted line is
+    additionally cross-pinned against the trainer's placement-neutral
+    first-center goal set: after the printed pre-rotation plus the fc
+    segment, the white hexagon is formed.
   - Exactly **3 CIF grips** place the first-center face (engine D) at
     position BL with engine U at position R (R and BL are opposite):
     spelled `{L,R}`, `{R,B}`, `{B,L}` (the pre-2026-07-14 o/T spellings
     were `T`, `Uo T`, `Uo' T`); hold-U reads engine L / R / B
     respectively. Rw reads engine D PLUS a grip drift about the R-BL axis
     (walkParsed's wide re-hold); BL reads engine D in place — the two share
-    a state effect and differ only by the frame rotation. Re-grips among
-    the three are free between steps (rotations cost nothing).
-  - The restricted group **SEALS the first center**: engine D's 3 edge
-    slots and 3 centre slots are invariant under the reachable face effects
-    {U, D, L, R, B} (each D edge's other face is F/BR/BL — all outside the
-    group — and D's centre slots sit only in the D/F/BR/BL layers), so a
-    solved first center can only SPIN (BL/Rw), realigns in ≤ 1 move, and
-    can never be broken by the later hold steps.
+    a state effect and differ only by the frame rotation, which is why the
+    pair `Rw BL'` is a pure re-grip and why runs never need both letters.
+    All R-axis tokens read the same engine faces at every grip ({U, D});
+    only the hold-U face varies by grip — so a mid-word re-grip is exactly
+    "choose which of engine L/R/B the next U turn hits", and canonical
+    words carry re-grips only immediately before U turns. A pure {R,U,Rw}
+    word CANNOT re-grip at all: its net grip drift and its net engine-D
+    power are locked together through Rw, so the triple steps' composites
+    are load-bearing for reachability, not just ergonomics.
+  - **Continuous-line display (physical-loop finding, user 2026-07-14)**:
+    the original display anchored every segment's grip spell at the
+    recognition hold, a hidden "reset between segments" convention that a
+    human executing the printed tokens in order never applies — and the
+    wide moves' hold drift makes the reset unknowable by memory; a one-pass
+    replay of the flat text failed on 25/25 sampled lines. Displayed lines
+    are now ONE continuous engine text: every junction re-grip — grip
+    changes AND wide-drift compensation — is an explicit {X,Y} bracket
+    spelled RELATIVE to the hold the previous tokens actually leave (or
+    omitted when the human is already holding it right), and verifyLine
+    proves the exact flat text end-to-end from the scramble state
+    (solver-core respellLine; pinned in tools/test-solver.mjs). Within a
+    segment the wide-drift reading itself is the sheets' own convention and
+    stays (see the wide/slice pins above).
+  - The hold group **SEALS the first center**: engine D's 3 edge slots and
+    3 centre slots are invariant under the sealed group's reachable face
+    effects {U, D, L, R, B} (each D edge's other face is F/BR/BL — all
+    outside the group — and D's centre slots sit only in the D/F/BR/BL
+    layers), so a solved first center can only SPIN (BL/Rw), realigns in
+    ≤ 1 move, and can never be broken by ANY hold step — since 2026-07-15
+    the triple steps live inside the group too (their 2026-07-14 B-turn
+    insertions, which passed through the sealed region, are retired).
   - Inside the post-first-center invariant space every later-step
-    coordinate is fully reachable; restricted-metric eccentricities (min
-    over grips): remaining-center patterns ≤ 11, one-hexagon-exact ≤ 16,
-    hexagon-pair 6-edge placements ≤ 17, triple-centre pairs ≤ 8, corners
-    ≤ 7. Coordinates OUTSIDE the invariant space are permanently
-    unreachable (a single BR turn from solved already strands first-center
-    triangles) — the r* PDBs mark them with a 99 sentinel, which fails an
-    impossible junction instantly.
-  - Measured (200-scramble gate scan, 2026-07-13): 200/200 solved, 0
-    verify failures; totals min 50 / median 62 / max 74 (avg 61.8 — the
-    ergonomic move set costs ~6 moves over the old free search, still
-    under the ~70 human average); median 144 ms / p90 814 ms / max 3.3 s
-    (the restricted-metric PDBs prune far harder than the free-metric
-    ones did); orientation ladder 173 fixed / 27 vertical.
+    coordinate is fully reachable; r* eccentricities in the search's own
+    metric (tokens 1 / re-grip composites 2, min over grips —
+    js/tables.js bfsTableR walks the composite edges backward as
+    "turn-then-re-grip", which coincides under the all-grip goals + grip
+    collapse): remaining-center patterns ≤ 11, one-hexagon-exact ≤ 16,
+    hexagon-pair 6-edge placements ≤ 17, triple-centre pairs ≤ 8 (single
+    triples ≤ 5), corners ≤ 6 (singles ≤ 3). Coordinates OUTSIDE the
+    invariant space are permanently unreachable (a single BR turn from
+    solved already strands first-center triangles) — the r* PDBs mark
+    them with a 99 sentinel, which fails an impossible junction
+    instantly. Every hold step (triples AND centers) reads the r*
+    families now; the 2026-07-14 free-16-metric fA/fC detour is deleted.
+    Table Lipschitz constants along sealed moves are 1 for engine U/D
+    turns but 2 for engine L/R/B (a composite from the wrong grip) —
+    pinned in tools/test-solver.mjs.
+  - Measured (200-scramble gate scan, 2026-07-15, post R-U-Rw triple +
+    re-grip-composite rework): 200/200 solved, 0 verify failures, 0
+    truncated; totals min 45 / median 60 / p90 65 / max 71 (avg 59.3 —
+    2.3 moves BETTER than the insert-with-B design's 61.6: the cost-2
+    re-grips buy real moves where they appear); median 443 ms / p90
+    2.8 s / max 8.8 s (the exact-metric r* tables prune the triples hard
+    again); anchor ladder 183 primary / 16 spins / 1 wide retry.
 - **LBT case-space semantics (M5 discovery, machine-measured)**: the LBT
   sheet's 95 cases pin only the LBT-RELEVANT features (the corner-4 piece +
   the two source triangles); the rest of the top layer is a DON'T-CARE, so

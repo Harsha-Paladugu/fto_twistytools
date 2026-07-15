@@ -439,6 +439,96 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   the JSON). Gates: build + check green, test:engine 73 / test:render 7 /
   test:trainer 40 / test:solver 23 green, solver-lab --scan 200 PASS,
   headless-Edge E2E 0 console errors.
+- [x] **Solver continuous-line fix (2026-07-14, physical-loop finding).** The
+  user executed a printed solve and hit the junction flaw: every segment's
+  grip spell was anchored at the recognition hold — a hidden "reset between
+  segments" reading no human applies, and the wide moves' hold drift makes
+  the reset unknowable (reproduced: 25/25 sampled best lines failed a
+  one-pass replay of the flat text; verifyLine's per-segment re-prefix model
+  masked it). Fix: solver-core `respellLine` — each segment's `pre` is now
+  the relative {X,Y} bracket read at the hold the previous tokens actually
+  leave (wide drift included), or omitted when already held right; verifyLine
+  now proves the EXACT flat displayed text in one continuous applyParsed from
+  the scramble state (strictly stronger gate; solver.js comments keyed on
+  segment kind, the "full line" row now always proves). Within-segment
+  wide-drift reading is unchanged — it is the sheets' own convention
+  (ground-truth §Notation/§Methods pins). Gates re-run: test:solver 23 green
+  (continuous-replay pins replace the per-segment ones), solver-lab
+  --scan 200 GATE PASS, E2E green. Search behavior, movecounts and latency
+  untouched (display + proof layer only).
+- [x] **Solver method policy rework (2026-07-14, user spec): white center
+  first EVERY TIME + build/insert triples.** The user's execution spec:
+  (1) the solver must solve the WHITE center first, always; (2) hold it on
+  BL afterwards (already the M5 hold); (3) the first two triples build
+  primarily with U/R/Rw and INSERT with B/U, rotating to insert when
+  needed. Landed: orientation policy replaced — the only admissible
+  pre-rotations are the 3 white anchors (U→D rotations, spelled
+  {D,L}/{D,R}/{D,B}); the auto ladder is primary anchor → other two spins
+  → all three again WIDER (beam 6 / 5 sols / slack 1) instead of the old
+  24-orientation surrender of the color; every emitted line cross-pinned
+  against the trainer's placement-neutral white-center goal set. Hold
+  machinery: makeBLHold grew B tokens (engine BL/F/BR by grip — the
+  first-center flanking faces; no drift, init-pinned); solver-core got two
+  hold alphabets — CENTER steps (sc/c3/c4) keep the sealed {R,U,Rw,BL},
+  TRIPLE steps (t1/t2) use {R,U,Rw} + B/U with a free re-grip fused to an
+  insertion turn (path codes; pathToText renders mid-word relative {X,Y}
+  brackets; init check proves tracked ≡ applyParsed over the full alphabet
+  incl. re-grip composites; equal-length solutions prefer the
+  build-then-insert shape). B turns pass THROUGH the sealed region
+  (an insertion carries one first-center edge + triangle out and back), so
+  the triples are goal-guaranteed (hexagon exactly restored, pinned by a
+  broken-center-through test) rather than move-sealed, and their searches
+  read NEW free-16-metric fA/fC tables + full-metric H1.D (admissible:
+  every token incl. the re-grip composite is exactly one native move; the
+  r* sentinels would false-fail the through-paths). rA/rC restricted
+  families trimmed to the center steps' keys; bundle ≈ 10 MB, IndexedDB
+  key bumped to 'fto-pdb-v4'. solver.js copy reworked (white-first lede,
+  orient chips Auto / One anchor / All 3 anchors — the 'fully color
+  neutral' mode is gone by design). Measured (200-scramble gate scan):
+  200/200 solved, 0 verify failures, 0 truncated; totals min 46 / median
+  62 / p90 68 / max 73 (avg 61.6 — the white pin + insertion shape cost
+  NOTHING vs the free-color 61.8); median 835 ms / p90 3.0 s / max 10.4 s
+  (free-metric triple bounds prune less; acceptable, page shows a pause
+  note); anchors 174 primary / 25 spins / 1 wide retry. Gates:
+  test:solver 26 green (new pins: B faces, white anchors, triple-word
+  alphabet, through-broken-center restore, trainer-goal cross-pin),
+  solver-lab --scan 200 GATE PASS, headless-Edge E2E green.
+- [x] **Solver ergonomics rework (2026-07-15, user feedback on the printed
+  solves): R-U-Rw triples + one-bracket re-grips.** The user's two reports:
+  (1) the output could spell a pure re-grip as the redundant token pair
+  `Rw BL'` (state-verified: engine D then D′ = NO state change) — "better
+  to just rotate by doing a {F, BR}"; (2) the triples rotated too much —
+  "I want the triples to be solved with R U Rw moves." Landed as ONE
+  mechanism: both hold-step kinds may re-grip mid-word for FREE, fused to
+  the U turn that needs it and printed as a single relative {X,Y} bracket
+  ({F,BR} / {BR,U} — grip-independent letters, pinned); the TRIPLE steps'
+  alphabet is now {R, U, Rw} (B insertions and the hold's B tokens
+  RETIRED — triples are move-sealed again); the CENTER steps keep
+  {R, U, Rw, BL}; and the canonicalization bans every Rw/BL adjacency
+  (rank(Rw) = rank(BL), runs strictly ascend), so the redundant pair can
+  never print. Search metric: composites cost 2 (turn + reading penalty;
+  displayed movecount counts only the turn) — plain spellings win unless
+  the rotation saves a real move (~0.7 re-grips per triple, ~0.4 per
+  center; raising the cost to 3 halves the rate but costs ~2.5 moves per
+  solve through the junction cascade — rejected, the dial stays in
+  MODES.regripCost). Free-cost re-grips were tried first and REJECTED:
+  bracket-fests + 12 s solves (weak bounds). r* PDBs rebuilt in the
+  search's exact metric — (coordinate x grip) BFS, tokens 1 / composites
+  2 walked backward as turn-then-re-grip, min-over-grips — and re-grown
+  with the triple keys (rA '6,9'/'5,8', rC '3'/'5'); fA/fC deleted;
+  IndexedDB key 'fto-pdb-v5'. NOTE pure {R,U,Rw} cannot re-grip (net
+  drift ≡ net engine-D power through Rw), so triple composites are
+  load-bearing, not cosmetic. Measured (200-scramble gate scan):
+  200/200, 0 verify failures, 0 truncated; totals min 45 / median 60 /
+  p90 65 / max 71 (avg 59.3 — 2.3 moves BETTER than the insert-with-B
+  61.6); median 443 ms / p90 2.8 s / max 8.8 s (faster than the 835 ms /
+  3.0 s / 10.4 s baseline); anchors 183 primary / 16 spins / 1 wide
+  retry. Gates: test:solver 28 green (new pins: sealed 10-move set,
+  Rw BL' = {F,BR} state-identity, no-adjacency word grammar, cost-2
+  admissibility walks, 2-Lipschitz + sentinel closure), test:trainer 40
+  green, solver-lab --scan 200 GATE PASS, headless-Edge E2E 11 checks /
+  0 console errors (incl. an in-page replay of the printed flat line and
+  a no-redundant-pair scan of the rendered solution).
 - [ ] **M6 — Accounts/Firebase (OPTIONAL — user decision).** Demo mode suffices
   until launch. If wanted: new Firebase project, auth + per-user prefs/stats
   sync only (no census collections; firestore.rules shrinks accordingly), rules

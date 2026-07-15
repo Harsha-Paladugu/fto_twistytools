@@ -42,14 +42,15 @@ async function boot() {
 }
 
 /* ---- state ---- */
+// every solve starts with the white center (user spec); the only choice is
+// how many of the 3 spins about the white axis to try
 const ORIENT_LABEL = {
-  auto: 'Auto', fixed: 'As scrambled', vertical: 'Vertical spins', full: 'Fully color neutral',
+  auto: 'Auto', fixed: 'One anchor', vertical: 'All 3 anchors',
 };
 const ORIENT_HINT = {
-  auto: 'Solve in the scrambling hold first; widen to other holds only when the sheets have no path.',
-  fixed: 'One orientation: exactly the hold the scramble leaves.',
-  vertical: 'Also try the two spins about the top face (3 holds).',
-  full: 'Try all 24 holds. Slow: expect tens of seconds.',
+  auto: 'Solve from the main white-center anchor first; try the other two spins only when the sheets have no path.',
+  fixed: 'Exactly one hold: the primary white-center anchor.',
+  vertical: 'Try all three spins about the white axis (the first center is always white).',
 };
 const UI = {
   scramble: '',
@@ -123,14 +124,17 @@ function reconstruction(it) {
   let inHold = false;
   for (const seg of it.segs) {
     let cmt = '// ' + seg.label;
-    if (seg.pre && !inHold) cmt += ' · rotate: first center to BL';
-    if (!seg.pre && inHold) cmt += ' · rotate back for the sheet algs';
-    inHold = !!seg.pre;
+    // re-grips ({X,Y} pre tokens) are RELATIVE to the hold the previous
+    // tokens leave — wide-move drift included — so the rows read continuously
+    const holdStep = seg.kind === 'search' && seg.id !== 'fc';
+    if (holdStep && !inHold) cmt += ' · rotate: white center to BL';
+    if (!holdStep && inHold && seg.pre) cmt += ' · rotate back for the sheet algs';
+    inHold = holdStep;
     if (seg.caseName) cmt += ' · ' + seg.subset + ' ' + seg.caseName;
     lines.push({ mv: (seg.pre ? seg.pre + '  ' : '') + seg.text, cmt, note: seg.note || null });
   }
-  // one continuous line is shown only when the engine proves that flat
-  // reading too (an algorithm that nets a re-grip would make it misleading)
+  // the flat line is the exact text verifyLine proved (one continuous
+  // engine reading); the local re-check is belt and braces only
   const flat = [it.rotSpell, ...it.segs.map(s => (s.pre ? s.pre + ' ' : '') + s.text)].filter(Boolean).join(' ');
   let flatOk = false;
   try {
@@ -168,7 +172,7 @@ function renderInner() {
   main.appendChild(h('section', { class: 'homeintro' },
     h('h1', null, 'Method solver'),
     h('p', { class: 'lede' },
-      'Paste a scramble and get a full Bencisco solve you can actually follow: first center, then — holding that center on BL — the two bottom triples and the remaining centers using only R, U, wide R and BL turns, then rotate back for the sheet algorithms for the last bottom triple and the last three triples. Every line is checked by the computer, end to end.')));
+      'Paste a scramble and get a full Bencisco solve you can actually follow: the white center first, every time, then — holding it on BL — the two bottom triples solved with U, R and wide R, the remaining centers with R, U, wide R and BL, an occasional {X,Y} rotation where it saves a move, then rotate back for the sheet algorithms for the last bottom triple and the last three triples. Every line is checked by the computer, end to end.')));
 
   /* scramble row */
   main.appendChild(h('div', { class: 'searchrow' },
@@ -200,7 +204,7 @@ function renderInner() {
             if (Number.isInteger(v) && v >= 2 && v <= 10) { UI.beam = v; persistPrefs(); if (UI.state && UI.result) runSearch(); }
           } })),
         h('p', { class: 'opthint' },
-          'More lines explore more step alternatives (slower, sometimes shorter). Solutions are organized purely by move count; after the first center every search step uses only R, U, wide R and BL turns (the Bencisco hold), optimal for the triples and near-optimal for the later centers within that move set. No global optimum is claimed; nobody knows FTO’s God’s number.'))));
+          'More lines explore more step alternatives (slower, sometimes shorter). Solutions are organized purely by move count; after the white center the triples use only U, R and wide R turns and the centers add BL, with a rare {X,Y} re-grip rotation exactly where it saves a move — optimal for the triples and near-optimal for the later centers within those move sets. No global optimum is claimed; nobody knows FTO’s God’s number.'))));
   }
   main.appendChild(drawer);
 

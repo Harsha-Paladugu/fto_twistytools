@@ -20,44 +20,56 @@
  *
  * MOVE GROUPS. The first-center step searches the 16 native moves, but every
  * later search step (triples, remaining centers) runs in the BENCISCO HOLD:
- * the first center held on the BL face, move group {R, U, Rw, BL} (the
- * user's method decision, 2026-07-13 — BL turns are the "align the white
- * layer" moves). makeBLHold(E) derives that machinery from the engine's own
- * hold walk: the 3 CIF grips with first-center-at-BL / working-face-at-R
- * (spelled {L,R} / {R,B} / {B,L} — the site's {X,Y} re-orientation brackets;
- * hold-U reads engine L / R / B), and the 8-token
- * generator table (token -> native move + next grip; Rw = engine D plus a
- * grip drift, BL = engine D in place). Machine-verified consequence, pinned
- * in tools/test-solver.mjs: the restricted group SEALS the first center —
- * engine D's edge and centre slots are invariant (only BL spins them), so a
- * solved first center can never be broken by the later steps, and every
- * later-step coordinate stays fully reachable inside that invariant space.
+ * the white first center held on the BL face. makeBLHold(E) derives that
+ * machinery from the engine's own hold walk: the 3 CIF grips with
+ * first-center-at-BL / working-face-at-R (spelled {L,R} / {R,B} / {B,L} —
+ * the site's {X,Y} re-orientation brackets; hold-U reads engine L / R / B),
+ * and the 8-token generator table (token -> native move + next grip; Rw =
+ * engine D plus a grip drift, BL = engine D in place). The step alphabets
+ * (user specs 2026-07-14, refined same day — "solve the triples with
+ * R U Rw"): centers (sc/c3/c4) use {R, U, Rw, BL}; triples (t1/t2) use
+ * {R, U, Rw}. BOTH may re-grip for free mid-word, fused to the U turn that
+ * needs it and printed as one {X,Y} bracket ({F,BR} / {BR,U} — never as a
+ * redundant token pair like Rw BL'). Machine-verified and pinned in
+ * tools/test-solver.mjs: this group SEALS the first center — engine D's
+ * edge and centre slots are invariant (only BL/Rw spin them), so the hold
+ * steps can never break earlier work, and every later-step coordinate
+ * stays fully reachable inside that invariant space.
+ *
+ * The search metric: hold tokens cost 1; a mid-word re-grip composite (the
+ * free rotation fused to the U turn that needs it) costs 2 — the extra
+ * unit keeps plain spellings preferred, so re-grips only appear where they
+ * save a real move. The r* families are (coordinate x grip) BFS in that
+ * exact metric, collapsed to min-over-grips (admissible whatever grip the
+ * search is in; see bfsTableR). The sealed group's native face effects are
+ * {U, D, L, R, B}± — SEALED_MOVES below, derived from the hold walk and
+ * asserted.
  *
  * Tables built here (Int8 distances, BFS from every goal state; the move set
- * is closed under inverse, so BFS-from-goals is distance-to-goal). The r*
- * families are BFS over (coordinate x 3 grips) under the 8 hold tokens,
- * collapsed to min-over-grips (admissible for any grip); entries the
- * restricted group cannot connect to the goal hold the sentinel 99 — a
- * junction reading 99 is restricted-unsolvable and fails fast:
+ * is closed under inverse and the composite reversal is handled inside
+ * bfsTableR, so BFS-from-goals is distance-to-goal). Entries the restricted
+ * group cannot connect to the goal hold the sentinel 99 — a junction
+ * reading 99 is restricted-unsolvable and fails fast:
  *   rB[faces]  8 goal sets 'D','DL',…,'DLRB' — orbit-B patterns whose slots
  *              on those faces show the face's own color.
- *   rA[slots]  '6,9' / '5,8' (single bottom-triple pairs) and '5,6,8,9'.
- *   rC[set]    corner goal sets '3', '5', '3,5' over the full 11,520.
+ *   rA[slots]  orbit-A goals '6,9' / '5,8' (one bottom triple each — t1's
+ *              read) and '5,6,8,9' (both; t2 and the center steps).
+ *   rC[set]    corner goals '3' / '5' / '3,5' over the full 11,520.
  *   rE6[pair]  hexagon-pair 6-edge placements over 665,280.
  *   rH1[face]  one-hexagon EXACT tables (3-edge placement x face-color mask,
  *              1,320 x 220 = 290,400) — couple a hexagon's edges and centres.
  *   H1.D       the first-center table, full 16-move metric (fc's heuristic).
  *   E3[face]   full-metric hexagon edge triples (data-quality gauge; the
  *              search itself no longer reads them).
- * Total ≈ 9.6 MB, cached in IndexedDB ('fto-tables' / 'fto-pdb-v3'); first
- * build ≈ 10-20 s (transient move tables, freed afterwards; the restricted
+ * Total ≈ 10 MB, cached in IndexedDB ('fto-tables' / 'fto-pdb-v5'); first
+ * build ≈ 5-10 s (transient move tables, freed afterwards; the restricted
  * BFS are near-instant — their reachable sets are small) — inside the
  * ~10 MB / ~30 s budget, so no user checkpoint (docs/port-plan.md M5).
  */
 (function () {
   const module = { exports: {} };
   const DB_NAME = 'fto-tables', STORE = 't';
-  const KEY_PDB = 'fto-pdb-v3';
+  const KEY_PDB = 'fto-pdb-v5';
   const UNREACHED = 99;   // restricted-group sentinel: cannot reach the goal
 
   // ---------------- IndexedDB (best-effort cache) ----------------
@@ -262,11 +274,17 @@
   // engine L / R / B at grips 0 / 1 / 2. Spells are the site's {X,Y}
   // re-orientation brackets (user decision 2026-07-14) — one token per grip.
   const BL_SPELLS = ['{L,R}', '{R,B}', '{B,L}'];
+  // the 8-token hold alphabet {R, U, Rw, BL}. Same-axis canonicalization for
+  // the search: R/Rw/BL share the R-BL axis and their ENGINE effects are
+  // grip-independent (R = engine U, Rw and BL = engine D — the two differ
+  // only by Rw's grip drift), so a commuting run needs at most one R± and
+  // one D-layer token: rank 0 for R, rank 1 for BOTH Rw and BL, runs forced
+  // strictly ascending. That bans every Rw<->BL adjacency — in particular
+  // the redundant re-grip pair Rw BL' (user report 2026-07-14), whose job
+  // the search's free re-grip composites now do as one {X,Y} bracket.
   const BL_TOKS = ['R', "R'", 'U', "U'", 'Rw', "Rw'", 'BL', "BL'"];
-  // same-axis canonicalization for the search: R/Rw/BL share the R-BL axis
-  // (rank 0/1/2 — commuting runs are forced ascending); U is its own axis.
   const BL_AXIS = [0, 0, 1, 1, 0, 0, 0, 0];
-  const BL_RANK = [0, 0, -1, -1, 1, 1, 2, 2];
+  const BL_RANK = [0, 0, -1, -1, 1, 1, 1, 1];
   function makeBLHold(E) {
     const holdOf = spell => E.walkParsed(E.parseAlg(spell), () => {});
     const holds = BL_SPELLS.map(holdOf);
@@ -284,17 +302,25 @@
         return { m: fired[0], nj };
       });
     });
-    // pin the load-bearing facts: R reads engine U, BL reads engine D, only
-    // the wide changes grip, and hold-U reads engine L/R/B by grip
+    // pin the load-bearing facts: R reads engine U, BL reads engine D,
+    // hold-U reads engine L/R/B by grip, and only the wide changes grip
     const wantU = [E.FIDX.L, E.FIDX.R, E.FIDX.B];
     for (let j = 0; j < 3; j++) {
       if (gen[j][0].m !== 2 * E.FIDX.U || gen[j][6].m !== 2 * E.FIDX.D)
         throw new Error('BL hold reading mismatch at grip ' + j);
       if (gen[j][2].m !== 2 * wantU[j]) throw new Error('BL hold-U mismatch at grip ' + j);
-      for (let k = 0; k < 8; k++)
+      for (let k = 0; k < BL_TOKS.length; k++)
         if ((gen[j][k].nj !== j) !== (k === 4 || k === 5)) throw new Error('BL grip drift mismatch');
     }
-    return { SPELLS: BL_SPELLS, TOKS: BL_TOKS, AXIS: BL_AXIS, RANK: BL_RANK, holds, gen };
+    // the sealed group's native move set: with free re-grips every token is
+    // one of these from every grip, and every one of these is one token —
+    // the r* BFS metric below IS the hold search's own metric
+    const SEALED_MOVES = [...new Set(gen.flatMap(row => row.map(g => g.m)))].sort((a, b) => a - b);
+    const sealedFaces = [...new Set(SEALED_MOVES.map(m => m >> 1))].sort((a, b) => a - b);
+    const wantFaces = [E.FIDX.U, E.FIDX.L, E.FIDX.R, E.FIDX.D, E.FIDX.B].sort((a, b) => a - b);
+    if (SEALED_MOVES.length !== 10 || sealedFaces.join() !== wantFaces.join())
+      throw new Error('sealed move set mismatch: ' + SEALED_MOVES);
+    return { SPELLS: BL_SPELLS, TOKS: BL_TOKS, AXIS: BL_AXIS, RANK: BL_RANK, holds, gen, SEALED_MOVES };
   }
 
   // ---------------- builders ----------------
@@ -320,30 +346,46 @@
     }
     return dist;
   }
-  // BFS under the Bencisco-hold move group: nodes are (coordinate, grip),
-  // edges follow the 8-token generator table over the same native transition
-  // table, then collapse to min-over-grips (a lower bound whatever grip the
-  // search is actually in). Coordinates the restricted group cannot connect
-  // to the goal get the UNREACHED sentinel — reading one at a junction means
-  // "this step is impossible from here", which prunes instantly.
-  function bfsTableBL(n, next, goals, bl) {
+  // BFS under the sealed Bencisco-hold move system: nodes are (coordinate,
+  // grip), the 8 tokens cost 1, and a re-grip composite (free rotation
+  // fused to the U turn that needs it — the search's only mid-word
+  // re-grip) costs 2. That is EXACTLY the metric js/solver-core.js
+  // searches in, so the collapsed min-over-grips values are admissible in
+  // every grip and as tight as a grip-free table can be. Composite edges
+  // are walked BACKWARD (turn the current grip's U face, then land at
+  // either other grip): the token set is inverse-closed but "re-grip then
+  // turn" reverses to "turn then re-grip", and with all-grip goals plus
+  // the min-over-grips collapse the two systems' distances coincide.
+  // Costs are 1 and 2, so the frontier runs as distance buckets with the
+  // unit-cost pass first. Coordinates the restricted group cannot connect
+  // to the goal get the UNREACHED sentinel — reading one at a junction
+  // means "this step is impossible from here", which prunes instantly.
+  function bfsTableR(n, next, goals, bl) {
     const dist = new Int8Array(n * 3).fill(-1);
-    let frontier = [];
-    for (const g of goals) for (let j = 0; j < 3; j++) { dist[g * 3 + j] = 0; frontier.push(g * 3 + j); }
-    let d = 0;
-    while (frontier.length) {
-      const nf = [];
-      for (const s of frontier) {
-        const c = (s / 3) | 0, j = s % 3;
-        const row = c * 16;
+    const buckets = [[]];
+    for (const g of goals) for (let j = 0; j < 3; j++) { dist[g * 3 + j] = 0; buckets[0].push(g * 3 + j); }
+    for (let d = 0; d < buckets.length; d++) {
+      const cur = buckets[d];
+      if (!cur || !cur.length) continue;
+      for (const s of cur) {                   // unit-cost token edges first
+        const c = (s / 3) | 0, j = s % 3, row = c * 16;
         for (let k = 0; k < 8; k++) {
           const g = bl.gen[j][k];
           const t = next[row + g.m] * 3 + g.nj;
-          if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
+          if (dist[t] < 0) { dist[t] = d + 1; (buckets[d + 1] || (buckets[d + 1] = [])).push(t); }
         }
       }
-      d++;
-      frontier = nf;
+      for (const s of cur) {                   // cost-2 re-grip composites
+        const c = (s / 3) | 0, j = s % 3, row = c * 16;
+        for (let dd = 0; dd < 2; dd++) {
+          const c2 = next[row + bl.gen[j][2 + dd].m];
+          for (let tg = 0; tg < 3; tg++) {
+            if (tg === j) continue;
+            const t = c2 * 3 + tg;
+            if (dist[t] < 0) { dist[t] = d + 2; (buckets[d + 2] || (buckets[d + 2] = [])).push(t); }
+          }
+        }
+      }
     }
     const out = new Int8Array(n).fill(UNREACHED);
     for (let c = 0; c < n; c++) {
@@ -505,6 +547,9 @@
   const B_FACE_SLOT = { L: 0, R: 1, D: 2, B: 3 };   // orbit-B face -> block
   // A-orbit goal slots per bottom triple: corner 3 -> {BR(6), BL(9)},
   // corner 5 -> {F(5), BR(8)}; F2T = both. Slot colors are the slot's face.
+  // The single-triple keys are t1's reads; the combined keys serve t2 and
+  // the center steps. All are sealed-group tables now that the triple
+  // steps run inside the group again (user spec 2026-07-14: R U Rw).
   const A_SETS = { '6,9': [[6, 2], [9, 3]], '5,8': [[5, 1], [8, 2]], '5,6,8,9': [[5, 1], [6, 2], [8, 2], [9, 3]] };
   const C_SETS = { '3': [3], '5': [5], '3,5': [3, 5] };
   const HEX_EDGES = { D: [9, 10, 11], L: [1, 2, 8], R: [0, 3, 6], B: [4, 5, 7] };
@@ -515,7 +560,8 @@
     for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++)
       E6_PAIRS[fs[i] + fs[j]] = HEX_EDGES[fs[i]].concat(HEX_EDGES[fs[j]]).sort((a, b) => a - b);
   }
-  const NTBL = B_SETS.length + Object.keys(A_SETS).length + Object.keys(C_SETS).length
+  const NTBL = B_SETS.length
+    + Object.keys(A_SETS).length + Object.keys(C_SETS).length
     + 3 * Object.keys(HEX_EDGES).length + Object.keys(E6_PAIRS).length + 1;
 
   function bFaceWants(faces) {
@@ -530,27 +576,27 @@
   async function buildPDBs(E, report, tick) {
     const rep = (stage, n, tot) => { if (report) report(stage, n, tot); };
     const yieldNow = tick || null;
-    const bl = makeBLHold(E);
+    const RM = makeBLHold(E);
     const out = { rB: {}, rA: {}, rC: {}, E3: {}, rE6: {}, H1: {}, rH1: {} };
 
     rep('mtab', 0, 4);
     const mB = await buildOrbitMtable(E, 'B', yieldNow ? async (n, t) => { rep('mtab', n / t, 4); await yieldNow(); } : null);
     let done = 0;
     for (const faces of B_SETS) {
-      out.rB[faces] = bfsTableBL(NPAT, mB, orbitGoals('B', bFaceWants(faces.split(''))), bl);
+      out.rB[faces] = bfsTableR(NPAT, mB, orbitGoals('B', bFaceWants(faces.split(''))), RM);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
     rep('mtab', 2, 4);
     const mA = await buildOrbitMtable(E, 'A', yieldNow ? async (n, t) => { rep('mtab', 2 + n / t, 4); await yieldNow(); } : null);
     for (const key of Object.keys(A_SETS)) {
-      out.rA[key] = bfsTableBL(NPAT, mA, orbitGoals('A', A_SETS[key]), bl);
+      out.rA[key] = bfsTableR(NPAT, mA, orbitGoals('A', A_SETS[key]), RM);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
     const mC = buildCornerMtable(E);
     for (const key of Object.keys(C_SETS)) {
-      out.rC[key] = bfsTableBL(NCORNER, mC, cornerGoals(C_SETS[key]), bl);
+      out.rC[key] = bfsTableR(NCORNER, mC, cornerGoals(C_SETS[key]), RM);
       rep('bfs', ++done, NTBL);
     }
     const mE3 = await buildEdgeMtable(E, 3, yieldNow);
@@ -565,7 +611,7 @@
     const mE6 = await buildEdgeMtable(E, 6, yieldNow ? async () => { rep('mtab', 3.5, 4); await yieldNow(); } : null);
     for (const key of Object.keys(E6_PAIRS)) {
       // goal: both hexagons' 6 edges home (one placement index)
-      out.rE6[key] = bfsTableBL(NE6, mE6, [edgePlaceIndex(home, E6_PAIRS[key])], bl);
+      out.rE6[key] = bfsTableR(NE6, mE6, [edgePlaceIndex(home, E6_PAIRS[key])], RM);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
@@ -574,7 +620,7 @@
     rep('bfs', ++done, NTBL);
     if (yieldNow) await yieldNow();
     for (const f of Object.keys(HEX_EDGES)) {
-      out.rH1[f] = bfsTableBL(NH1, hN, [h1GoalIx(f, HEX_EDGES[f])], bl);
+      out.rH1[f] = bfsTableR(NH1, hN, [h1GoalIx(f, HEX_EDGES[f])], RM);
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
