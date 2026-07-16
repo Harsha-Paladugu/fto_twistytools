@@ -738,17 +738,18 @@ export function createCore(E) {
   // The drill starts where a real Bencisco solve stands after the first two
   // triples: the printed scramble is a 16-move canonical sealed walk PLUS a
   // machine-optimal solve of both bottom triples (which also lands the white
-  // center exactly home), and mode 'third' appends a machine-optimal
-  // second-center solve on top. Goals are placement-neutral, matching the
-  // solver's "search picks" semantics: 'second' forms ANY one of the three
-  // remaining hexagons, 'third' and 'both' reach any two of them — always
+  // center exactly home), and the pre-solved modes append machine-optimal
+  // center words on top. Goals are placement-neutral, matching the solver's
+  // "search picks" semantics: 'second' forms ANY one of the three remaining
+  // hexagons, 'third'/'both' reach any two, and 'fourth'/'l2c' finish all
+  // three (Bencisco's Last Two Centers when one is pre-solved) — always
   // with the white center and both triples exactly solved again at the end.
 
   const C23_LEN = 16;                         // scramble walk length (before the appended solves)
   const C23_TRIES = 40;                       // attempts are cheap to reject, expensive to finish
   const C23_ENUM_CAP = 512;                   // optimal-word harvest cap
   const C23_NODES = 2e7;                      // enumeration node budget per call
-  const C23_LMAX = 22;                        // bound guard for the iterative deepening
+  const C23_LMAX = 26;                        // bound guard for the iterative deepening
   const C23_FACES = ['L', 'R', 'B'];          // the method-frame candidate hexagons
   const C23_EDGES = {};                       // face -> its 3 edge slots (derived like the solver)
   for (const f of C23_FACES) {
@@ -764,11 +765,13 @@ export function createCore(E) {
     return true;
   }
   const c23CountHex = (s) => C23_FACES.reduce((n, f) => n + (c23HexOK(s, f) ? 1 : 0), 0);
-  // goals: 'c1' (any one hexagon formed) / 'c2' (any two). Every goal keeps
-  // the first center exactly home and both bottom triples re-solved.
+  const C23_NEED = { c1: 1, c2: 2, c3: 3 };
+  // goals: 'c1' (any one hexagon formed) / 'c2' (any two) / 'c3' (all three
+  // — the centers stage complete). Every goal keeps the first center exactly
+  // home and both bottom triples re-solved.
   function c23GoalOK(s, goal) {
     if (!f2tHexOK(s) || !f2tTripleOK(s, 3) || !f2tTripleOK(s, 5)) return false;
-    return c23CountHex(s) >= (goal === 'c2' ? 2 : 1);
+    return c23CountHex(s) >= (C23_NEED[goal] || 1);
   }
 
   // The center searches run 10+ turns deep, so unlike the F2T DFS this one
@@ -811,8 +814,7 @@ export function createCore(E) {
     const hL_ = CT.dH1.L, hR_ = CT.dH1.R, hB_ = CT.dH1.B;
     const eLR = CT.dE33.LR, eLB = CT.dE33.LB, eRB = CT.dE33.RB;
     const MKB = CT.MKB, MBITS = CT.MBITS, HOME = CT.HOME;
-    const pair = goal === 'c2';
-    const need = pair ? 2 : 1;
+    const need = C23_NEED[goal] || 1;
     const moves = FT.BL.SEALED_MOVES;
     const words = [], path = [];
     let nodes = 0, capped = false;
@@ -836,7 +838,13 @@ export function createCore(E) {
       const lim = L - g;
       if (dC[c] > lim || dAF[aF] > lim || dABR[aBR] > lim || dABL[aBL] > lim) return;
       const u = mL * NMKc + mR;
-      if (pair) {
+      if (need === 3) {
+        // conjunction: every hexagon must form, so EVERY table prunes alone
+        if (dBall[u] > lim) return;
+        if (hL_[eL * NMKc + mL] > lim || hR_[eR * NMKc + mR] > lim) return;
+        if (hB_[eB * NMKc + MKB[u]] > lim) return;
+        if (eLR[eL * NE3c + eR] > lim || eLB[eL * NE3c + eB] > lim || eRB[eR * NE3c + eB] > lim) return;
+      } else if (need === 2) {
         if (dBall[u] > lim) return;
         const hL = hL_[eL * NMKc + mL], hR = hR_[eR * NMKc + mR];
         let fits = hL <= lim && hR <= lim && eLR[eL * NE3c + eR] <= lim;
@@ -884,7 +892,10 @@ export function createCore(E) {
     bump(CT.dAm.F[ix[7]]); bump(CT.dAm.BR[ix[8]]); bump(CT.dAm.BL[ix[9]]);
     const hL = CT.dH1.L[eL * NMKc + mL], hR = CT.dH1.R[eR * NMKc + mR];
     const hB = mB === 255 ? 99 : CT.dH1.B[eB * NMKc + mB];
-    if (goal === 'c2') {
+    if (goal === 'c3') {
+      bump(CT.dB.all[u]); bump(hL); bump(hR); bump(hB);
+      bump(CT.dE33.LR[eL * NE3c + eR]); bump(CT.dE33.LB[eL * NE3c + eB]); bump(CT.dE33.RB[eR * NE3c + eB]);
+    } else if (goal === 'c2') {
       bump(CT.dB.all[u]);
       bump(Math.min(
         Math.max(hL, hR, CT.dE33.LR[eL * NE3c + eR]),
@@ -988,13 +999,19 @@ export function createCore(E) {
 
   // scramble + drill. mode: 'second' (form any one of the three remaining
   // hexagons), 'third' (one pre-solved by an appended machine-optimal word,
-  // reach two), 'both' (reach two from none). Returns null only on
-  // rejection-cap exhaustion (practically: a stuck injected rng).
+  // reach two), 'both' (reach two from none), 'fourth' (two pre-solved,
+  // finish all three), 'l2c' (one pre-solved, finish all three — Bencisco's
+  // Last Two Centers step). The pre-solve count per mode drives how many
+  // hexagons the appended words must land before the drill starts. Returns
+  // null only on rejection-cap exhaustion (practically: a stuck injected rng).
+  const C23_MODES = { second: { goal: 'c1', pre: 0 }, third: { goal: 'c2', pre: 1 },
+                      both: { goal: 'c2', pre: 0 }, fourth: { goal: 'c3', pre: 2 },
+                      l2c: { goal: 'c3', pre: 1 } };
   function makeC23Drill(FT, CT, opts, rng) {
     const rnd = rng || Math.random;
     const env = f2tEnv(FT);
-    const mode = opts && (opts.mode === 'third' || opts.mode === 'both') ? opts.mode : 'second';
-    const goal = mode === 'second' ? 'c1' : 'c2';
+    const mode = opts && C23_MODES[opts.mode] ? opts.mode : 'second';
+    const { goal, pre } = C23_MODES[mode];
     const toPhys = (m) => 2 * E.faceImg(env.Minv, m >> 1) + (m & 1);
     const refold = (seq) => {
       let st = E.solved();
@@ -1018,7 +1035,7 @@ export function createCore(E) {
       let st = refold(seq);
       let sM = conjState(env.M, st);
       // append a machine-optimal solve of both bottom triples: the drill
-      // starts exactly where a real solve enters the second-center step
+      // starts exactly where a real solve enters its center step
       if (!f2tGoalOK(sM, 'pair')) {
         const Lp = f2tSearchLen(FT, sM, 'pair');
         if (Lp == null || Lp < 1) continue;
@@ -1029,28 +1046,28 @@ export function createCore(E) {
         sM = conjState(env.M, st);
         if (!f2tGoalOK(sM, 'pair')) continue;
       }
-      let presolved = null;
       let solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
-      if (mode === 'third') {
-        if (solvedNow.length === 0) {
-          const L1 = c23SearchLen(FT, CT, sM, 'c1');
-          if (L1 == null || L1 < 1) continue;
-          const w = c23Enumerate(FT, CT, sM, 'c1', L1, 1).words[0];
-          if (!w) continue;
-          seq = mergeMoves(seq.concat(w.map(toPhys)));
-          st = refold(seq);
-          sM = conjState(env.M, st);
-          if (!f2tGoalOK(sM, 'pair')) continue;
-          solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
-        }
-        if (solvedNow.length !== 1) continue;
-        presolved = solvedNow[0];
-      } else if (solvedNow.length) continue;    // second/both start with none formed
+      if (solvedNow.length < pre) {
+        // pre-solve centers with one machine-optimal word ('c1' lands one
+        // hexagon, 'c2' lands two — jointly optimal, like a real solve)
+        const pg = pre === 2 ? 'c2' : 'c1';
+        const L1 = c23SearchLen(FT, CT, sM, pg);
+        if (L1 == null || L1 < 1) continue;
+        const w = c23Enumerate(FT, CT, sM, pg, L1, 1).words[0];
+        if (!w) continue;
+        seq = mergeMoves(seq.concat(w.map(toPhys)));
+        st = refold(seq);
+        sM = conjState(env.M, st);
+        if (!f2tGoalOK(sM, 'pair')) continue;
+        solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
+      }
+      if (solvedNow.length !== pre) continue;   // over-forming words reroll
       const optimal = c23SearchLen(FT, CT, sM, goal);
       if (optimal == null || optimal < 1) continue;
       return {
-        kind: 'c23', mode, goal, presolved,
-        presolvedFace: presolved ? c23PhysFace(env, presolved) : null,
+        kind: 'c23', mode, goal,
+        presolved: solvedNow.slice(),
+        presolvedFaces: solvedNow.map((f) => c23PhysFace(env, f)),
         scramble: seq.map((m) => E.MOVES[m]).join(' '),
         state: st, stateM: sM, optimal,
         mask: c23Mask(env, sM),
@@ -1107,11 +1124,13 @@ export function createCore(E) {
     const sM = conjState(env.M, st);
     if (!E.eq(sM, d.stateM)) return false;
     if (!f2tGoalOK(sM, 'pair')) return false;   // white center + both triples solved at start
+    const spec = C23_MODES[d.mode];
+    if (!spec || d.goal !== spec.goal) return false;
     const solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
-    if (d.mode === 'third') {
-      if (solvedNow.length !== 1 || solvedNow[0] !== d.presolved) return false;
-      if (d.presolvedFace !== c23PhysFace(env, d.presolved)) return false;
-    } else if (d.presolved !== null || solvedNow.length !== 0) return false;
+    if (solvedNow.length !== spec.pre) return false;
+    if (!Array.isArray(d.presolved) || d.presolved.join() !== solvedNow.join()) return false;
+    if (!Array.isArray(d.presolvedFaces) ||
+        d.presolvedFaces.join() !== solvedNow.map((f) => c23PhysFace(env, f)).join()) return false;
     if (c23GoalOK(sM, d.goal)) return false;    // never a solved drill
     return c23SearchLen(FT, CT, sM, d.goal) === d.optimal;
   }

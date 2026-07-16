@@ -375,21 +375,31 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   tamper rejection); headless-Edge E2E 20 checks / 0 console errors
   (masked diagram, both verdict paths, second/first sub-modes, IndexedDB
   cached reboot 175 ms, mode persistence); build + check:fresh green.
-  **STEP TRAINERS v3 (2026-07-15): the Second/third centers (Centers) mode
-  is LIVE** — the user's spec this session: a trainer for the next steps
-  (the second and third centers), same style as the triples, the scramble
-  assuming everything before the step is solved. Mechanics: a
-  second/third/both selector; scrambles are the F2T 16-move sealed walk
+  **STEP TRAINERS v3 (2026-07-15, extended the same day with the fourth
+  center / L2C): the Centers mode is LIVE** — the user's spec this session:
+  a trainer for the next steps (the second and third centers, then the
+  fourth / Last Two Centers), same style as the triples, the scramble
+  assuming everything before the step is solved. Mechanics: a five-way
+  selector — second / third / fourth / second+third / last two (L2C);
+  scrambles are the F2T 16-move sealed walk
   PLUS appended machine-optimal words — a both-triples solve (which also
-  re-aligns any white spin, so the walk needs no white-home rejection) and,
-  for 'third', a second-center solve — so the drill starts exactly where a
+  re-aligns any white spin, so the walk needs no white-home rejection)
+  plus per-sub-mode center pre-solves ('third'/'l2c' one, 'fourth' a
+  jointly-optimal two) — so the drill starts exactly where a
   real solve enters the step, with the printed scramble still one flat list
   of {U, F, BR, BL, D}± letters. Goals are placement-neutral, matching the
   solver's "search picks": 'second' forms ANY one of the three remaining
-  method hexagons, 'third'/'both' reach any two — always with the white
+  method hexagons, 'third'/'both' reach any two, 'fourth'/'l2c' finish all
+  three (the centers stage complete) — always with the white
   center exactly home and BOTH bottom triples re-solved at the end (a
   center word may break them mid-way, which is why the F2T dC/dA tables
-  read at every node). The TARGET is the TRUE turn optimal in the same
+  read at every node). The all-centers 'c3' goal is a CONJUNCTION — every
+  table prunes alone — so L2C searches run FASTER than the disjunctive
+  pair goals (gen median ~5 ms); and the FOURTH CENTER is EDGES-ONLY: any
+  two orbit-B blocks + D force the third, so the last hexagon's triangles
+  are always already correct, only its 3 edges (an even 3-perm) remain,
+  and the optimal is ALWAYS 1 or 3 turns (80/80 measured, pinned per
+  drill, surfaced in the UI copy). The TARGET is the TRUE turn optimal in the same
   sealed 10-native-move metric as F2T (the center alphabet {R, U, Rw, BL}
   still spells every sealed move as one token from every grip).
   js/tables.js gained `buildC23`/`loadOrBuildC23` (IndexedDB 'fto-c23-v1',
@@ -416,16 +426,19 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   centers end formed. The fc/f2t answer flow is shared; generation runs
   ASYNC in the UI behind a searching note (median ~10-30 ms, multi-second
   tails on the deepest states; measured optimals: second 1-11, third
-  5-14, both 7-15; reveal enumeration median well under 100 ms, worst
-  ~1-3 s at the 512-word cap). Gates: test:trainer **57** green (table
+  5-14, both 7-15, l2c 5-15, fourth ∈ {1,3}; reveal enumeration median
+  well under 100 ms, worst
+  ~1-3 s at the 512-word cap). Gates: test:trainer **59** green (table
   eccentricity + reachable-cell pins, dist-0 ⇔ predicate + 1-Lipschitz
-  walks, per-mode drill conditions, the 53-facelet mask census, a
-  heuristic-free brute-force optimality cross-check, end-to-end line
-  proofs, tamper rejection); headless-Edge E2E 25 checks / 0 console
-  errors (mode chip, async generation, both verdict paths, all three
-  sub-modes, IndexedDB cached reload 278 ms, mode persistence); build +
+  walks, per-mode drill conditions incl. the presolved lists, the
+  fourth-center structure pin, the 53-facelet mask census, a
+  heuristic-free brute-force optimality cross-check per mode plus a
+  synthetic-walk exactness cross-check for every goal, end-to-end line
+  proofs, tamper rejection); headless-Edge E2E 29 checks / 0 console
+  errors (mode chip, async generation, both verdict paths, all five
+  sub-modes, IndexedDB cached reload, mode persistence); build +
   check:fresh green.
-  Next step trainers (fourth center, …) follow this pattern: a coordinate
+  Next step trainers (LBT, …) follow this pattern: a coordinate
   + goal set in tables.js, a drill layer in the core, a mode chip.
 - [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step
   Bencisco solves** (the USER's method decision this session), every line
@@ -674,10 +687,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   would be new step decompositions over the same machinery.
 - Trainer tool lineup beyond case drill (M4 shipped drill + recap from the M3
   data; **step trainers started 2026-07-13 with the First center mode, joined
-  2026-07-15 by the First two triples and Second/third centers modes** — the
-  user's decisions; a fourth-center/L2C-finish mode is the natural next
-  addition, same pattern; full-solve/recognition/one-look modes still await
-  the user's spec).
+  2026-07-15 by the First two triples mode and the Centers mode (second
+  through fourth centers incl. L2C)** — the user's decisions; an LBT step
+  mode is the natural next addition, same pattern;
+  full-solve/recognition/one-look modes still await the user's spec).
 - Notation presentation: the 8 face letters are settled, but rotation spelling
   (`Ro` vs `Rv` vs `[R]`), slice spelling (`Rs` vs `2U` vs lowercase), and
   lowercase-means-wide-or-slice are NOT community-settled (ground-truth
