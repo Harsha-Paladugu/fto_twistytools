@@ -343,27 +343,39 @@ The USER supplies the actual sheets; this section is context, not authority.
   hexagons (SC + L2C) → LBT (corner 4) → L3T (the U layer). All pinned in
   tools/test-solver.mjs against the M3 sheet data.
 - **Bencisco execution hold (M5 rework 2026-07-13, revised 2026-07-14,
-  refined 2026-07-15, machine-verified)**: the solve builds the **WHITE
-  center first, every time** (USER spec 2026-07-14 — no color neutrality),
-  then HOLDS IT ON THE BL FACE. The step move sets (USER specs 2026-07-14
-  + the 2026-07-15 refinement "I want the triples to be solved with
-  R U Rw moves"): the **center steps (sc/c3/c4) use {R, U, Rw, BL}**; the
-  **triple steps (t1/t2) use {R, U, Rw}** — both inside the sealed group —
-  and EITHER may re-grip mid-word for free, the rotation fused to the U
-  turn that needs it and printed as one {X,Y} bracket ({F,BR} spinning
-  forward / {BR,U} backward — the same letters at every grip). A re-grip
-  is NEVER spelled as a token pair: `Rw BL'` (engine D then D′ — no state
-  change, pure re-grip) is banned outright by the search canonicalization
-  (USER report 2026-07-15: "it would be better to just rotate by doing a
-  {F, BR}"), along with every other Rw/BL adjacency (D-doubles respell as
-  the single inverse token — face turns have order 3). In the search
-  metric a composite costs 2 (its turn + a reading penalty; displayed
-  movecount counts only the turn), so plain spellings win unless the
-  rotation saves a real move — measured ~0.7 mid-word re-grips per triple
-  and ~0.4 per center. The old insert-with-{B,U} triple shape (2026-07-14)
-  is RETIRED, and with it the hold's B tokens. Facts, all derived from the
-  engine's hold walk (`js/tables.js makeBLHold`) and pinned in
-  tools/test-solver.mjs:
+  refined 2026-07-15, centers restricted 2026-07-16, machine-verified)**:
+  the solve builds the **WHITE center first, every time** (USER spec
+  2026-07-14 — no color neutrality), then HOLDS IT ON THE BL FACE. The
+  step move sets (USER specs 2026-07-14 + the 2026-07-15 refinement "I
+  want the triples to be solved with R U Rw moves" + the 2026-07-16
+  restriction, applied to the solver at the user's direction after the
+  Centers trainer): the **triple steps (t1/t2) use {R, U, Rw}** and may
+  re-grip mid-word for free, the rotation fused to the U turn that needs
+  it and printed as one {X,Y} bracket ({F,BR} spinning forward / {BR,U}
+  backward — the same letters at every grip); the **center steps
+  (sc/c3/c4) use the RESTRICTED triple-preserving {R, U, Rw} system from
+  the ONE aligned grip** — no BL, no mid-word rotations, and the solved
+  triples NEVER leave their place (the trainer's theorem: Rw's drift
+  tracks the block position, so the aligned grip's plain U token is
+  always the safe working face; each center goal puts the white center
+  exactly home, so the net drift is 0 at every center junction and the
+  grip returns to the aligned one — the center stage never re-grips
+  between its steps either; per-line prefix walks re-prove the contract
+  in test-solver). A triple re-grip is NEVER spelled as a token pair:
+  `Rw BL'` (engine D then D′ — no state change, pure re-grip) is banned
+  outright by the search canonicalization (USER report 2026-07-15: "it
+  would be better to just rotate by doing a {F, BR}"). In the triple
+  search metric a composite costs 2 (its turn + a reading penalty;
+  displayed movecount counts only the turn), so plain spellings win
+  unless the rotation saves a real move — measured ~0.7 mid-word
+  re-grips per triple. The old insert-with-{B,U} triple shape
+  (2026-07-14) is RETIRED, and with it the hold's B tokens; the center
+  steps' BL token and re-grip composites retired 2026-07-16 with the
+  restricted metric (their sealed-metric PDB families rB/rE6/rH1 deleted
+  — the center heuristics read the C23 bundle's (cell × drift) tables,
+  and the center steps went back to EXACT search, w = 1). Facts, all
+  derived from the engine's hold walk (`js/tables.js makeBLHold`) and
+  pinned in tools/test-solver.mjs:
   - White-first = whole-puzzle pre-rotation: exactly **3 rotations map the
     white (engine U) material onto the method's D region** — the spins
     about the white axis, spelled `{D,L}` / `{D,R}` / `{D,B}`. They are the
@@ -541,10 +553,11 @@ The USER supplies the actual sheets; this section is context, not authority.
   displayed line passes BOTH the end-to-end applyParsed proof and a
   per-prefix block-intactness walk (block = D^b(home) after every single
   move — the "triples never leave their place" contract, machine-checked
-  per line). The solver's own center steps (sc/c3/c4) still search the
-  sealed {R,U,Rw,BL}+re-grip metric — the trainer restriction is a
-  deliberate, stricter execution contract for humans. All pinned in
-  tools/test-trainer.mjs. A fourth-center corollary,
+  per line). The solver's center steps (sc/c3/c4) adopted this same
+  restricted system later the same day at the user's direction (see the
+  Bencisco execution hold entry) — trainer and solver now share the
+  metric AND the tables (the C23 bundle, one IndexedDB cache serving both
+  pages). All pinned in tools/test-trainer.mjs. A fourth-center corollary,
   machine-measured before the user retired that mode as redundant
   (2026-07-16; implementation in git history at 7c105c1): with the white
   center, both triples and two hexagons formed, the last hexagon's

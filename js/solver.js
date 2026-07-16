@@ -4,7 +4,8 @@
 const E = window.OOEngine, T = window.OOTables, R = window.OORender, CORE = window.OOSolverCore;
 const { h, $, toast, tick, copyBtn, installErrorToast } = window.OODom;
 
-/* ---- boot: pruning tables (IndexedDB-cached; ~4 MB, seconds to build)
+/* ---- boot: pruning tables (IndexedDB-cached; ~1.4 MB PDB + the ~18 MB
+   C23 center bundle shared with the trainer, a couple of seconds to build)
    + the alg data (fetched like the Algorithms page and the trainer — the
    LBT / 1L3T / TCP finishing algorithms are the sheets', verbatim) ---- */
 let C = null;
@@ -25,6 +26,10 @@ async function boot() {
     T.loadOrBuildPDBs(E, stage, tick),
     fetch('data/fto_algs.json').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' loading alg data'); return r.json(); }),
   ]);
+  // the restricted center-step tables (shared cache with the trainer's
+  // Centers mode — whichever page builds them first serves both)
+  rep('Building center tables…', 0, 1);
+  pdb.C23 = await T.loadOrBuildC23(E, tick);
   rep('Preparing the solver…', 0, 1);
   await tick();
   C = CORE.makeSolverCore(E, T, pdb, algData);
@@ -172,7 +177,7 @@ function renderInner() {
   main.appendChild(h('section', { class: 'homeintro' },
     h('h1', null, 'Method solver'),
     h('p', { class: 'lede' },
-      'Paste a scramble and get a full Bencisco solve you can actually follow: the white center first, every time, then — holding it on BL — the two bottom triples solved with U, R and wide R, the remaining centers with R, U, wide R and BL, an occasional {X,Y} rotation where it saves a move, then rotate back for the sheet algorithms for the last bottom triple and the last three triples. Every line is checked by the computer, end to end.')));
+      'Paste a scramble and get a full Bencisco solve you can actually follow: the white center first, every time, then — holding it on BL — the two bottom triples solved with U, R and wide R (an occasional {X,Y} rotation where it saves a move), the remaining centers with R, U and wide R only — the solved triples never leave their place, and wide R does all the re-gripping — then rotate back for the sheet algorithms for the last bottom triple and the last three triples. Every line is checked by the computer, end to end.')));
 
   /* scramble row */
   main.appendChild(h('div', { class: 'searchrow' },
@@ -204,7 +209,7 @@ function renderInner() {
             if (Number.isInteger(v) && v >= 2 && v <= 10) { UI.beam = v; persistPrefs(); if (UI.state && UI.result) runSearch(); }
           } })),
         h('p', { class: 'opthint' },
-          'More lines explore more step alternatives (slower, sometimes shorter). Solutions are organized purely by move count; after the white center the triples use only U, R and wide R turns and the centers add BL, with a rare {X,Y} re-grip rotation exactly where it saves a move — optimal for the triples and near-optimal for the later centers within those move sets. No global optimum is claimed; nobody knows FTO’s God’s number.'))));
+          'More lines explore more step alternatives (slower, sometimes shorter). Solutions are organized purely by move count; after the white center the triples use only U, R and wide R turns (with a rare {X,Y} re-grip rotation exactly where it saves a move), and the centers use R, U and wide R only — no rotations, no BL, and the solved triples never move — per-step optimal within those move sets. No global optimum is claimed; nobody knows FTO’s God’s number.'))));
   }
   main.appendChild(drawer);
 

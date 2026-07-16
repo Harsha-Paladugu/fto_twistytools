@@ -1,9 +1,11 @@
 /* fto.twistytools.com — Bencisco solver tests (js/tables.js + js/solver-core.js). M5.
  *
  * The solver exit gate: coordinate codecs pinned, every pruning table
- * admissible and goal-exact (the r* families in the sealed hold group's
- * own 10-native-move metric — the token metric once re-grips are free —
- * first center on BL), the hold machinery itself (grip spells, token
+ * admissible and goal-exact (the triple steps' r* families in the sealed
+ * hold group's own 10-native-move metric — the token metric once
+ * re-grips are free — and the center steps' C23 bundle in the RESTRICTED
+ * triple-preserving {R,U,Rw} metric over (cell x drift), goals at drift
+ * 0; first center on BL), the hold machinery itself (grip spells, token
  * reading incl. the re-grip-fused U composites, the sealed group, the
  * structural ban on redundant Rw/BL re-grip pairs), WHITE-FIRST
  * orientation policy (the 3 white anchors {D,L}/{D,R}/{D,B}; every solve
@@ -13,11 +15,14 @@
  * {X,Y} bracket spelling) machinery proven, the LBT effect-matcher and
  * L3T exact index verified, and full pipelines on fixed seeds — every
  * displayed line re-proved end-to-end by applyParsed from the original
- * scramble state, the hold steps emitting ONLY their step's ergonomic
- * tokens (triples {R,U,Rw}, centers + BL, either with rare {X,Y}
- * re-grips) under their grip spells. The wide statistical scan (>= 200
- * scrambles, 0 verify failures) lives in tools/solver-lab.mjs; this
- * suite stays deterministic and CI-sized.
+ * scramble state, the hold steps emitting ONLY their step's tokens
+ * (triples {R,U,Rw} with rare {X,Y} re-grips; centers PURE {R,U,Rw} —
+ * no BL, no mid-word rotations, user spec 2026-07-16) under their grip
+ * spells, and the whole center stage walked move by move proving the
+ * solved triples never leave their place (block = D^b(home) after every
+ * fired token). The wide statistical scan (>= 200 scrambles, 0 verify
+ * failures) lives in tools/solver-lab.mjs; this suite stays
+ * deterministic and CI-sized.
  *
  * Run: node tools/test-solver.mjs   (exit 0 = OK, 1 = a test failed)
  */
@@ -60,6 +65,7 @@ const randState = (n) => {
 
 console.log('building pruning tables…');
 const PDB = await T.buildPDBs(E);
+PDB.C23 = await T.buildC23(E);        // restricted center-step tables
 const solved = E.solved();
 
 /* ---------- 1. codecs ---------- */
@@ -93,30 +99,39 @@ t('edge placement codec: round trip; orbit views survive moves', () => {
 /* ---------- 2. pruning tables ---------- */
 const BL = T.makeBLHold(E);
 const readAll = (st) => [
-  ...Object.keys(PDB.rB).map(k => PDB.rB[k][T.encB(st.ctr)]),
   ...Object.keys(PDB.rA).map(k => PDB.rA[k][T.encA(st.ctr)]),
   ...Object.keys(PDB.rC).map(k => PDB.rC[k][T.cornerIndex(st.cp, st.co)]),
-  ...Object.keys(PDB.rE6).map(k => PDB.rE6[k][T.edgePlaceIndex(st.ep, T.E6_PAIRS[k])]),
-  ...Object.keys(PDB.rH1).map(k => PDB.rH1[k][T.h1Index(st.ep, st.ctr, k, T.HEX_EDGES[k])]),
 ];
-t('every table: solved state at distance 0; no negative entries', () => {
-  for (const k of Object.keys(PDB.rB)) assert(PDB.rB[k][T.encB(solved.ctr)] === 0, 'rB[' + k + ']');
+// the C23 bundle reads the solver's center steps make: (cell x drift), the
+// drift b being net Rw count from the aligned grip
+const c23MaskPair = (st) => {
+  const pB = new Array(12);
+  for (let i = 0; i < 12; i++) pB[i] = st.ctr[12 + i] - 4;
+  return T.maskOfColor(pB, 0) * 220 + T.maskOfColor(pB, 1);
+};
+const c23Reads = (st, b) => [
+  ...['L', 'R', 'B'].map(f => PDB.C23.dH1[f][T.h1Index(st.ep, st.ctr, f, T.HEX_EDGES[f]) * 3 + b]),
+  ...['LR', 'LB', 'RB'].map(k => PDB.C23.dE33[k][
+    (T.edgePlaceIndex(st.ep, T.HEX_EDGES[k[0]]) * 1320 + T.edgePlaceIndex(st.ep, T.HEX_EDGES[k[1]])) * 3 + b]),
+  ...['L', 'R', 'B', 'all'].map(k => PDB.C23.dB[k][c23MaskPair(st) * 3 + b]),
+];
+t('every table: solved state at distance 0; no negative entries; the C23 bundle\n  is solved only at drift 0 (a misaligned grip costs the realign)', () => {
   for (const k of Object.keys(PDB.rA)) assert(PDB.rA[k][T.encA(solved.ctr)] === 0, 'rA[' + k + ']');
   for (const k of Object.keys(PDB.rC)) assert(PDB.rC[k][T.cornerIndex(solved.cp, solved.co)] === 0, 'rC[' + k + ']');
   for (const k of Object.keys(PDB.E3)) assert(PDB.E3[k][T.edgePlaceIndex(solved.ep, T.HEX_EDGES[k])] === 0, 'E3[' + k + ']');
-  for (const k of Object.keys(PDB.rE6)) assert(PDB.rE6[k][T.edgePlaceIndex(solved.ep, T.E6_PAIRS[k])] === 0, 'rE6[' + k + ']');
   assert(PDB.H1.D[T.h1Index(solved.ep, solved.ctr, 'D', T.HEX_EDGES.D)] === 0, 'H1.D');
-  for (const k of Object.keys(PDB.rH1)) assert(PDB.rH1[k][T.h1Index(solved.ep, solved.ctr, k, T.HEX_EDGES[k])] === 0, 'rH1[' + k + ']');
-  // the restricted families carry BOTH triple steps' keys and the center
-  // steps' combined keys (the triples run inside the sealed group again)
+  // the triple steps' keys (the center steps read the C23 bundle instead)
   assert(Object.keys(PDB.rA).sort().join('|') === '5,6,8,9|5,8|6,9', 'rA keys');
   assert(Object.keys(PDB.rC).sort().join('|') === '3|3,5|5', 'rC keys');
-  for (const fam of [PDB.rB, PDB.rA, PDB.rC, PDB.E3, PDB.rE6, PDB.H1, PDB.rH1])
+  for (const fam of [PDB.rA, PDB.rC, PDB.E3, PDB.H1])
     for (const k of Object.keys(fam))
       for (let i = 0; i < fam[k].length; i += 101) {
         const v = fam[k][i];
         assert(v >= 0 && (v <= 40 || v === T.UNREACHED), 'bad entry ' + v);
       }
+  for (const v of c23Reads(solved, 0)) assert(v === 0, 'C23 solved at drift 0: ' + v);
+  for (const b of [1, 2]) for (const v of c23Reads(solved, b))
+    assert(v > 0 && v !== T.UNREACHED, 'C23 misaligned drift costs: ' + v + ' at b=' + b);
 });
 t('full-metric tables (E3, H1.D) are 1-Lipschitz along native moves', () => {
   for (let trial = 0; trial < 60; trial++) {
@@ -136,7 +151,7 @@ t('the sealed move set is the 10 moves of engine {U, L, R, D, B}', () => {
   const faces = [...new Set(BL.SEALED_MOVES.map(m => m >> 1))].map(f => E.FACES[f]).sort().join(',');
   assert(faces === 'B,D,L,R,U', 'faces: ' + faces);
 });
-t('restricted tables are admissible along hold walks (composites cost 2)', () => {
+t('triple-step tables are admissible along hold walks (composites cost 2)', () => {
   // solved satisfies every r* goal; the tables are min-over-grips of the
   // search's own cost metric (tokens 1, re-grip composites 2), so after a
   // walk of total cost k every table must read <= k, whatever grip the
@@ -155,7 +170,7 @@ t('restricted tables are admissible along hold walks (composites cost 2)', () =>
     for (const v of readAll(s)) assert(v <= k, 'inadmissible: ' + v + ' > ' + k);
   }
 });
-t('restricted tables are 2-Lipschitz along sealed moves; sentinels are closed', () => {
+t('triple-step tables are 2-Lipschitz along sealed moves; sentinels are closed', () => {
   // one sealed move changes any r* read by at most its worst-grip cost —
   // 1 for the R-BL axis faces (engine U/D: one token from every grip), 2
   // for the hold-U faces (engine L/R/B: a composite from the wrong grip) —
@@ -175,11 +190,31 @@ t('restricted tables are 2-Lipschitz along sealed moves; sentinels are closed', 
     }
   }
 });
-t('rB.D ignores D turns; a BR turn leaves the restricted group (sentinel)', () => {
-  assert(PDB.rB.D[T.encB(E.move(solved, 2 * E.FIDX.D).ctr)] === 0, 'after D');
-  // BR pulls first-center triangles out of the sealed D block — the hold
-  // move group can never bring them back, and the table says so
-  assert(PDB.rB.D[T.encB(E.move(solved, 2 * E.FIDX.BR).ctr)] === T.UNREACHED, 'after BR');
+t('C23 bundle: admissible + 1-Lipschitz along restricted {R,U,Rw} walks from the\n  aligned grip; an engine D costs exactly the realign; BR strands the group (sentinel)', () => {
+  const j0 = PDB.C23.RES.j0;
+  for (let trial = 0; trial < 40; trial++) {
+    let s = E.solved(), j = j0, k = 0;
+    let prev = c23Reads(s, 0);
+    for (let n = 1 + ((rnd() * 14) | 0); n > 0; n--) {
+      const g = BL.gen[j][(rnd() * 6) | 0];        // R R' U U' Rw Rw'
+      s = E.move(s, g.m); j = g.nj; k++;
+      const cur = c23Reads(s, (j - j0 + 3) % 3);   // drift tracks the grip
+      for (let i = 0; i < cur.length; i++) {
+        assert(cur[i] !== T.UNREACHED && prev[i] !== T.UNREACHED, 'sentinel on a legal walk');
+        assert(Math.abs(cur[i] - prev[i]) <= 1, '1-Lipschitz: ' + prev[i] + '->' + cur[i]);
+        assert(cur[i] <= k, 'inadmissible: ' + cur[i] + ' > ' + k);
+      }
+      prev = cur;
+    }
+  }
+  // one engine D from solved leaves every hexagon cell at its goal but the
+  // drift at 1 — the tables charge exactly the one realigning Rw'
+  for (const v of c23Reads(E.move(solved, 2 * E.FIDX.D), 1))
+    assert(v === 1, 'D-turn realign cost: ' + v);
+  // BR strands B-hexagon material outside the sealed slots — no word in
+  // the group can ever bring it back, and the one-hexagon table says so
+  const afterBR = E.move(solved, 2 * E.FIDX.BR);
+  assert(PDB.C23.dH1.B[T.h1Index(afterBR.ep, afterBR.ctr, 'B', T.HEX_EDGES.B) * 3] === T.UNREACHED, 'after BR');
 });
 
 /* ---------- 3. the core: geometry + orientation machinery ---------- */
@@ -279,13 +314,13 @@ t('the center move group seals the first center (spin-only, one BL realigns)', (
     assert(ok, 'not realignable by D spins');
   }
 });
-// a hold-step word: the mode's plain tokens (triples R/U/Rw, centers + BL)
-// with an optional {X,Y} re-grip bracket immediately before a U turn —
-// nothing else, and never an Rw/BL adjacency in either order (the redundant
-// re-grip pair the canonicalization bans)
-function assertHoldWord(text, withBL) {
+// a TRIPLE-step word: plain {R,U,Rw} tokens with an optional {X,Y} re-grip
+// bracket immediately before a U turn — nothing else. (The center steps'
+// stricter contract — PURE tokens, no brackets at all — is asserted
+// separately in the pipeline test; their old +BL alphabet is retired.)
+function assertHoldWord(text) {
   const parts = text.split(' ');
-  const tok = withBL ? /^(?:R|U|Rw|BL)'?$/ : /^(?:R|U|Rw)'?$/;
+  const tok = /^(?:R|U|Rw)'?$/;
   let last = '';
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
@@ -301,7 +336,7 @@ function assertHoldWord(text, withBL) {
     last = p;
   }
 }
-const assertTripleWord = text => assertHoldWord(text, false);
+const assertTripleWord = text => assertHoldWord(text);
 t('triple-mode t1 searchStep solves spun-center states with R/U/Rw words', () => {
   for (let trial = 0; trial < 8; trial++) {
     let s = E.solved(), j = (rnd() * 3) | 0;
@@ -383,6 +418,29 @@ const SCRAMBLES = [
   "BL' F R' U' D B L BR' F' U R D' B' L' U' F BL R' B D U' L' F' R BR B' U' D L F'",
 ];
 const FC = T.buildFirstCenter(E);   // the trainer's placement-neutral white goal set
+// independent block predicate for the center-stage walk: after b net engine-D
+// powers the block (white hexagon + both triples) must read exactly as D^b
+// applied to solved — slot images and reference features derived here from
+// the engine's own tables, NOT from the solver or the C23 bundle
+const BLOCK_REFS = (() => {
+  const inv = (p) => { const q = new Array(p.length); for (let i = 0; i < p.length; i++) q[p[i]] = i; return q; };
+  const dT = E.moveTables[2 * E.FIDX.D];
+  const cI = inv(dT.cperm), eI = inv(dT.eperm), xI = inv(dT.xperm);
+  const out = [];
+  let s = E.solved(), c = [3, 5], e = [9, 10, 11], x = [5, 6, 8, 9, 18, 19, 20];
+  for (let b = 0; b < 3; b++) {
+    out.push({ c, e, x, ref: s });
+    s = E.move(s, 2 * E.FIDX.D);
+    c = c.map(v => cI[v]); e = e.map(v => eI[v]); x = x.map(v => xI[v]);
+  }
+  return out;
+})();
+const blockAtOK = (s, b) => {
+  const B = BLOCK_REFS[b], R = B.ref;
+  return B.e.every(v => s.ep[v] === R.ep[v]) &&
+    B.c.every(v => s.cp[v] === R.cp[v] && s.co[v] === R.co[v]) &&
+    B.x.every(v => s.ctr[v] === R.ctr[v]);
+};
 t('three fixed scrambles solve end to end; every emitted line is machine-proved', () => {
   const whiteSpells = new Set(C.WHITE_ORIENTS.map(i => C.ORIENTS[i].spell));
   for (const scrText of SCRAMBLES) {
@@ -415,24 +473,61 @@ t('three fixed scrambles solve end to end; every emitted line is machine-proved'
       // totals add up: segment moves sum to the badge total
       assert(it.segs.reduce((a, sg) => a + sg.moves, 0) === it.total, 'movecount adds up');
       // t1..c4 live in the Bencisco hold: the TRIPLE steps emit {R,U,Rw}
-      // words, the CENTER steps add BL, and either may carry a rare {X,Y}
-      // re-grip bracket immediately before a U turn — never an Rw/BL
-      // adjacency (the banned redundant pair). Every pre is a single
-      // relative {X,Y} bracket (or absent when the previous segment
-      // already leaves the right hold); entering the hold always re-grips;
-      // fc reads plain natives in the line's own hold, never a pre
+      // words and may carry a rare {X,Y} re-grip bracket immediately
+      // before a U turn; the CENTER steps emit PURE {R,U,Rw} words — no
+      // BL, no mid-word rotation of any kind (the restricted
+      // triple-preserving system, user spec 2026-07-16). Every pre is a
+      // single relative {X,Y} bracket (or absent when the previous
+      // segment already leaves the right hold); entering the hold always
+      // re-grips; fc reads plain natives in the line's own hold, never a
+      // pre. Center words also never move the solved triples: after every
+      // single token the method-frame block must sit exactly at
+      // D^b(home), b = the running engine-D power (the user's contract,
+      // re-proved here move by move on full states).
       const BRK = /^\{(?:BR|BL|[UFRLDB]),(?:BR|BL|[UFRLDB])\}$/;
+      const CTOK = /^(?:R|U|Rw)'?$/;
       let firstHold = true;
       for (const seg of it.segs) {
         assert(seg.pre === undefined || BRK.test(seg.pre), 'pre is one bracket: ' + seg.pre);
         if (['t1', 't2'].includes(seg.id)) {
-          assertHoldWord(seg.text, false);
+          assertHoldWord(seg.text);
           if (firstHold) { assert(seg.pre, 'hold entry re-grips'); firstHold = false; }
         } else if (['sc', 'c3', 'c4'].includes(seg.id)) {
-          assertHoldWord(seg.text, true);
+          for (const p of seg.text.split(' '))
+            assert(CTOK.test(p), 'center word is pure {R,U,Rw}: ' + p + ' in ' + seg.text);
           if (firstHold) { assert(seg.pre, 'hold entry re-grips'); firstHold = false; }
         } else if (seg.id === 'fc') {
           assert(!seg.pre, 'fc carries no pre');
+        }
+      }
+      // the center segments' block walk: replay the WHOLE continuous line
+      // move by move (the only frame-correct reading); inside the center
+      // range the conjugated block must read exactly D^b(home) after
+      // EVERY fired move — the "triples never leave their place" contract
+      {
+        const M = C.ORIENTS[it.rotIdx].M;
+        let pre = 0, len = 0;
+        for (const sg of it.segs) {
+          if (['sc', 'c3', 'c4'].includes(sg.id)) len += sg.moves;
+          else if (!len) pre += sg.moves;
+        }
+        if (len > 0) {
+          let sM = C.conjState(M, E.copy(s));
+          let fired = 0, b = 0, intact = true;
+          let entryHome = pre === 0 && C.hexOK(sM, 'D') && C.tripleOK(sM, 3) && C.tripleOK(sM, 5);
+          E.walkParsed(E.parseAlg(C.lineText(it)), mp => {
+            const mM = 2 * E.faceImg(M, mp >> 1) + (mp & 1);
+            sM = E.move(sM, mM);
+            fired++;
+            if (fired === pre)
+              entryHome = C.hexOK(sM, 'D') && C.tripleOK(sM, 3) && C.tripleOK(sM, 5);
+            if (fired > pre && fired <= pre + len) {
+              b = (b + (mM === 2 * E.FIDX.D ? 1 : mM === 2 * E.FIDX.D + 1 ? 2 : 0)) % 3;
+              if (!blockAtOK(sM, b)) intact = false;
+            }
+          });
+          assert(entryHome, 'block home at center entry');
+          assert(intact && b === 0, 'triples never leave their place through the center stage');
         }
       }
     }

@@ -704,6 +704,48 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   green, solver-lab --scan 200 GATE PASS, headless-Edge E2E 11 checks /
   0 console errors (incl. an in-page replay of the printed flat line and
   a no-redundant-pair scan of the rendered solution).
+- [x] **Solver centers restricted (2026-07-16, user: "the solver should
+  also apply this" — the Centers trainer's triple-preserving contract).**
+  The CENTER steps (sc/c3/c4) now search the RESTRICTED {R, U, Rw}
+  system from the one aligned grip: no BL, no mid-word re-grip
+  composites, and the solved triples NEVER leave their place at any
+  point in a center word (the trainer's machine-verified theorem — Rw's
+  drift tracks the block position, so the aligned grip's plain U token
+  is always the safe working face; asserted at core init against
+  BL.gen). Every center goal puts the white center exactly home, so net
+  drift is 0 at each center junction and the grip returns to the aligned
+  one — the center stage never re-grips between its own steps (only the
+  single t2→sc entry bracket remains, when t2 leaves a different hold).
+  Center heuristics switched to the trainer's C23 bundle (EXACT
+  (cell × drift) distances, goals at drift 0; PDB.C23 =
+  loadOrBuildC23/buildC23 — ONE IndexedDB cache 'fto-c23-v2' now serves
+  both pages), and the center steps went back to EXACT search (weights
+  sc/c3/c4 = 1; the sealed-metric 1.4/1.8 weights retired — the
+  restricted tables are so tight the old deep-center blowup vanished).
+  The old center-only PDB families rB / rE6 / rH1 are DELETED from
+  buildPDBs (~8 MB of the ~10 MB bundle was dead weight; keys now rA ×3
+  + rC ×3 + E3 + H1.D ≈ 1.4 MB, IndexedDB key bumped 'fto-pdb-v6';
+  build ~1.6 s incl. the C23 bundle). Every emitted line still proves
+  end-to-end, and test-solver additionally walks the whole center stage
+  move by move on full states asserting block = D^b(home) after every
+  single fired token (the user's contract as a per-line machine proof).
+  Feasibility pre-proved: 40/40 random post-triples junctions reach the
+  FULL centers-done state in restricted words (optimals 5-19, median
+  14, sub-ms exact searches). Measured (200-scramble gate scan):
+  200/200, 0 verify failures, 0 truncated; totals min 47 / median 58 /
+  p90 64 / max 77 (avg 58.5 — BETTER than the sealed 59.3: exactness
+  buys more than the restriction costs); median 75 ms / p90 231 ms /
+  max 1.7 s (~6x faster than 443 ms / 2.8 s / 8.8 s — the whole scan
+  runs in 22 s); anchors 191 primary / 9 spins. UI copy reworked (lede
+  + options hint: centers are R, U, wide R only, triples never move,
+  per-step optimal within the move sets; boot gains a "Building center
+  tables…" stage). Gates: test:solver 28 green (C23 solved-only-at-
+  drift-0 pins, restricted-walk admissibility/1-Lipschitz, D-realign
+  cost, BR sentinel, pure-token center words, the per-move block walk),
+  test:trainer 59 / test:engine 73 / test:render 7 green, solver-lab
+  --scan 200 GATE PASS, build + check:fresh green, headless-Edge E2E 11
+  checks / 0 console errors (fresh v6+C23 boot, in-page solve, rendered
+  center rows scanned for the restricted alphabet, cache round-trip).
 - [ ] **M6 — Accounts/Firebase (OPTIONAL — user decision).** Demo mode suffices
   until launch. If wanted: new Firebase project, auth + per-user prefs/stats
   sync only (no census collections; firestore.rules shrinks accordingly), rules

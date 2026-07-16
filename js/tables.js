@@ -25,51 +25,48 @@
  * first-center-at-BL / working-face-at-R (spelled {L,R} / {R,B} / {B,L} —
  * the site's {X,Y} re-orientation brackets; hold-U reads engine L / R / B),
  * and the 8-token generator table (token -> native move + next grip; Rw =
- * engine D plus a grip drift, BL = engine D in place). The step alphabets
- * (user specs 2026-07-14, refined same day — "solve the triples with
- * R U Rw"): centers (sc/c3/c4) use {R, U, Rw, BL}; triples (t1/t2) use
- * {R, U, Rw}. BOTH may re-grip for free mid-word, fused to the U turn that
- * needs it and printed as one {X,Y} bracket ({F,BR} / {BR,U} — never as a
- * redundant token pair like Rw BL'). Machine-verified and pinned in
- * tools/test-solver.mjs: this group SEALS the first center — engine D's
- * edge and centre slots are invariant (only BL/Rw spin them), so the hold
- * steps can never break earlier work, and every later-step coordinate
- * stays fully reachable inside that invariant space.
+ * engine D plus a grip drift, BL = engine D in place). The step alphabets:
+ * triples (t1/t2) use {R, U, Rw} and may re-grip for free mid-word, fused
+ * to the U turn that needs it and printed as one {X,Y} bracket ({F,BR} /
+ * {BR,U} — never as a redundant token pair like Rw BL'); the CENTER steps
+ * (sc/c3/c4) use the RESTRICTED triple-preserving {R, U, Rw} system from
+ * the one aligned grip (user spec 2026-07-16, same contract as the Centers
+ * trainer: the solved triples never leave their place, no rotations, no
+ * BL) — their tables are the C23 bundle below, not these PDBs. Both step
+ * kinds stay inside the sealed group, which SEALS the first center —
+ * engine D's edge and centre slots are invariant (only Rw/BL spin them).
  *
- * The search metric: hold tokens cost 1; a mid-word re-grip composite (the
- * free rotation fused to the U turn that needs it) costs 2 — the extra
- * unit keeps plain spellings preferred, so re-grips only appear where they
- * save a real move. The r* families are (coordinate x grip) BFS in that
- * exact metric, collapsed to min-over-grips (admissible whatever grip the
- * search is in; see bfsTableR). The sealed group's native face effects are
- * {U, D, L, R, B}± — SEALED_MOVES below, derived from the hold walk and
- * asserted.
+ * The triple-step search metric: hold tokens cost 1; a mid-word re-grip
+ * composite (the free rotation fused to the U turn that needs it) costs 2 —
+ * the extra unit keeps plain spellings preferred, so re-grips only appear
+ * where they save a real move. The r* families are (coordinate x grip) BFS
+ * in that exact metric, collapsed to min-over-grips (admissible whatever
+ * grip the search is in; see bfsTableR). The sealed group's native face
+ * effects are {U, D, L, R, B}± — SEALED_MOVES below, derived from the hold
+ * walk and asserted.
  *
  * Tables built here (Int8 distances, BFS from every goal state; the move set
  * is closed under inverse and the composite reversal is handled inside
  * bfsTableR, so BFS-from-goals is distance-to-goal). Entries the restricted
  * group cannot connect to the goal hold the sentinel 99 — a junction
  * reading 99 is restricted-unsolvable and fails fast:
- *   rB[faces]  8 goal sets 'D','DL',…,'DLRB' — orbit-B patterns whose slots
- *              on those faces show the face's own color.
  *   rA[slots]  orbit-A goals '6,9' / '5,8' (one bottom triple each — t1's
- *              read) and '5,6,8,9' (both; t2 and the center steps).
+ *              read) and '5,6,8,9' (both; t2's read).
  *   rC[set]    corner goals '3' / '5' / '3,5' over the full 11,520.
- *   rE6[pair]  hexagon-pair 6-edge placements over 665,280.
- *   rH1[face]  one-hexagon EXACT tables (3-edge placement x face-color mask,
- *              1,320 x 220 = 290,400) — couple a hexagon's edges and centres.
  *   H1.D       the first-center table, full 16-move metric (fc's heuristic).
  *   E3[face]   full-metric hexagon edge triples (data-quality gauge; the
  *              search itself no longer reads them).
- * Total ≈ 10 MB, cached in IndexedDB ('fto-tables' / 'fto-pdb-v5'); first
- * build ≈ 5-10 s (transient move tables, freed afterwards; the restricted
- * BFS are near-instant — their reachable sets are small) — inside the
- * ~10 MB / ~30 s budget, so no user checkpoint (docs/port-plan.md M5).
+ * (The old center-step families rB / rE6 / rH1 were RETIRED 2026-07-16 with
+ * the restricted center metric — the center steps read the C23 bundle's
+ * (cell x drift) tables instead, ~8 MB of dead weight dropped.)
+ * Total ≈ 1.4 MB, cached in IndexedDB ('fto-tables' / 'fto-pdb-v6'); first
+ * build ≈ 1-2 s — far inside the ~10 MB / ~30 s budget, so no user
+ * checkpoint (docs/port-plan.md M5).
  */
 (function () {
   const module = { exports: {} };
   const DB_NAME = 'fto-tables', STORE = 't';
-  const KEY_PDB = 'fto-pdb-v5';
+  const KEY_PDB = 'fto-pdb-v6';
   const UNREACHED = 99;   // restricted-group sentinel: cannot reach the goal
 
   // ---------------- IndexedDB (best-effort cache) ----------------
@@ -539,56 +536,28 @@
   }
 
   // ---------------- the PDB bundle ----------------
-  // B goal sets: hexagon faces solved so far (D always first); slots within
-  // orbit B are 3*(faceIndexInOrbit)+k with orbit order [L,R,D,B] = ctr slots
-  // 12..23, so face L -> orbit slots 0..2, R -> 3..5, D -> 6..8, B -> 9..11
-  // and colors L=0 R=1 D=2 B=3 (engine colors 4..7 minus 4).
-  const B_SETS = ['D', 'DL', 'DR', 'DB', 'DLR', 'DLB', 'DRB', 'DLRB'];
-  const B_FACE_SLOT = { L: 0, R: 1, D: 2, B: 3 };   // orbit-B face -> block
   // A-orbit goal slots per bottom triple: corner 3 -> {BR(6), BL(9)},
   // corner 5 -> {F(5), BR(8)}; F2T = both. Slot colors are the slot's face.
-  // The single-triple keys are t1's reads; the combined keys serve t2 and
-  // the center steps. All are sealed-group tables now that the triple
-  // steps run inside the group again (user spec 2026-07-14: R U Rw).
+  // The single-triple keys are t1's reads; the combined keys serve t2.
+  // All are sealed-group tables now that the triple steps run inside the
+  // group again (user spec 2026-07-14: R U Rw). The center-step families
+  // (rB / rE6 / rH1) were retired 2026-07-16 — the restricted center steps
+  // read the C23 bundle instead.
   const A_SETS = { '6,9': [[6, 2], [9, 3]], '5,8': [[5, 1], [8, 2]], '5,6,8,9': [[5, 1], [6, 2], [8, 2], [9, 3]] };
   const C_SETS = { '3': [3], '5': [5], '3,5': [3, 5] };
   const HEX_EDGES = { D: [9, 10, 11], L: [1, 2, 8], R: [0, 3, 6], B: [4, 5, 7] };
-  // hexagon-pair 6-edge sets (tracked pieces ascending — codec piece order)
-  const E6_PAIRS = {};
-  {
-    const fs = Object.keys(HEX_EDGES);
-    for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++)
-      E6_PAIRS[fs[i] + fs[j]] = HEX_EDGES[fs[i]].concat(HEX_EDGES[fs[j]]).sort((a, b) => a - b);
-  }
-  const NTBL = B_SETS.length
-    + Object.keys(A_SETS).length + Object.keys(C_SETS).length
-    + 3 * Object.keys(HEX_EDGES).length + Object.keys(E6_PAIRS).length + 1;
-
-  function bFaceWants(faces) {
-    const wants = [];
-    for (const f of faces) {
-      const b = B_FACE_SLOT[f];
-      for (let k = 0; k < 3; k++) wants.push([3 * b + k, b]);
-    }
-    return wants;
-  }
+  const NTBL = Object.keys(A_SETS).length + Object.keys(C_SETS).length
+    + Object.keys(HEX_EDGES).length + 1;
 
   async function buildPDBs(E, report, tick) {
     const rep = (stage, n, tot) => { if (report) report(stage, n, tot); };
     const yieldNow = tick || null;
     const RM = makeBLHold(E);
-    const out = { rB: {}, rA: {}, rC: {}, E3: {}, rE6: {}, H1: {}, rH1: {} };
+    const out = { rA: {}, rC: {}, E3: {}, H1: {} };
 
-    rep('mtab', 0, 4);
-    const mB = await buildOrbitMtable(E, 'B', yieldNow ? async (n, t) => { rep('mtab', n / t, 4); await yieldNow(); } : null);
+    rep('mtab', 0, 2);
+    const mA = await buildOrbitMtable(E, 'A', yieldNow ? async (n, t) => { rep('mtab', n / t, 2); await yieldNow(); } : null);
     let done = 0;
-    for (const faces of B_SETS) {
-      out.rB[faces] = bfsTableR(NPAT, mB, orbitGoals('B', bFaceWants(faces.split(''))), RM);
-      rep('bfs', ++done, NTBL);
-      if (yieldNow) await yieldNow();
-    }
-    rep('mtab', 2, 4);
-    const mA = await buildOrbitMtable(E, 'A', yieldNow ? async (n, t) => { rep('mtab', 2 + n / t, 4); await yieldNow(); } : null);
     for (const key of Object.keys(A_SETS)) {
       out.rA[key] = bfsTableR(NPAT, mA, orbitGoals('A', A_SETS[key]), RM);
       rep('bfs', ++done, NTBL);
@@ -599,6 +568,7 @@
       out.rC[key] = bfsTableR(NCORNER, mC, cornerGoals(C_SETS[key]), RM);
       rep('bfs', ++done, NTBL);
     }
+    rep('mtab', 1, 2);
     const mE3 = await buildEdgeMtable(E, 3, yieldNow);
     const home = Array.from({ length: 12 }, (_, i) => i);
     for (const f of Object.keys(HEX_EDGES)) {
@@ -607,31 +577,17 @@
       rep('bfs', ++done, NTBL);
       if (yieldNow) await yieldNow();
     }
-    rep('mtab', 3, 4);
-    const mE6 = await buildEdgeMtable(E, 6, yieldNow ? async () => { rep('mtab', 3.5, 4); await yieldNow(); } : null);
-    for (const key of Object.keys(E6_PAIRS)) {
-      // goal: both hexagons' 6 edges home (one placement index)
-      out.rE6[key] = bfsTableR(NE6, mE6, [edgePlaceIndex(home, E6_PAIRS[key])], RM);
-      rep('bfs', ++done, NTBL);
-      if (yieldNow) await yieldNow();
-    }
     const hN = h1Next(E, mE3);
     out.H1.D = bfsTable(NH1, hN, [h1GoalIx('D', HEX_EDGES.D)]);
     rep('bfs', ++done, NTBL);
     if (yieldNow) await yieldNow();
-    for (const f of Object.keys(HEX_EDGES)) {
-      out.rH1[f] = bfsTableR(NH1, hN, [h1GoalIx(f, HEX_EDGES[f])], RM);
-      rep('bfs', ++done, NTBL);
-      if (yieldNow) await yieldNow();
-    }
     return out;
   }
 
   // browser entry: cache the Int8 tables in IndexedDB, rebuild on miss
   const PDB_FAMS = [
-    ['rB', B_SETS, NPAT], ['rA', Object.keys(A_SETS), NPAT], ['rC', Object.keys(C_SETS), NCORNER],
-    ['E3', Object.keys(HEX_EDGES), NE3], ['rE6', Object.keys(E6_PAIRS), NE6],
-    ['H1', ['D'], NH1], ['rH1', Object.keys(HEX_EDGES), NH1],
+    ['rA', Object.keys(A_SETS), NPAT], ['rC', Object.keys(C_SETS), NCORNER],
+    ['E3', Object.keys(HEX_EDGES), NE3], ['H1', ['D'], NH1],
   ];
   async function loadOrBuildPDBs(E, report, tick) {
     const cached = await idbGet(KEY_PDB);
@@ -659,6 +615,8 @@
       for (const k of Object.keys(out[fam])) payload[fam][k] = out[fam][k].buffer;
     }
     idbPut(KEY_PDB, payload);
+    // retired PDB caches (v5 was ~10 MB; earlier keys shipped 2026-07-13/14)
+    for (const old of ['fto-pdb-v2', 'fto-pdb-v3', 'fto-pdb-v4', 'fto-pdb-v5']) idbDel(old);
     return out;
   }
 
@@ -1149,7 +1107,7 @@
 
   module.exports = {
     idbGet, idbPut, idbDel, KEY_PDB, UNREACHED,
-    NPAT, NCORNER, NE3, NE6, NMASK, NH1, B_SETS, A_SETS, C_SETS, HEX_EDGES, E6_PAIRS,
+    NPAT, NCORNER, NE3, NE6, NMASK, NH1, A_SETS, C_SETS, HEX_EDGES,
     maskIndex, maskOfColor, h1Index,
     encPattern, decPattern, encA, encB,
     permRank, evenPermUnrank, cornerIndex, cornerUnpack,

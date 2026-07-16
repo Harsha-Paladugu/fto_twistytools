@@ -45,6 +45,7 @@ const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed
 console.log('building pruning tables…');
 let t0 = Date.now();
 const PDB = await T.buildPDBs(E);
+PDB.C23 = await T.buildC23(E);        // restricted center-step tables
 console.log('  ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
 const C = makeSolverCore(E, T, PDB, algData);
 C.finishIndex();
