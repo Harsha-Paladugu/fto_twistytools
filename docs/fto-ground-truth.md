@@ -498,6 +498,43 @@ The USER supplies the actual sheets; this section is context, not authority.
   enumerate optimal solutions as canonical ENGINE words (grip-independent,
   well-defined counts) and respell afterwards. All pinned in
   tools/test-trainer.mjs.
+- **Second/third-center step space (trainer derivation, machine-verified
+  2026-07-15)**: the Centers drill (Bencisco second/third centers) measures
+  its target in the same sealed 10-native-move TURN metric as F2T — the
+  center steps' hold alphabet {R, U, Rw, BL} still spells every sealed move
+  as exactly one token from every grip, so plain sealed BFS distance IS
+  "how many turns". Goals are placement-neutral, matching the solver's
+  "search picks": 'second' = ANY one of the L/R/B method hexagons formed,
+  'third'/'both' = any two — always with the first center exactly home and
+  BOTH bottom triples re-solved at the end (a center word may break them
+  mid-way). The sealed group's invariants shrink every coordinate: engine
+  D's edge and centre slots are invariant, so a hexagon's 3 edges live
+  among 9 slots (one-hexagon exact = 42,336 sealed-reachable cells of the
+  290,400 codec, turn-metric eccentricity 12), a pair's 6 edges among 9
+  (60,480 cells over the e3×e3 coding, ecc 12), and the white triangles
+  never leave their block — the whole orbit-B pattern collapses to the
+  (L-mask, R-mask) pair (1,680 valid cells; any two hexagon blocks + D
+  force the third, so every pair triangle goal is the single 'all' goal,
+  ecc 9; single blocks ecc 5; the orbit-A per-color marginals for the
+  triples' source slots have ecc 2/3/2). The drill search is an
+  index-carrying DFS — ten small coordinates stepped through Int32
+  transition tables, no full states inside the search (~20× the node rate
+  of the F2T-style full-state DFS, measured; the two implementations
+  agreed on all 52 cross-checked drill optimals) — with admissible
+  max/min-composed bounds from those tables plus the F2T dC/dA families;
+  emitted words are re-proved on full states by the display/verify layer,
+  so the search and the proof stay independent. Scrambles are the F2T
+  16-move sealed walk plus APPENDED machine-optimal words — a both-triples
+  solve (its goal includes the D hexagon exactly home, so it also
+  re-aligns any white spin and the walk needs no white-home rejection)
+  and, for 'third', a second-center solve — landing the drill exactly
+  where a real solve enters the step. Reveals respell optimal sealed words
+  through a (position × grip) DP over the full 8-token alphabet: engine D
+  has two spellings (Rw with grip drift / BL in place) and the DP picks
+  the bracket-minimal one (ties resolve in BL.TOKS order — Rw first).
+  Measured optimals: 'second' 1-11, 'third' 5-14, 'both' 7-15; the deepest
+  states take multi-second exact searches (async in the trainer UI). All
+  pinned in tools/test-trainer.mjs.
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶

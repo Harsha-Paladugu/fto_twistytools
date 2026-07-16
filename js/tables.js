@@ -891,6 +891,198 @@
     return out;
   }
 
+  // ---------------- second/third-center trainer tables (step trainers v3) ----------------
+  // The Centers drill (second/third Bencisco centers) measures its target in
+  // the same sealed 10-native-move TURN metric as F2T — the center steps'
+  // hold alphabet is {R, U, Rw, BL} and with free re-grips every sealed move
+  // is still exactly one token from every grip, so plain BFS distance over
+  // the sealed moves IS "how many turns" (the solver's r* families price
+  // re-grip composites at 2 and would overestimate — inadmissible here).
+  //
+  // The center searches run 10+ turns deep, so the drill layer's DFS carries
+  // small per-piece COORDINATES through transition tables instead of full
+  // states (a ~20x node-rate win, measured). The sealed group makes them
+  // tiny: engine D's edge and centre slots are invariant, so the white
+  // (D-color) triangles NEVER leave their block — the whole orbit-B pattern
+  // reduces to the (L-mask, R-mask) pair with B's mask the complement, and
+  // the D-triangle part of every goal is free. What the bundle carries:
+  //   dH1[f]    f in L/R/B — one-hexagon EXACT distances over the H1
+  //             coordinate (3-edge placement x color mask, 290,400)
+  //   dE33[fg]  hexagon-pair edges over (e3 x e3) = 1,320^2 — the exact
+  //             6-edge coupling keyed by the two carried e3 indices
+  //   dB[f|all] orbit-B triangle distances over mask pairs (220^2): one
+  //             face's block solved / the whole orbit solved (two hexagon
+  //             blocks + D force the third, so every pair goal collapses
+  //             to 'all')
+  //   dAm[c]    per-color orbit-A marginals over masks (220): the triples'
+  //             source-triangle slots re-filled (F->5, BR->{6,8}, BL->9)
+  //   rt        Int32 transition tables the DFS steps indices with (mC
+  //             corners, mE3 3-edge placements, mMA/mMB per-orbit masks) —
+  //             small enough to rebuild on every load
+  //   MKB/MBITS mask-pair -> complement-mask / mask -> 12-bit occupancy
+  //   HOME      goal cells for every carried index
+  // The triples' own joint tables (dC/dA) come from the F2T bundle — the
+  // drill layer reads both. Only dH1 and dE33 are worth persisting
+  // (~6.1 MB); everything else rebuilds in well under a second.
+  const KEY_C23 = 'fto-c23-v1';
+  const C23_H1 = ['L', 'R', 'B'];
+  const C23_E33 = ['LR', 'LB', 'RB'];
+  const NE33 = NE3 * NE3;
+  const NMK2 = NMASK * NMASK;
+  const C23_FAMS = [['dH1', C23_H1, NH1], ['dE33', C23_E33, NE33]];
+  const MBITS = (() => {                    // mask index -> 12-bit slot occupancy
+    const bits = new Int32Array(NMASK);
+    for (let a = 0; a < 12; a++) for (let b = a + 1; b < 12; b++) for (let c = b + 1; c < 12; c++)
+      bits[maskIndex(a, b, c)] = (1 << a) | (1 << b) | (1 << c);
+    return bits;
+  })();
+
+  function maskMtable(E, orbit) {           // per-color mask transitions (one orbit)
+    const off = orbit === 'A' ? 0 : 12;
+    const xp = E.moveTables.map(t => {
+      const p = new Array(12);
+      for (let i = 0; i < 12; i++) p[i] = t.xperm[off + i] - off;
+      return p;
+    });
+    const next = new Int32Array(NMASK * 16);
+    const pat = new Array(12);
+    for (let p0 = 0; p0 < 12; p0++) for (let p1 = p0 + 1; p1 < 12; p1++) for (let p2 = p1 + 1; p2 < 12; p2++) {
+      pat.fill(0); pat[p0] = 1; pat[p1] = 1; pat[p2] = 1;
+      const ix = maskIndex(p0, p1, p2);
+      for (let m = 0; m < 16; m++) {
+        const q = xp[m];
+        let a = -1, b = -1, c = -1;
+        for (let i = 0; i < 12; i++) if (pat[q[i]]) { if (a < 0) a = i; else if (b < 0) b = i; else c = i; }
+        next[ix * 16 + m] = maskIndex(a, b, c);
+      }
+    }
+    return next;
+  }
+
+  // generic sealed BFS over an implicit graph: step(u, m) -> u'
+  function bfsSealedFn(n, step, goals, moves) {
+    const dist = new Int8Array(n).fill(-1);
+    let frontier = [];
+    for (const g of goals) if (dist[g] < 0) { dist[g] = 0; frontier.push(g); }
+    let d = 0;
+    while (frontier.length) {
+      const nf = [];
+      for (const u of frontier) {
+        for (const m of moves) {
+          const t = step(u, m);
+          if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
+        }
+      }
+      d++;
+      frontier = nf;
+    }
+    for (let i = 0; i < n; i++) if (dist[i] < 0) dist[i] = UNREACHED;
+    return dist;
+  }
+
+  // runtime part of the bundle: hold, transitions, tiny tables, goal cells
+  async function c23Runtime(E) {
+    const bl = makeBLHold(E);
+    const SEALED = bl.SEALED_MOVES;
+    const mE3 = await buildEdgeMtable(E, 3, null);
+    const mMA = maskMtable(E, 'A');
+    const mMB = maskMtable(E, 'B');
+    const mC = buildCornerMtable(E);
+    // mask-pair complement: (L-mask, R-mask) -> B-mask, given the D block
+    // {6,7,8} sealed-fixed; 255 marks pairs no sealed state realizes
+    const B2M = new Int32Array(4096).fill(-1);
+    for (let ix = 0; ix < NMASK; ix++) B2M[MBITS[ix]] = ix;
+    const D_BITS = (1 << 6) | (1 << 7) | (1 << 8);
+    const MKB = new Uint8Array(NMK2).fill(255);
+    for (let l = 0; l < NMASK; l++) {
+      const bL = MBITS[l];
+      if (bL & D_BITS) continue;
+      for (let r = 0; r < NMASK; r++) {
+        const bR = MBITS[r];
+        if ((bR & D_BITS) || (bL & bR)) continue;
+        MKB[l * NMASK + r] = B2M[0xfff & ~(bL | bR | D_BITS)];
+      }
+    }
+    const home = Array.from({ length: 12 }, (_, i) => i);
+    const HOME = {
+      eD: edgePlaceIndex(home, HEX_EDGES.D), eL: edgePlaceIndex(home, HEX_EDGES.L),
+      eR: edgePlaceIndex(home, HEX_EDGES.R), eB: edgePlaceIndex(home, HEX_EDGES.B),
+      mL: maskIndex(0, 1, 2), mR: maskIndex(3, 4, 5), mB: maskIndex(9, 10, 11),
+    };
+    // orbit-B mask-pair tables: step both masks through mMB
+    const stepMK2 = (u, m) => mMB[((u / NMASK) | 0) * 16 + m] * NMASK + mMB[(u % NMASK) * 16 + m];
+    const dB = {};
+    const mkGoals = (want) => {
+      const goals = [];
+      for (let u = 0; u < NMK2; u++) if (want((u / NMASK) | 0, u % NMASK)) goals.push(u);
+      return goals;
+    };
+    dB.L = bfsSealedFn(NMK2, stepMK2, mkGoals((l) => l === HOME.mL), SEALED);
+    dB.R = bfsSealedFn(NMK2, stepMK2, mkGoals((l, r) => r === HOME.mR), SEALED);
+    dB.B = bfsSealedFn(NMK2, stepMK2, mkGoals((l, r) => MKB[l * NMASK + r] === HOME.mB), SEALED);
+    dB.all = bfsSealedFn(NMK2, stepMK2, [HOME.mL * NMASK + HOME.mR], SEALED);
+    // orbit-A per-color marginals: the triples' source slots covered
+    const stepMA = (u, m) => mMA[u * 16 + m];
+    const dAm = {};
+    const maskGoals = (test) => {
+      const goals = [];
+      for (let u = 0; u < NMASK; u++) if (test(MBITS[u])) goals.push(u);
+      return goals;
+    };
+    dAm.F = bfsSealedFn(NMASK, stepMA, maskGoals((b) => b & (1 << 5)), SEALED);
+    dAm.BR = bfsSealedFn(NMASK, stepMA, maskGoals((b) => (b & 0x140) === 0x140), SEALED);
+    dAm.BL = bfsSealedFn(NMASK, stepMA, maskGoals((b) => b & (1 << 9)), SEALED);
+    return { BL: bl, rt: { mE3, mMA, mMB, mC }, MKB, MBITS, HOME, dB, dAm,
+             HEX_EDGES, cornerIndex, edgePlaceIndex, maskOfColor, encA };
+  }
+
+  async function buildC23(E, tick) {
+    const out = await c23Runtime(E);
+    const SEALED = out.BL.SEALED_MOVES;
+    // hexagon-pair 6-edge coupling over (e3 x e3)
+    const mE3 = out.rt.mE3;
+    const stepE33 = (u, m) => mE3[((u / NE3) | 0) * 16 + m] * NE3 + mE3[(u % NE3) * 16 + m];
+    out.dE33 = {};
+    const eHome = { L: out.HOME.eL, R: out.HOME.eR, B: out.HOME.eB };
+    for (const fg of C23_E33) {
+      out.dE33[fg] = bfsSealedFn(NE33, stepE33, [eHome[fg[0]] * NE3 + eHome[fg[1]]], SEALED);
+      if (tick) await tick();
+    }
+    // one-hexagon exact tables (edges x mask coupling) in the sealed metric
+    const hN = h1Next(E, mE3);
+    out.dH1 = {};
+    for (const f of C23_H1) {
+      out.dH1[f] = bfsTableSealed(NH1, hN, [h1GoalIx(f, HEX_EDGES[f])], SEALED);
+      if (tick) await tick();
+    }
+    return out;
+  }
+  async function loadOrBuildC23(E, tick) {
+    const cached = await idbGet(KEY_C23);
+    if (cached && cached.v === KEY_C23) {
+      try {
+        const out = await c23Runtime(E);
+        let ok = true;
+        for (const [fam, keys, n] of C23_FAMS) {
+          out[fam] = {};
+          for (const k of keys) {
+            out[fam][k] = new Int8Array(cached[fam][k]);
+            if (out[fam][k].length !== n) ok = false;
+          }
+        }
+        if (ok) return out;
+      } catch (e) { /* fall through to rebuild */ }
+    }
+    const out = await buildC23(E, tick);
+    const payload = { v: KEY_C23 };
+    for (const [fam, keys] of C23_FAMS) {
+      payload[fam] = {};
+      for (const k of keys) payload[fam][k] = out[fam][k].buffer;
+    }
+    idbPut(KEY_C23, payload);
+    return out;
+  }
+
   module.exports = {
     idbGet, idbPut, idbDel, KEY_PDB, UNREACHED,
     NPAT, NCORNER, NE3, NE6, NMASK, NH1, B_SETS, A_SETS, C_SETS, HEX_EDGES, E6_PAIRS,
@@ -900,6 +1092,7 @@
     edgePlaceIndex, edgePlaceUnrank,
     makeBLHold, buildPDBs, loadOrBuildPDBs, buildFirstCenter,
     KEY_F2T, buildF2T, loadOrBuildF2T,
+    KEY_C23, buildC23, loadOrBuildC23,
   };
   window.OOTables = module.exports;
 })();

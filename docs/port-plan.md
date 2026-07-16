@@ -375,7 +375,57 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   tamper rejection); headless-Edge E2E 20 checks / 0 console errors
   (masked diagram, both verdict paths, second/first sub-modes, IndexedDB
   cached reboot 175 ms, mode persistence); build + check:fresh green.
-  Next step trainers (second center, …) follow this pattern: a coordinate
+  **STEP TRAINERS v3 (2026-07-15): the Second/third centers (Centers) mode
+  is LIVE** — the user's spec this session: a trainer for the next steps
+  (the second and third centers), same style as the triples, the scramble
+  assuming everything before the step is solved. Mechanics: a
+  second/third/both selector; scrambles are the F2T 16-move sealed walk
+  PLUS appended machine-optimal words — a both-triples solve (which also
+  re-aligns any white spin, so the walk needs no white-home rejection) and,
+  for 'third', a second-center solve — so the drill starts exactly where a
+  real solve enters the step, with the printed scramble still one flat list
+  of {U, F, BR, BL, D}± letters. Goals are placement-neutral, matching the
+  solver's "search picks": 'second' forms ANY one of the three remaining
+  method hexagons, 'third'/'both' reach any two — always with the white
+  center exactly home and BOTH bottom triples re-solved at the end (a
+  center word may break them mid-way, which is why the F2T dC/dA tables
+  read at every node). The TARGET is the TRUE turn optimal in the same
+  sealed 10-native-move metric as F2T (the center alphabet {R, U, Rw, BL}
+  still spells every sealed move as one token from every grip).
+  js/tables.js gained `buildC23`/`loadOrBuildC23` (IndexedDB 'fto-c23-v1',
+  ~6.1 MB persisted — dH1 one-hexagon exact + dE33 pair-edge tables; the
+  mask-pair dB / orbit-A marginal dAm tables and the Int32 transition
+  tables rebuild in well under a second on every load; first build ~4 s,
+  cached ~0.3 s). The sealed invariants shrink every coordinate (D's edge
+  and centre slots are invariant): one-hexagon exact = 42,336 reachable
+  cells of the 290,400 codec, ecc 12; pair edges (e3×e3) ecc 12; orbit-B
+  collapses to (L-mask, R-mask) pairs — 1,680 valid cells, and any two
+  hexagon blocks + D force the third, so every pair triangle goal is the
+  single 'all' goal (ecc 9; single blocks 5); orbit-A per-color marginals
+  ecc 2/3/2. The search is an INDEX-CARRYING DFS in fto-core: ten small
+  coordinates stepped through the transition tables, no full states inside
+  the search — measured ~20× the F2T-style full-state node rate, and the
+  index and full-state implementations agreed on all 52 cross-checked
+  drill optimals; every emitted line is still re-proved end-to-end on full
+  states by the solutions/verify layer (the search and the proof stay
+  independent). Reveals are solver-style {R,U,Rw,BL} lines: one {X,Y}
+  entry bracket, tokens with relative {X,Y} re-grips, the bracket-minimal
+  spelling per word found by a (position × grip) DP over the full 8-token
+  alphabet (engine D has two spellings — Rw with grip drift or BL in
+  place; ties resolve in BL.TOKS order), chips naming the faces whose
+  centers end formed. The fc/f2t answer flow is shared; generation runs
+  ASYNC in the UI behind a searching note (median ~10-30 ms, multi-second
+  tails on the deepest states; measured optimals: second 1-11, third
+  5-14, both 7-15; reveal enumeration median well under 100 ms, worst
+  ~1-3 s at the 512-word cap). Gates: test:trainer **57** green (table
+  eccentricity + reachable-cell pins, dist-0 ⇔ predicate + 1-Lipschitz
+  walks, per-mode drill conditions, the 53-facelet mask census, a
+  heuristic-free brute-force optimality cross-check, end-to-end line
+  proofs, tamper rejection); headless-Edge E2E 25 checks / 0 console
+  errors (mode chip, async generation, both verdict paths, all three
+  sub-modes, IndexedDB cached reload 278 ms, mode persistence); build +
+  check:fresh green.
+  Next step trainers (fourth center, …) follow this pattern: a coordinate
   + goal set in tables.js, a drill layer in the core, a mode chip.
 - [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step
   Bencisco solves** (the USER's method decision this session), every line
@@ -624,9 +674,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   would be new step decompositions over the same machinery.
 - Trainer tool lineup beyond case drill (M4 shipped drill + recap from the M3
   data; **step trainers started 2026-07-13 with the First center mode, joined
-  2026-07-15 by the First two triples mode** — the user's decisions;
-  second-center step modes are the natural next additions, same pattern;
-  full-solve/recognition/one-look modes still await the user's spec).
+  2026-07-15 by the First two triples and Second/third centers modes** — the
+  user's decisions; a fourth-center/L2C-finish mode is the natural next
+  addition, same pattern; full-solve/recognition/one-look modes still await
+  the user's spec).
 - Notation presentation: the 8 face letters are settled, but rotation spelling
   (`Ro` vs `Rv` vs `[R]`), slice spelling (`Rs` vs `2U` vs lowercase), and
   lowercase-means-wide-or-slice are NOT community-settled (ground-truth

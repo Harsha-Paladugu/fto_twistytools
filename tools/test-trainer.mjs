@@ -22,6 +22,14 @@
  * exact optimals cross-checked by a heuristic-free brute force, and every
  * displayed solver-style line re-proved end-to-end from the drill state.
  *
+ * Plus the SECOND/THIRD CENTERS step trainer (2026-07-15): the sealed
+ * turn-metric hexagon tables (eccentricities + sealed-reachable cell counts
+ * pinned; the sealed group's invariants shrink every coordinate), the
+ * index-carrying DFS against full-state predicates, per-mode drills
+ * (triples pre-solved by appended machine-optimal words, mode conditions,
+ * the 53-facelet mask), exact optimals cross-checked by a heuristic-free
+ * brute force, and every displayed {R,U,Rw,BL} line re-proved end-to-end.
+ *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
  */
 import fs from 'fs';
@@ -545,6 +553,193 @@ t('verifyF2tDrill: rejects a tampered state, scramble, optimal, presolved, or mo
     !core.verifyF2tDrill(FT, { ...d, optimal: d.optimal + 1 }) &&
     !core.verifyF2tDrill(FT, { ...d, presolved: d.presolved === 3 ? 5 : 3 }) &&
     !core.verifyF2tDrill(FT, { ...d, mode: 'both', presolved: 0 });
+});
+
+// ================ second/third-center step trainer ================
+const CT = await T.buildC23(E);
+const C23_TOK = /^(R|U|Rw|BL)'?$/;
+const C23_FACES = ['L', 'R', 'B'];
+const C23_PHYS = {};                    // method-frame face -> scrambling-hold letter
+for (const f of C23_FACES) C23_PHYS[f] = E.FACES[E.faceImg(F2T_ENV.Minv, E.FIDX[f])];
+const orbitView = (ctr, orbit) => {
+  const p = new Array(12);
+  for (let i = 0; i < 12; i++) p[i] = orbit === 'A' ? ctr[i] : ctr[12 + i] - 4;
+  return p;
+};
+// heuristic-free exhaustive proof that no sealed word shorter than L reaches `goal`
+function c23NoShorter(s0, goal, L) {
+  if (core.c23GoalOK(s0, goal)) return false;
+  let found = false;
+  const rec = (s, g, lastFace) => {
+    if (found || g >= L - 1) return;
+    for (const m of FT.BL.SEALED_MOVES) {
+      const f = m >> 1;
+      if (f === lastFace || (E.OPPF[f] === lastFace && f > lastFace)) continue;
+      const s2 = E.move(s, m);
+      if (core.c23GoalOK(s2, goal)) { found = true; return; }
+      rec(s2, g + 1, f);
+      if (found) return;
+    }
+  };
+  if (L > 1) rec(s0, 0, -1);
+  return !found;
+}
+
+t('C23 tables: eccentricities + sealed-reachable cell counts pinned', () => {
+  const scan = (arr) => {
+    let max = 0, reach = 0;
+    for (const v of arr) { if (v === T.UNREACHED) continue; reach++; if (v > max) max = v; }
+    return { max, reach };
+  };
+  for (const f of C23_FACES) {
+    const { max, reach } = scan(CT.dH1[f]);
+    if (max !== 12 || reach !== 42336) return false;       // 9P3 x C(9,3): D slots sealed
+  }
+  for (const fg of ['LR', 'LB', 'RB']) {
+    const { max, reach } = scan(CT.dE33[fg]);
+    if (max !== 12 || reach !== 60480) return false;       // 9P6 disjoint placements
+  }
+  if (scan(CT.dB.L).max !== 5 || scan(CT.dB.R).max !== 5 || scan(CT.dB.B).max !== 5) return false;
+  const all = scan(CT.dB.all);
+  if (all.max !== 9 || all.reach !== 1680) return false;   // 9!/(3!)^3 valid mask pairs
+  if (scan(CT.dAm.F).max !== 2 || scan(CT.dAm.BR).max !== 3 || scan(CT.dAm.BL).max !== 2) return false;
+  return CT.dAm.F.every((v) => v !== T.UNREACHED);          // single masks: fully sealed-reachable
+});
+t('C23 tables: dist 0 ⇔ the goal reads solved; 1-Lipschitz along sealed moves', () => {
+  const rnd = lcg(20260716);
+  let s = E.solved();
+  const ixOf = (st) => ({
+    h1: Object.fromEntries(C23_FACES.map((f) => [f, T.h1Index(st.ep, st.ctr, f, T.HEX_EDGES[f])])),
+    e3: Object.fromEntries(['L', 'R', 'B'].map((f) => [f, T.edgePlaceIndex(st.ep, T.HEX_EDGES[f])])),
+    mk: [T.maskOfColor(orbitView(st.ctr, 'B'), 0), T.maskOfColor(orbitView(st.ctr, 'B'), 1)],
+    ma: [1, 2, 3].map((c) => T.maskOfColor(orbitView(st.ctr, 'A'), c)),
+  });
+  let prev = ixOf(s);
+  for (let i = 0; i < 400; i++) {
+    const m = FT.BL.SEALED_MOVES[(rnd() * 10) | 0];
+    const s2 = E.move(s, m);
+    const cur = ixOf(s2);
+    for (const f of C23_FACES) {
+      const a = CT.dH1[f][prev.h1[f]], b = CT.dH1[f][cur.h1[f]];
+      if (a === T.UNREACHED || b === T.UNREACHED || Math.abs(a - b) > 1) return false;
+      if ((b === 0) !== core.c23HexOK(s2, f)) return false;
+    }
+    for (const [fg, i1, i2] of [['LR', 'L', 'R'], ['LB', 'L', 'B'], ['RB', 'R', 'B']]) {
+      const a = CT.dE33[fg][prev.e3[i1] * 1320 + prev.e3[i2]];
+      const b = CT.dE33[fg][cur.e3[i1] * 1320 + cur.e3[i2]];
+      if (a === T.UNREACHED || b === T.UNREACHED || Math.abs(a - b) > 1) return false;
+      if ((b === 0) !== [...T.HEX_EDGES[i1], ...T.HEX_EDGES[i2]].every((e) => s2.ep[e] === e)) return false;
+    }
+    const ua = prev.mk[0] * 220 + prev.mk[1], ub = cur.mk[0] * 220 + cur.mk[1];
+    const ba = CT.dB.all[ua], bb = CT.dB.all[ub];
+    if (ba === T.UNREACHED || bb === T.UNREACHED || Math.abs(ba - bb) > 1) return false;
+    if ((bb === 0) !== [...Array(12).keys()].every((k) => s2.ctr[12 + k] === 4 + ((k / 3) | 0))) return false;
+    const wantA = [[5, 1], [6, 2], [8, 2], [9, 3]];
+    const aOK = [wantA.slice(0, 1), wantA.slice(1, 3), wantA.slice(3)].map((w) => w.every(([x, c]) => s2.ctr[x] === c));
+    [CT.dAm.F, CT.dAm.BR, CT.dAm.BL].forEach((tab, k) => {
+      const a = tab[prev.ma[k]], b = tab[cur.ma[k]];
+      if (Math.abs(a - b) > 1 || (b === 0) !== aOK[k]) throw new Error('dAm ' + k);
+    });
+    s = s2; prev = cur;
+  }
+  return true;
+});
+t('makeC23Drill: per mode — plain sealed letters, no same-face runs, state re-proved,\n  white center + both triples solved at start, mode conditions, verifyC23Drill agrees', () => {
+  for (const mode of ['second', 'third', 'both']) {
+    for (let i = 0; i < 3; i++) {
+      const d = core.makeC23Drill(FT, CT, { mode }, lcg(3000 * i + 17 * mode.length));
+      if (!d || d.mode !== mode) return false;
+      const toks = d.scramble.split(/\s+/).filter(Boolean);
+      if (!toks.every((x) => F2T_TOK.test(x)) || toks.length > 42) return false;
+      for (let j = 1; j < toks.length; j++)
+        if (toks[j].replace("'", '') === toks[j - 1].replace("'", '')) return false;
+      const st = E.applyParsed(E.parseAlg(d.scramble), E.solved());
+      if (!E.eq(st, d.state) || !f2tWhiteHomePhys(st)) return false;
+      const sM = d.stateM;
+      if (!core.f2tGoalOK(sM, 'pair')) return false;      // triples + white solved at start
+      const solved = C23_FACES.filter((f) => core.c23HexOK(sM, f));
+      if (mode === 'third') {
+        if (solved.length !== 1 || d.presolved !== solved[0]) return false;
+        if (d.presolvedFace !== C23_PHYS[d.presolved]) return false;
+      } else if (solved.length !== 0 || d.presolved !== null) return false;
+      if (core.c23GoalOK(sM, d.goal)) return false;
+      if (d.optimal < 1 || !core.verifyC23Drill(FT, CT, d)) return false;
+    }
+  }
+  return true;
+});
+t('makeC23Drill: mask keeps exactly 53 facelets — all 12 edges, all 12 orbit-B\n  triangles, the 9 candidate source triangles, both triple corners', () => {
+  for (const mode of ['second', 'third', 'both']) {
+    const d = core.makeC23Drill(FT, CT, { mode }, lcg(881 + mode.length));
+    if (!d || d.mask.length !== 72 - 53) return false;
+    const keep = new Set([...Array(72).keys()]);
+    for (const i of d.mask) keep.delete(i);
+    if (keep.size !== 53) return false;
+    let x = 0, e = 0, c = 0;
+    for (const i of keep) { const ft = E.FEAT[i]; if (ft.t === 'x') x++; else if (ft.t === 'e') e++; else c++; }
+    if (x !== 21 || e !== 24 || c !== 8) return false;
+    // the home white hexagon is always among the kept facelets
+    for (let i = 0; i < 72; i++) {
+      const ft = E.FEAT[i];
+      const isWhiteHex = (ft.t === 'x' && ft.f === E.FIDX.U) ||
+        (ft.t === 'e' && E.EDGES.some((q) => q[2] === E.FIDX.U && q[0] === ft.v && q[1] === ft.v2));
+      if (isWhiteHex && !keep.has(i)) return false;
+    }
+  }
+  return true;
+});
+t('C23 optimal is exact: a heuristic-free brute force finds nothing shorter (per mode)', () => {
+  const CAPS = { second: 6, third: 7, both: 8 };
+  for (const mode of ['second', 'third', 'both']) {
+    let checked = 0;
+    for (let i = 0; i < 40 && checked < 2; i++) {
+      const d = core.makeC23Drill(FT, CT, { mode }, lcg(7100 + 61 * i + mode.length));
+      if (!d || d.optimal > CAPS[mode]) continue;
+      if (!c23NoShorter(d.stateM, d.goal, d.optimal)) return false;
+      checked++;
+    }
+    if (checked < 2) return false;
+  }
+  return true;
+});
+t('c23Solutions: every line proved end-to-end — entry bracket + {R,U,Rw,BL} tokens from\n  the drill state reach the goal with white + triples re-solved; count = optimal; none dropped', () => {
+  for (const mode of ['second', 'third', 'both']) {
+    for (let i = 0; i < 3; i++) {
+      const d = core.makeC23Drill(FT, CT, { mode }, lcg(650 + 29 * i + mode.length));
+      if (!d) return false;
+      const res = core.c23Solutions(FT, CT, d, 8);
+      if (!res.lines.length || res.dropped !== 0) return false;
+      if (!res.capped && res.total < res.lines.length) return false;
+      for (const l of res.lines) {
+        const toks = l.text.split(/\s+/).filter(Boolean);
+        if (!/^\{[A-Z]+,[A-Z]+\}$/.test(toks[0])) return false;
+        if (!toks.slice(1).every((x) => /^\{[A-Z]+,[A-Z]+\}$/.test(x) || C23_TOK.test(x))) return false;
+        const parsed = E.parseAlg(l.text);
+        if (E.countMoves(parsed) !== d.optimal) return false;
+        const st2 = E.applyParsed(parsed, d.state);
+        if (!f2tWhiteHomePhys(st2)) return false;
+        const F = E.toFacelets(st2), P = E.rotFaceletPerm(F2T_ENV.M), F2 = new Array(72);
+        for (let k = 0; k < 72; k++) F2[k] = E.faceImg(F2T_ENV.M, F[P[k]]);
+        const sM2 = E.fromFacelets(F2);
+        if (!core.c23GoalOK(sM2, d.goal)) return false;
+        const want = C23_FACES.filter((f) => core.c23HexOK(sM2, f)).map((f) => C23_PHYS[f]).sort();
+        if (l.centers.slice().sort().join() !== want.join()) return false;
+        if (l.centers.length < (d.goal === 'c2' ? 2 : 1)) return false;
+      }
+    }
+  }
+  return true;
+});
+t('makeC23Drill: a stuck injected rng exhausts the attempt cap and returns null (no hang)', () =>
+  core.makeC23Drill(FT, CT, { mode: 'second' }, () => 0) === null);
+t('verifyC23Drill: rejects a tampered state, scramble, optimal, presolved, or mode', () => {
+  const d = core.makeC23Drill(FT, CT, { mode: 'third' }, lcg(6021));
+  if (!d || !core.verifyC23Drill(FT, CT, d)) return false;
+  return !core.verifyC23Drill(FT, CT, { ...d, state: E.move(d.state, 2 * E.FIDX.R) }) &&
+    !core.verifyC23Drill(FT, CT, { ...d, scramble: d.scramble + ' R' }) &&
+    !core.verifyC23Drill(FT, CT, { ...d, optimal: d.optimal + 1 }) &&
+    !core.verifyC23Drill(FT, CT, { ...d, presolved: d.presolved === 'L' ? 'R' : 'L' }) &&
+    !core.verifyC23Drill(FT, CT, { ...d, mode: 'both', presolved: null });
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
