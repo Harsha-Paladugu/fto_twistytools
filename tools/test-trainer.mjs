@@ -12,7 +12,9 @@
  * distance tables over the 290,400-state coordinate, God's number pinned in
  * both metrics (7 face turns; 6 with slice turns at unit cost), the mirror
  * false-solve fact (visually complete, unsolvable, at exactly God's number),
- * and every drill + displayed solution re-proved on full states. Derivation
+ * the short 10-move scrambles + 9-facelet mask (2026-07-16: the drill
+ * assumes a solved puzzle and shows only the white-center pieces), and
+ * every drill + displayed solution re-proved on full states. Derivation
  * 2026-07-13, adversarially reviewed; docs/fto-ground-truth.md §Methods.
  *
  * Plus the FIRST TWO TRIPLES step trainer (2026-07-15): the sealed
@@ -329,15 +331,41 @@ t('FC: all 24 generators match the engine on a random state (parse → same coor
   return FC.GENS.every((g, gi) =>
     FC.stepGen(c, gi) === FC.coordOf(E.applyParsed(E.parseAlg(g.tok), st)));
 });
-t('makeFcDrill: any target — 30 plain face letters, machine-verified, optimal in 1..gn', () => {
+t('makeFcDrill: any target — 10 plain face letters, machine-verified, optimal in 1..gn', () => {
   for (const metric of ['token', 'native']) {
     for (let i = 0; i < 5; i++) {
       const d = core.makeFcDrill(FC, { metric, target: 0 });
       if (!d || !core.verifyFcDrill(FC, d)) return false;
       const toks = d.scramble.split(/\s+/);
-      if (toks.length !== 30 || !toks.every((x) => FACE_TOK.test(x))) return false;
+      if (toks.length !== 10 || !toks.every((x) => FACE_TOK.test(x))) return false;
       const gn = metric === 'native' ? FC.gn16 : FC.gn24;
       if (d.optimal < 1 || d.optimal > gn) return false;
+    }
+  }
+  return true;
+});
+t('makeFcDrill: mask keeps exactly 9 facelets — the three white-sticker edges (both\n  stickers) and the three white triangles, wherever they sit', () => {
+  for (const metric of ['token', 'native']) {
+    for (let i = 0; i < 5; i++) {
+      const d = core.makeFcDrill(FC, { metric, target: 0 });
+      if (!d || d.mask.length !== 72 - 9) return false;
+      const keep = new Set([...Array(72).keys()]);
+      for (const k of d.mask) keep.delete(k);
+      if (keep.size !== 9) return false;
+      const fl = E.toFacelets(d.state);
+      let x = 0, e = 0;
+      for (const k of keep) {
+        const ft = E.FEAT[k];
+        if (ft.t === 'x') {
+          if (fl[k] !== 0) return false;                     // a white triangle, wherever it sits
+          x++;
+        } else if (ft.t === 'e') {
+          const slot = E.EDGES.findIndex((q) => q[0] === ft.v && q[1] === ft.v2);
+          if (!FC.U_EDGES.includes(d.state.ep[slot])) return false;   // a white-hexagon edge piece
+          e++;
+        } else return false;                                 // never a corner facelet
+      }
+      if (x !== 3 || e !== 6) return false;
     }
   }
   return true;

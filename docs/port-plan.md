@@ -333,6 +333,18 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   histograms digit for digit); headless-Edge E2E 24 checks / 0 console
   errors (both verdict paths, the optimal-solve-rate table, and a
   build-effect deadlock regression); build + check:fresh green.
+  REWORKED 2026-07-16 (user decision): the standalone mode chip is GONE —
+  the drill lives on as the 'first' sub-mode of the Centers trainer (see
+  the v3 entry), and its scrambles are SHORT: 10 canonical native moves
+  (the drill assumes a solved puzzle, so the scramble's only job is to
+  displace the white center; 10 stays above God's number 7, so a scramble
+  never reads as the inverse of an optimal solution, and the short walk
+  lands shallow exact targets far MORE often than the retired 30-move
+  community-style scramble — measured rarest level ~1.5e-3 vs ~2.5e-4).
+  The diagram now MASKS to the 9 white-center facelets (the three
+  white-sticker edges, both stickers each, + the three white triangles,
+  wherever they sit — together they determine the coordinate exactly:
+  side stickers tell the edges apart, white triangles are identical).
   **STEP TRAINERS v2 (2026-07-15): the First two triples (Triples) mode is
   LIVE** — the user's spec this session: a first triple / second triple /
   both selector, scrambles that assume the white center solved (and so stay
@@ -425,6 +437,25 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   errors (mode chip, async generation, both verdict paths, all three
   sub-modes, IndexedDB cached reload 278 ms, mode persistence); build +
   check:fresh green.
+  MERGE 2026-07-16 (user decision, "so it's cleaner"): the First center
+  mode joined this trainer as the 'first' sub-mode — one Centers chip
+  with a First center / Second center / Third center / Second + third
+  selector. 'first' keeps its counting toggle and exact-optimal-length
+  difficulty picker, shares the centers session pills and the
+  optimal-solve-rate card (rows "first center" / "first center (face
+  turns)" from the per-metric fcStats, which persist unchanged), and the
+  table effect is sub-mode aware: 'first' builds only the small
+  buildFirstCenter bundle (~a quarter second, no IndexedDB) while the
+  deeper sub-modes load the F2T + C23 bundles, so first-center drills
+  never wait on the ~4 s first C23 build. Legacy stored `mode: "fc"`
+  blobs migrate to Centers·first on boot. The first-center scrambles are
+  now the short masked drills described in the v1 entry's 2026-07-16
+  rework note. Gates re-run: test:trainer **58** green (the fc 10-token
+  scramble pin + a 9-facelet mask census joined), headless-Edge E2E 27
+  checks / 0 console errors (merged chips, 4-way selector, masked fc
+  diagram, both verdict paths, difficulty chips, second-center async
+  drill, persistence, the legacy-blob migration), build + check:fresh
+  green.
   A fourth-center/L2C extension (goal 'c3' = all three hexagons, a
   five-way selector) was built, fully gated and RETIRED the same day —
   the user's decision (2026-07-16): redundant, the centers stage is done

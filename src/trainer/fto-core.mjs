@@ -164,17 +164,23 @@ export function createCore(E) {
   // FC is the table bundle from window.OOTables.buildFirstCenter(E): the
   // white-hexagon coordinate (290,400), exact distance tables under two
   // metrics (dist16 = face turns, dist24 = face + slice turns at unit cost),
-  // the 12 goal formations, and the 24 unit generators. The drill: a plain
-  // 30-random-move scramble (the community full-scramble style, engine
+  // the 12 goal formations, and the 24 unit generators. The drill starts
+  // from a solved puzzle and only the white center is drilled (the diagram
+  // masks to its pieces), so the scramble's one job is to displace the
+  // white center: a SHORT walk — 10 canonical native moves (engine
   // suppression rules), rejection-sampled on the white-center distance when
-  // an exact difficulty is requested; reveal enumerates ALL optimal solutions
+  // an exact difficulty is requested. 10 stays above God's number 7, so a
+  // scramble never reads as the inverse of an optimal solution, and the
+  // short walk lands shallow depths far MORE often than the old 30-move
+  // full scramble did (measured: rarest exact level ~1.5e-3 at length 10
+  // vs ~2.5e-4 at 30). Reveal enumerates ALL optimal solutions
   // (canonicalized: commuting same-axis runs in fixed layer order) and
   // respells them token by token through the engine's own hold walk, so
   // slice-containing texts mean exactly what the engine (and the sheets'
   // dialect) say they mean.
 
-  const FC_LEN = 30;                          // community-standard scramble length
-  const FC_TRIES = 60000;                     // exact-N rejection cap (rarest level ~2.5e-4)
+  const FC_LEN = 10;                          // short walk: the step assumes a solved puzzle
+  const FC_TRIES = 60000;                     // exact-N rejection cap (rarest level ~1.5e-3)
   const FC_ENUM_CAP = 512;                    // DFS harvest cap (display slices from it)
 
   const fcEdgeImg = (M, e) => {
@@ -201,6 +207,40 @@ export function createCore(E) {
 
   const fcDist = (FC, metric) => (metric === 'native' ? FC.dist16 : FC.dist24);
   const fcGn = (FC, metric) => (metric === 'native' ? FC.gn16 : FC.gn24);
+
+  // slot -> facelet maps shared by the step-trainer masks (centre slot 3f+k,
+  // corner vertex, edge slot), derived once from the engine's features
+  let _slotF = null;
+  function slotFacelets() {
+    if (_slotF) return _slotF;
+    const CTRF = new Array(24);
+    const CORNF = Array.from({ length: 6 }, () => []);
+    const EDGEF = Array.from({ length: 12 }, () => []);
+    for (let i = 0; i < 72; i++) {
+      const ft = E.FEAT[i];
+      if (ft.t === 'x') CTRF[3 * ft.f + (ft.v % 3)] = i;
+      else if (ft.t === 'c') CORNF[ft.v].push(i);
+      else EDGEF[E.EDGES.findIndex((q) => q[0] === ft.v && q[1] === ft.v2)].push(i);
+    }
+    _slotF = { CTRF, CORNF, EDGEF };
+    return _slotF;
+  }
+
+  // diagram mask: neutral-fill everything except the step's pieces — the
+  // three white-sticker edges and the three white triangles, wherever they
+  // sit. Those 9 facelets determine the coordinate exactly: the edges' side
+  // stickers tell the three pieces apart, and the white triangles are
+  // identical, which is all the mask index reads.
+  function fcMask(FC, s) {
+    const { CTRF, EDGEF } = slotFacelets();
+    const keep = new Set();
+    for (let x = 0; x < 12; x++) if (s.ctr[x] === 0) keep.add(CTRF[x]);
+    for (let e = 0; e < 12; e++)
+      if (FC.U_EDGES.includes(s.ep[e])) for (const i of EDGEF[e]) keep.add(i);
+    const mask = [];
+    for (let i = 0; i < 72; i++) if (!keep.has(i)) mask.push(i);
+    return mask;
+  }
 
   // scramble + drill: target = 0 for "any" (rerolls the already-solved case),
   // 1..gn for an exact optimal length. Returns null only on rejection-cap
@@ -230,6 +270,7 @@ export function createCore(E) {
       return {
         kind: 'fc', metric, target, coord: c, optimal: dist[c],
         scramble: seq.map((m) => E.MOVES[m]).join(' '), state,
+        mask: fcMask(FC, state),
       };
     }
     return null;
@@ -467,16 +508,8 @@ export function createCore(E) {
     });
     const gripOfFace = {};
     for (let j = 0; j < 3; j++) gripOfFace[BL.gen[j][2].m >> 1] = j;
-    // slot -> facelet maps (mask): centre slot 3f+k, corner vertex, edge slot
-    const CTRF = new Array(24);
-    const CORNF = Array.from({ length: 6 }, () => []);
-    const EDGEF = Array.from({ length: 12 }, () => []);
-    for (let i = 0; i < 72; i++) {
-      const ft = E.FEAT[i];
-      if (ft.t === 'x') CTRF[3 * ft.f + (ft.v % 3)] = i;
-      else if (ft.t === 'c') CORNF[ft.v].push(i);
-      else EDGEF[E.EDGES.findIndex((q) => q[0] === ft.v && q[1] === ft.v2)].push(i);
-    }
+    // slot -> facelet maps (mask): shared with the first-center mask
+    const { CTRF, CORNF, EDGEF } = slotFacelets();
     const U_EDGE_SLOTS = E.EDGES.map((q, i) => (q[2] === FIDX.U ? i : -1)).filter((i) => i >= 0);
     const P = E.rotFaceletPerm(M);            // method facelet i lives at physical facelet P[i]
     _f2tEnv = { BL, M, Minv, anchorSpell, ENTRY, REGRIP, PHYS, TOKOF, gripOfFace,

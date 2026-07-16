@@ -5,21 +5,23 @@ import { createCore, SEP } from "./fto-core.mjs";
 // FTO trainer (M4) — case drill over the authored algorithm sheet
 //   Drill: setup scrambles (inverted case alg + random AUF) onto sheet
 //   cases, timed; Recap: one pass over every enabled case.
-//   First center: the first Bencisco step trainer — full random scrambles,
-//   the exact optimal move count for the white center as the challenge, all
-//   optimal solutions on reveal (exact BFS tables from js/tables.js,
-//   built on demand in well under a second; God's number 6 counting slice
-//   turns as one move, 7 in pure face turns — pinned in test-trainer).
 //   Triples (first two triples): short white-center-sealing scrambles, a
 //   first/second/both selector, masked diagram (white center + triple
 //   pieces only), exact optimal turn target, solver-style {R,U,Rw} reveal
 //   lines (tables via OOTables.loadOrBuildF2T, IndexedDB-cached).
-//   Centers (second/third centers): scrambles whose appended machine-
-//   optimal words pre-solve the white center + both triples (and, for the
-//   third-center drill, one more center), a second/third/both selector,
-//   masked diagram, exact optimal turn target, solver-style {R,U,Rw,BL}
-//   reveal lines (tables via OOTables.loadOrBuildC23 + the F2T bundle;
-//   generation is async — deep second+third searches can take seconds).
+//   Centers (every Bencisco center step, first/second/third/both selector):
+//   'first' is the white-center drill — a short 10-move scramble whose only
+//   job is to displace the white center, a masked diagram (its pieces
+//   only), the exact optimal move count as the challenge, all optimal
+//   solutions on reveal (exact BFS tables from js/tables.js, built on
+//   demand in well under a second; God's number 6 counting slice turns as
+//   one move, 7 in pure face turns — pinned in test-trainer); the other
+//   sub-modes are the second/third-center drills — scrambles whose
+//   appended machine-optimal words pre-solve the white center + both
+//   triples (and, for 'third', one more center), masked diagram, exact
+//   optimal turn target, solver-style {R,U,Rw,BL} reveal lines (tables via
+//   OOTables.loadOrBuildC23 + the F2T bundle; generation is async — deep
+//   second+third searches can take seconds).
 // Further step trainers follow this pattern; full-solve/recognition/
 // one-look modes are scoped with the user.
 // ============================================================
@@ -82,15 +84,6 @@ export default function FtoTrainer() {
   const [mode, setMode] = useState("drill");
   const [setupOpen, setSetupOpen] = useState(true);
 
-  // ---------- first-center step trainer ----------
-  const fcRef = useRef(null);                         // OOTables.buildFirstCenter bundle
-  const fcSolsCache = useRef(null);                   // { drill, res } — reveal memo
-  const [fcStatus, setFcStatus] = useState("idle");   // idle | building | ready | error
-  const [fcMetric, setFcMetric] = useState("token");  // token: slice turns count as 1
-  const [fcTarget, setFcTarget] = useState(0);        // 0 = any, else exact optimal length
-  const [fcStats, setFcStats] = useState({});         // metric -> { n, opt } (persisted)
-  const [fcSession, setFcSession] = useState([]);     // recent [{ count, more, optimal, correct }]
-
   // ---------- first-two-triples step trainer ----------
   const f2tRef = useRef(null);                        // OOTables.loadOrBuildF2T bundle
   const f2tSolsCache = useRef(null);                  // { drill, res } — reveal memo
@@ -99,12 +92,17 @@ export default function FtoTrainer() {
   const [f2tStats, setF2tStats] = useState({});       // mode -> { n, opt } (persisted)
   const [f2tSession, setF2tSession] = useState([]);   // recent [{ count, more, optimal, correct }]
 
-  // ---------- second/third-center step trainer ----------
+  // ---------- centers step trainer (first/second/third centers) ----------
+  const fcRef = useRef(null);                         // OOTables.buildFirstCenter bundle ('first')
+  const fcSolsCache = useRef(null);                   // { drill, res } — reveal memo
+  const [fcMetric, setFcMetric] = useState("token");  // 'first' counting: slice turns count as 1
+  const [fcTarget, setFcTarget] = useState(0);        // 'first': 0 = any, else exact optimal length
+  const [fcStats, setFcStats] = useState({});         // metric -> { n, opt } (persisted)
   const c23Ref = useRef(null);                        // { FT, CT } — F2T + C23 table bundles
   const c23SolsCache = useRef(null);                  // { drill, res } — reveal memo
   const c23Gen = useRef(0);                           // async-generation sequence guard
   const [c23Status, setC23Status] = useState("idle"); // idle | building | ready | error
-  const [c23Mode, setC23Mode] = useState("second");   // second | third | both
+  const [c23Mode, setC23Mode] = useState("second");   // first | second | third | both
   const [c23Busy, setC23Busy] = useState(false);      // a drill search is in flight
   const [c23Stats, setC23Stats] = useState({});       // mode -> { n, opt } (persisted)
   const [c23Session, setC23Session] = useState([]);   // recent [{ count, more, optimal, correct }]
@@ -151,7 +149,7 @@ export default function FtoTrainer() {
             if (Array.isArray(d.caseOff)) setCaseOff(new Set(d.caseOff.filter((x) => typeof x === "string")));
             if (Array.isArray(d.caseKnown)) setCaseKnown(new Set(d.caseKnown.filter((x) => typeof x === "string")));
             if (["all", "learning", "known"].includes(d.scope)) setScope(d.scope);
-            if (["drill", "recap", "fc", "f2t", "c23"].includes(d.mode)) setMode(d.mode);
+            if (["drill", "recap", "f2t", "c23"].includes(d.mode)) setMode(d.mode);
             if (typeof d.setupOpen === "boolean") setSetupOpen(d.setupOpen);
             if (["token", "native"].includes(d.fcMetric)) setFcMetric(d.fcMetric);
             if (Number.isInteger(d.fcTarget) && d.fcTarget >= 0 && d.fcTarget <= 7) setFcTarget(d.fcTarget);
@@ -172,7 +170,8 @@ export default function FtoTrainer() {
               }
               setF2tStats(fs);
             }
-            if (["second", "third", "both"].includes(d.c23Mode)) setC23Mode(d.c23Mode);
+            if (["first", "second", "third", "both"].includes(d.c23Mode)) setC23Mode(d.c23Mode);
+            if (d.mode === "fc") { setMode("c23"); setC23Mode("first"); }   // pre-merge stored blobs
             if (d.c23Stats && typeof d.c23Stats === "object") {
               const fs = {};
               for (const k of ["second", "third", "both"]) {
@@ -245,24 +244,6 @@ export default function FtoTrainer() {
     return out;
   }, [ready, subsetOn, groupsOf, caseOff, caseKnown, scope]);
 
-  // ---------- first-center tables (built on demand, once) ----------
-  // The cleanup must reset the status when it cancels a pending build:
-  // otherwise leaving fc mode inside the defer window would strand
-  // fcStatus at "building" with no timer, bricking the mode until reload.
-  useEffect(() => {
-    if (mode !== "fc" || fcRef.current) return;
-    setFcStatus("building");
-    // defer past the paint so the "building" note shows during the ~quarter second
-    const id = setTimeout(() => {
-      try {
-        fcRef.current = window.OOTables.buildFirstCenter(E);
-        setFcStatus("ready");
-      } catch (e) {
-        setFcStatus("error: " + String((e && e.message) || e));
-      }
-    }, 30);
-    return () => { clearTimeout(id); if (!fcRef.current) setFcStatus("idle"); };
-  }, [mode]);
   const fcGn = (metric) => {
     const FC = fcRef.current;
     if (FC) return metric === "native" ? FC.gn16 : FC.gn24;
@@ -289,11 +270,32 @@ export default function FtoTrainer() {
     return () => { cancelled = true; clearTimeout(id); if (!f2tRef.current) setF2tStatus("idle"); };
   }, [mode]);
 
-  // ---------- second/third-center tables (IndexedDB-cached; built once) ----------
-  // The centers drill reads BOTH bundles: C23's hexagon tables and F2T's
-  // triple tables (the appended pre-solves + the triples-restore bounds).
+  // ---------- centers tables (built on demand, once per bundle) ----------
+  // The 'first' sub-mode needs only the small first-center BFS bundle
+  // (~a quarter second, built in-page); the deeper sub-modes read BOTH
+  // IndexedDB bundles: C23's hexagon tables and F2T's triple tables (the
+  // appended pre-solves + the triples-restore bounds). c23Status always
+  // describes the CURRENT sub-mode's bundle. The cleanup must reset the
+  // status when it cancels a pending build: otherwise leaving the mode (or
+  // switching sub-modes) inside the defer window would strand c23Status at
+  // "building" with no timer, bricking the mode until reload.
   useEffect(() => {
-    if (mode !== "c23" || c23Ref.current) return;
+    if (mode !== "c23") return;
+    if (c23Mode === "first") {
+      if (fcRef.current) { setC23Status("ready"); return; }
+      setC23Status("building");
+      // defer past the paint so the "building" note shows during the build
+      const id = setTimeout(() => {
+        try {
+          fcRef.current = window.OOTables.buildFirstCenter(E);
+          setC23Status("ready");
+        } catch (e) {
+          setC23Status("error: " + String((e && e.message) || e));
+        }
+      }, 30);
+      return () => { clearTimeout(id); if (!fcRef.current) setC23Status("idle"); };
+    }
+    if (c23Ref.current) { setC23Status("ready"); return; }
     setC23Status("building");
     let cancelled = false;
     const id = setTimeout(async () => {
@@ -310,7 +312,7 @@ export default function FtoTrainer() {
       }
     }, 30);
     return () => { cancelled = true; clearTimeout(id); if (!c23Ref.current) setC23Status("idle"); };
-  }, [mode]);
+  }, [mode, c23Mode]);
 
   // ---------- problem generation ----------
   const nextDrill = useCallback(() => {
@@ -322,18 +324,6 @@ export default function FtoTrainer() {
     setCurrent(null);
   }, [entries]);
 
-  const nextFc = useCallback(() => {
-    const FC = fcRef.current;
-    if (!FC) { setCurrent(null); return; }
-    const d = core.makeFcDrill(FC, { metric: fcMetric, target: fcTarget });
-    if (!d) { setCurrent(null); return; }
-    setCurrent({
-      ...d, subset: "FC",
-      uid: "FC" + SEP + d.metric + "-" + d.optimal,
-      c: { name: "optimal " + d.optimal + (d.metric === "native" ? " (face turns)" : "") },
-    });
-  }, [fcMetric, fcTarget]);
-
   const nextF2t = useCallback(() => {
     const FT = f2tRef.current;
     if (!FT) { setCurrent(null); return; }
@@ -342,14 +332,28 @@ export default function FtoTrainer() {
     setCurrent({ ...d, subset: "F2T", uid: "F2T" + SEP + d.mode + "-" + d.optimal });
   }, [f2tMode]);
 
-  // The centers drill generation runs an exact search that can take seconds
-  // on deep second+third states, so it is deferred past a paint (the stage
-  // shows a "searching" note) and guarded against mode/option changes that
-  // land while it runs.
+  // The 'first' drill is a cheap coordinate-level rejection sample and runs
+  // inline; the second/third drills run an exact search that can take
+  // seconds on deep second+third states, so they are deferred past a paint
+  // (the stage shows a "searching" note) and guarded against mode/option
+  // changes that land while they run.
   const nextC23 = useCallback(() => {
+    const seq = ++c23Gen.current;               // cancels any in-flight search
+    if (c23Mode === "first") {
+      setC23Busy(false);
+      const FC = fcRef.current;
+      if (!FC) { setCurrent(null); return; }
+      const d = core.makeFcDrill(FC, { metric: fcMetric, target: fcTarget });
+      if (!d) { setCurrent(null); return; }
+      setCurrent({
+        ...d, subset: "FC",
+        uid: "FC" + SEP + d.metric + "-" + d.optimal,
+        c: { name: "optimal " + d.optimal + (d.metric === "native" ? " (face turns)" : "") },
+      });
+      return;
+    }
     const refs = c23Ref.current;
     if (!refs) { setCurrent(null); return; }
-    const seq = ++c23Gen.current;
     setCurrent(null);
     setC23Busy(true);
     setTimeout(() => {
@@ -360,7 +364,7 @@ export default function FtoTrainer() {
       if (!d) { setCurrent(null); return; }
       setCurrent({ ...d, subset: "C23", uid: "C23" + SEP + d.mode + "-" + d.optimal });
     }, 30);
-  }, [c23Mode]);
+  }, [c23Mode, fcMetric, fcTarget]);
 
   const startRecap = useCallback(() => {
     const queue = shuffled(entries);
@@ -369,7 +373,6 @@ export default function FtoTrainer() {
   }, [entries]);
 
   const advance = useCallback(() => {
-    if (mode === "fc") { nextFc(); return; }
     if (mode === "f2t") { nextF2t(); return; }
     if (mode === "c23") { nextC23(); return; }
     if (mode === "drill") { nextDrill(); return; }
@@ -380,7 +383,7 @@ export default function FtoTrainer() {
       setCurrent(core.makeDrill(r.queue[idx]));
       return { ...r, idx };
     });
-  }, [mode, nextDrill, nextFc, nextF2t, nextC23]);
+  }, [mode, nextDrill, nextF2t, nextC23]);
 
   // Regenerate on boot/mode switch (stage reset) and on pool edits. A pool
   // edit only swaps the PENDING problem — it must not clear a stop-screen
@@ -393,14 +396,13 @@ export default function FtoTrainer() {
     genMode.current = mode;
     // Step trainers have no timer: any regeneration (new options, or the
     // build landing) resets to a fresh scramble awaiting an answer.
-    if (mode === "fc") { setPhase("ready"); setLast(null); nextFc(); return; }
     if (mode === "f2t") { setPhase("ready"); setLast(null); nextF2t(); return; }
     if (mode === "c23") { setPhase("ready"); setLast(null); nextC23(); return; }
     if (modeSwitch || phase === "running") { setPhase("ready"); setLast(null); }
     if (mode === "drill") nextDrill();
     else startRecap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, mode, entries, fcStatus, fcMetric, fcTarget, f2tStatus, f2tMode, c23Status, c23Mode]);
+  }, [ready, mode, entries, fcMetric, fcTarget, f2tStatus, f2tMode, c23Status, c23Mode]);
 
   // ---------- timer ----------
   const tick = useCallback(() => {
@@ -463,7 +465,7 @@ export default function FtoTrainer() {
     };
     if (d.kind === "fc") {
       setFcStats((s) => bump(s, d.metric));
-      setFcSession((ss) => [...ss.slice(-49), row]);
+      setC23Session((ss) => [...ss.slice(-49), row]);   // 'first' shares the centers session
     } else if (d.kind === "c23") {
       setC23Stats((s) => bump(s, d.mode));
       setC23Session((ss) => [...ss.slice(-49), row]);
@@ -486,7 +488,7 @@ export default function FtoTrainer() {
       const tag = e.target && e.target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (caseBrowser) { if (e.code === "Escape") setCaseBrowser(null); return; }
-      if (mode === "fc" || mode === "f2t" || mode === "c23") {
+      if (mode === "f2t" || mode === "c23") {
         if (phase === "stopped") {
           if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); advanceStep(); }
           return;
@@ -498,7 +500,7 @@ export default function FtoTrainer() {
         }
         return;   // step trainers never drive the timer
       }
-      if (phase === "stopped" && e.code === "KeyK" && last && last.drill.kind !== "fc") {
+      if (phase === "stopped" && e.code === "KeyK" && last) {
         e.preventDefault();
         const k = last.drill.uid;
         setCaseKnown((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
@@ -563,7 +565,6 @@ export default function FtoTrainer() {
     setCaseStats({});
     setSession([]);
     setFcStats({});
-    setFcSession([]);
     setF2tStats({});
     setF2tSession([]);
     setC23Stats({});
@@ -761,11 +762,11 @@ export default function FtoTrainer() {
 
         <div className="chips" style={{ alignItems: "center" }}>
           <div className="modes">
-            {[["drill", "Drill"], ["recap", "Recap"], ["fc", "First center"], ["f2t", "Triples"], ["c23", "Centers"]].map(([v, l]) => (
+            {[["drill", "Drill"], ["recap", "Recap"], ["f2t", "Triples"], ["c23", "Centers"]].map(([v, l]) => (
               <button key={v} className={"mode" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
             ))}
           </div>
-          {mode !== "fc" && mode !== "f2t" && mode !== "c23" && <>
+          {mode !== "f2t" && mode !== "c23" && <>
             <span className="grouplabel">practice</span>
             <div className="modes">
               {[["all", "All"], ["learning", "Learning"], ["known", "Known"]].map(([v, l]) => (
@@ -780,7 +781,9 @@ export default function FtoTrainer() {
             <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
               <strong>Setup</strong>
               <span className="setupsum">
-                second + third centers · {c23Mode === "second" ? "second center" : c23Mode === "third" ? "third center" : "both centers"}
+                centers · {c23Mode === "first"
+                  ? "first center · optimal length " + (fcTarget === 0 ? "any" : fcTarget) + (fcMetric === "native" ? " · face turns" : "")
+                  : c23Mode === "second" ? "second center" : c23Mode === "third" ? "third center" : "second + third"}
               </span>
               <span className="chev">{setupOpen ? "▾" : "▸"}</span>
             </button>
@@ -789,26 +792,73 @@ export default function FtoTrainer() {
                 <div className="chips" style={{ alignItems: "center" }}>
                   <span className="grouplabel">solve</span>
                   <div className="modes">
-                    {[["second", "Second center"], ["third", "Third center"], ["both", "Both centers"]].map(([v, l]) => (
+                    {[["first", "First center"], ["second", "Second center"], ["third", "Third center"], ["both", "Second + third"]].map(([v, l]) => (
                       <button key={v} className={"mode" + (c23Mode === v ? " on" : "")} onClick={() => setC23Mode(v)}>{l}</button>
                     ))}
                   </div>
                 </div>
-                <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
-                  Scramble a solved puzzle with white on top — the scramble leaves the white center and
-                  both bottom triples solved{c23Mode === "third" ? ", plus one more center (named under the diagram)" : ""},
-                  so you start exactly at the {c23Mode === "third" ? "third" : "second"}-center step.
-                  Then follow a {"{X,Y}"} bracket into the solving hold (white center on BL) and form
-                  {c23Mode === "second" ? " one more center — around any of the three remaining candidate faces —" :
-                   c23Mode === "third" ? " one more center — any two formed in total count —" :
-                   " two more centers — any two of the three candidates —"} with R, U, Rw and BL turns,
-                  ending with the triples back in place. The diagram shows only the pieces that matter.
-                </div>
-                <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
-                  Each scramble shows its exact optimal turn count as the target. {"{X,Y}"} brackets are
-                  free re-orientations — count only the turns. Deep scrambles can take a few seconds to
-                  prepare. Solve, then pick how many turns you used to see whether you matched the optimal.
-                </div>
+                {c23Mode === "first" ? (
+                  <>
+                    <div className="chips" style={{ alignItems: "center", marginTop: 8 }}>
+                      <span className="grouplabel">counting</span>
+                      <div className="modes">
+                        <button className={"mode" + (fcMetric === "token" ? " on" : "")}
+                          onClick={() => { setFcMetric("token"); if (fcTarget > fcGn("token")) setFcTarget(0); }}>slice turns = 1 move</button>
+                        <button className={"mode" + (fcMetric === "native" ? " on" : "")}
+                          onClick={() => { setFcMetric("native"); }}>face turns only</button>
+                      </div>
+                    </div>
+                    <div className="chips" style={{ alignItems: "center" }}>
+                      <span className="grouplabel">optimal length</span>
+                      <div className="modes">
+                        <button className={"mode" + (fcTarget === 0 ? " on" : "")} onClick={() => setFcTarget(0)}>any</button>
+                        {Array.from({ length: fcGn(fcMetric) }, (_, i) => i + 1).map((n) => {
+                          const FC = fcRef.current;
+                          const hist = FC ? (fcMetric === "native" ? FC.hist16 : FC.hist24) : null;
+                          const pct = hist ? (100 * hist[n] / FC.N) : null;
+                          return (
+                            <button key={n} className={"mode" + (fcTarget === n ? " on" : "")}
+                              title={pct != null ? pct.toFixed(pct < 1 ? 2 : 1) + "% of positions" : ""}
+                              onClick={() => setFcTarget(n)}>{n}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
+                      Scramble with white on top — the short scramble&apos;s only job is to displace the
+                      white center, and the diagram shows only its pieces. Build the white center: the
+                      three white-sticker edges plus the three white triangles, grouped into a hexagon
+                      around any face where white can live. Each scramble shows its exact optimal length
+                      as the target. Solve it, then pick how many moves you used to see whether you
+                      matched the optimal.
+                      God&apos;s number for this step is {fcMetric === "native" ? "7 face turns" : "6 moves counting a slice turn as one"}
+                      {fcMetric === "native" ? "" : " (7 in pure face turns)"}: no scramble ever needs more.
+                    </div>
+                    <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
+                      Watch for the false solve: the mirror formation (all six white stickers in place but
+                      the side colors in reverse order around the hexagon) can never survive a full solve,
+                      and it sits at exactly God&apos;s number from a real center.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
+                      Scramble a solved puzzle with white on top — the scramble leaves the white center and
+                      both bottom triples solved{c23Mode === "third" ? ", plus one more center (named under the diagram)" : ""},
+                      so you start exactly at the {c23Mode === "third" ? "third" : "second"}-center step.
+                      Then follow a {"{X,Y}"} bracket into the solving hold (white center on BL) and form
+                      {c23Mode === "second" ? " one more center — around any of the three remaining candidate faces —" :
+                       c23Mode === "third" ? " one more center — any two formed in total count —" :
+                       " two more centers — any two of the three candidates —"} with R, U, Rw and BL turns,
+                      ending with the triples back in place. The diagram shows only the pieces that matter.
+                    </div>
+                    <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
+                      Each scramble shows its exact optimal turn count as the target. {"{X,Y}"} brackets are
+                      free re-orientations — count only the turns. Deep scrambles can take a few seconds to
+                      prepare. Solve, then pick how many turns you used to see whether you matched the optimal.
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -845,59 +895,6 @@ export default function FtoTrainer() {
                   Each scramble shows its exact optimal turn count as the target. {"{X,Y}"} brackets are
                   free re-orientations — count only the turns. Solve, then pick how many turns you used
                   to see whether you matched the optimal.
-                </div>
-              </div>
-            )}
-          </div>
-        ) : mode === "fc" ? (
-          <div className="card setupcard">
-            <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
-              <strong>Setup</strong>
-              <span className="setupsum">
-                white center · optimal length {fcTarget === 0 ? "any" : fcTarget}
-                {fcMetric === "native" ? " · face turns" : ""}
-              </span>
-              <span className="chev">{setupOpen ? "▾" : "▸"}</span>
-            </button>
-            {setupOpen && (
-              <div className="setupbody">
-                <div className="chips" style={{ alignItems: "center" }}>
-                  <span className="grouplabel">counting</span>
-                  <div className="modes">
-                    <button className={"mode" + (fcMetric === "token" ? " on" : "")}
-                      onClick={() => { setFcMetric("token"); if (fcTarget > fcGn("token")) setFcTarget(0); }}>slice turns = 1 move</button>
-                    <button className={"mode" + (fcMetric === "native" ? " on" : "")}
-                      onClick={() => { setFcMetric("native"); }}>face turns only</button>
-                  </div>
-                </div>
-                <div className="chips" style={{ alignItems: "center" }}>
-                  <span className="grouplabel">optimal length</span>
-                  <div className="modes">
-                    <button className={"mode" + (fcTarget === 0 ? " on" : "")} onClick={() => setFcTarget(0)}>any</button>
-                    {Array.from({ length: fcGn(fcMetric) }, (_, i) => i + 1).map((n) => {
-                      const FC = fcRef.current;
-                      const hist = FC ? (fcMetric === "native" ? FC.hist16 : FC.hist24) : null;
-                      const pct = hist ? (100 * hist[n] / FC.N) : null;
-                      return (
-                        <button key={n} className={"mode" + (fcTarget === n ? " on" : "")}
-                          title={pct != null ? pct.toFixed(pct < 1 ? 2 : 1) + "% of positions" : ""}
-                          onClick={() => setFcTarget(n)}>{n}</button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
-                  Scramble with white on top, then build the white center: the three white-sticker
-                  edges plus the three white triangles, grouped into a hexagon around any face where
-                  white can live. Each scramble shows its exact optimal length as the target. Solve it,
-                  then pick how many moves you used to see whether you matched the optimal.
-                  God&apos;s number for this step is {fcMetric === "native" ? "7 face turns" : "6 moves counting a slice turn as one"}
-                  {fcMetric === "native" ? "" : " (7 in pure face turns)"}: no scramble ever needs more.
-                </div>
-                <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
-                  Watch for the false solve: the mirror formation (all six white stickers in place but
-                  the side colors in reverse order around the hexagon) can never survive a full solve,
-                  and it sits at exactly God&apos;s number from a real center.
                 </div>
               </div>
             )}
@@ -967,18 +964,15 @@ export default function FtoTrainer() {
         ) : !current ? (
           <div className="stage" style={{ cursor: "default" }}>
             <div className="empty" style={{ padding: "40px 0", textAlign: "center" }}>
-              {mode === "fc"
-                ? (fcStatus.startsWith("error") ? "Couldn’t build the first-center tables: " + fcStatus.slice(7)
-                  : fcStatus === "ready" ? "Couldn’t generate a scramble. Try another optimal length."
-                  : "Building the first-center distance tables… (a moment, first time only)")
-                : mode === "f2t"
+              {mode === "f2t"
                 ? (f2tStatus.startsWith("error") ? "Couldn’t build the triples tables: " + f2tStatus.slice(7)
                   : f2tStatus === "ready" ? "Couldn’t generate a scramble — try again."
                   : "Building the triples distance tables… (a few seconds, first time only)")
                 : mode === "c23"
                 ? (c23Status.startsWith("error") ? "Couldn’t build the centers tables: " + c23Status.slice(7)
-                  : c23Status !== "ready" ? "Building the centers distance tables… (a few seconds, first time only)"
+                  : c23Status !== "ready" ? "Building the centers distance tables… (a moment, first time only)"
                   : c23Busy ? "Searching for an optimal scramble… (deep ones take a few seconds)"
+                  : c23Mode === "first" ? "Couldn’t generate a scramble. Try another optimal length."
                   : "Couldn’t generate a scramble — try again.")
                 : entries.length === 0
                 ? (scope === "learning" ? "Nothing left to learn in this selection — every enabled case is marked known."
@@ -1076,16 +1070,8 @@ export default function FtoTrainer() {
             )}
             {phase === "stopped" && last ? (
               <div className="analysis" onPointerDown={(e) => e.stopPropagation()}>
-                {last.drill.kind === "fc" ? (
-                  <FcSolutions drill={last.drill} />
-                ) : last.drill.kind === "f2t" ? (
-                  <F2tSolutions drill={last.drill} />
-                ) : (
-                  <>
-                    {last.drill.c.recognition ? <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>{last.drill.c.recognition}</div> : null}
-                    <AlgList drill={last.drill} />
-                  </>
-                )}
+                {last.drill.c.recognition ? <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>{last.drill.c.recognition}</div> : null}
+                <AlgList drill={last.drill} />
               </div>
             ) : null}
           </div>
@@ -1097,9 +1083,12 @@ export default function FtoTrainer() {
           <div className="card">
             <h3>Optimal-solve rate</h3>
             {(() => {
-              const NAMES = { second: "second center", third: "third center", both: "both centers" };
-              const rows = ["second", "third", "both"].filter((k) => c23Stats[k] && c23Stats[k].n)
-                .map((k) => ({ k, ...c23Stats[k] }));
+              const NAMES = { second: "second center", third: "third center", both: "second + third" };
+              const rows = [];
+              for (const [k, name] of [["token", "first center"], ["native", "first center (face turns)"]])
+                if (fcStats[k] && fcStats[k].n) rows.push({ k: "first-" + k, name, ...fcStats[k] });
+              for (const k of ["second", "third", "both"])
+                if (c23Stats[k] && c23Stats[k].n) rows.push({ k, name: NAMES[k], ...c23Stats[k] });
               if (!rows.length) return <div className="empty">Solve a few and your optimal-solve rate lands here, split by drill.</div>;
               return (
                 <table>
@@ -1107,7 +1096,7 @@ export default function FtoTrainer() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.k}>
-                        <td className="name">{NAMES[r.k]}</td>
+                        <td className="name">{r.name}</td>
                         <td className="mono">{r.n}</td>
                         <td className="mono">{r.opt}</td>
                         <td className="mono">{Math.round((100 * r.opt) / r.n)}%</td>
@@ -1167,47 +1156,6 @@ export default function FtoTrainer() {
             ) : (
               <div className="times">
                 {f2tSession.slice(-24).map((r, i) => (
-                  <span key={i} className="timepill" title={"optimal was " + r.optimal}
-                    style={{ "--cdot": r.correct ? "#27975a" : "#cf4d44" }}>
-                    {r.correct ? "✓ " + r.count : (r.more ? r.count + "+" : r.count)}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        ) : mode === "fc" ? (
-        <div className="panelrow">
-          <div className="card">
-            <h3>Optimal-solve rate</h3>
-            {(() => {
-              const rows = ["token", "native"].filter((k) => fcStats[k] && fcStats[k].n)
-                .map((k) => ({ k, ...fcStats[k] }));
-              if (!rows.length) return <div className="empty">Solve a few and your optimal-solve rate lands here, split by counting method.</div>;
-              return (
-                <table>
-                  <thead><tr><th>Counting</th><th>Solves</th><th>Optimal</th><th>Rate</th></tr></thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <tr key={r.k}>
-                        <td className="name">{r.k === "native" ? "face turns" : "slice = 1 move"}</td>
-                        <td className="mono">{r.n}</td>
-                        <td className="mono">{r.opt}</td>
-                        <td className="mono">{Math.round((100 * r.opt) / r.n)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              );
-            })()}
-          </div>
-          <div className="card">
-            <h3>Session</h3>
-            {fcSession.length === 0 ? (
-              <div className="empty">Each solve lands here — green if you matched the optimal.</div>
-            ) : (
-              <div className="times">
-                {fcSession.slice(-24).map((r, i) => (
                   <span key={i} className="timepill" title={"optimal was " + r.optimal}
                     style={{ "--cdot": r.correct ? "#27975a" : "#cf4d44" }}>
                     {r.correct ? "✓ " + r.count : (r.more ? r.count + "+" : r.count)}
