@@ -818,6 +818,79 @@
     };
   }
 
+  // ---------------- first-two-triples trainer tables (step trainers v2) ----------------
+  // The F2T drill's target is the TRUE turn count: re-grips are free
+  // rotations, and with free re-grips every sealed native move
+  // ({U, L, R, D, B}± in the method frame) is exactly ONE hold token from
+  // every grip — so the fair, unbeatable optimal is plain BFS distance over
+  // those 10 moves. That is NOT the solver's search metric: its +1 reading
+  // penalty on re-grip composites can prefer a plainer word one turn longer,
+  // and a table in that metric would overestimate here (inadmissible). These
+  // are the same goal sets as the solver's rA/rC families, rebuilt in the
+  // 10-move turn metric; UNREACHED marks sealed-unreachable coordinates
+  // (cannot occur for drill states, which sealed walks generate).
+  function bfsTableSealed(n, next, goals, moves) {
+    const dist = new Int8Array(n).fill(-1);
+    let frontier = [];
+    for (const g of goals) if (dist[g] < 0) { dist[g] = 0; frontier.push(g); }
+    let d = 0;
+    while (frontier.length) {
+      const nf = [];
+      for (const s of frontier) {
+        const row = s * 16;
+        for (const m of moves) {
+          const t = next[row + m];
+          if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
+        }
+      }
+      d++;
+      frontier = nf;
+    }
+    for (let i = 0; i < n; i++) if (dist[i] < 0) dist[i] = UNREACHED;
+    return dist;
+  }
+
+  const KEY_F2T = 'fto-f2t-v1';
+  const F2T_FAMS = [['dA', Object.keys(A_SETS), NPAT], ['dC', Object.keys(C_SETS), NCORNER]];
+  // the bundle carries the codecs the drill layer indexes with (the
+  // buildFirstCenter convention: consumers get one self-sufficient object)
+  const f2tShape = (bl) => ({ BL: bl, dA: {}, dC: {}, encA, cornerIndex });
+  async function buildF2T(E, tick) {
+    const bl = makeBLHold(E);
+    const out = f2tShape(bl);
+    const mA = await buildOrbitMtable(E, 'A', tick || null);
+    for (const key of Object.keys(A_SETS))
+      out.dA[key] = bfsTableSealed(NPAT, mA, orbitGoals('A', A_SETS[key]), bl.SEALED_MOVES);
+    const mC = buildCornerMtable(E);
+    for (const key of Object.keys(C_SETS))
+      out.dC[key] = bfsTableSealed(NCORNER, mC, cornerGoals(C_SETS[key]), bl.SEALED_MOVES);
+    return out;
+  }
+  async function loadOrBuildF2T(E, tick) {
+    const cached = await idbGet(KEY_F2T);
+    if (cached && cached.v === KEY_F2T) {
+      try {
+        const out = f2tShape(makeBLHold(E));
+        let ok = true;
+        for (const [fam, keys, n] of F2T_FAMS) {
+          for (const k of keys) {
+            out[fam][k] = new Int8Array(cached[fam][k]);
+            if (out[fam][k].length !== n) ok = false;
+          }
+        }
+        if (ok) return out;
+      } catch (e) { /* fall through to rebuild */ }
+    }
+    const out = await buildF2T(E, tick);
+    const payload = { v: KEY_F2T };
+    for (const [fam, keys] of F2T_FAMS) {
+      payload[fam] = {};
+      for (const k of keys) payload[fam][k] = out[fam][k].buffer;
+    }
+    idbPut(KEY_F2T, payload);
+    return out;
+  }
+
   module.exports = {
     idbGet, idbPut, idbDel, KEY_PDB, UNREACHED,
     NPAT, NCORNER, NE3, NE6, NMASK, NH1, B_SETS, A_SETS, C_SETS, HEX_EDGES, E6_PAIRS,
@@ -826,6 +899,7 @@
     permRank, evenPermUnrank, cornerIndex, cornerUnpack,
     edgePlaceIndex, edgePlaceUnrank,
     makeBLHold, buildPDBs, loadOrBuildPDBs, buildFirstCenter,
+    KEY_F2T, buildF2T, loadOrBuildF2T,
   };
   window.OOTables = module.exports;
 })();

@@ -10,7 +10,11 @@ import { createCore, SEP } from "./fto-core.mjs";
 //   optimal solutions on reveal (exact BFS tables from js/tables.js,
 //   built on demand in well under a second; God's number 6 counting slice
 //   turns as one move, 7 in pure face turns — pinned in test-trainer).
-// Further step trainers (triples, second center, …) follow this pattern;
+//   Triples (first two triples): short white-center-sealing scrambles, a
+//   first/second/both selector, masked diagram (white center + triple
+//   pieces only), exact optimal turn target, solver-style {R,U,Rw} reveal
+//   lines (tables via OOTables.loadOrBuildF2T, IndexedDB-cached).
+// Further step trainers (second center, …) follow this pattern;
 // full-solve/recognition/one-look modes are scoped with the user.
 // ============================================================
 
@@ -40,9 +44,10 @@ const shuffled = (a) => {
 // rotations, T tips
 const isRotTok = (t) => /^\{/.test(t) || /o'?2?$/.test(t) || /^T2?'?$/.test(t);
 
-// diagram through the shared renderer (front/back diamond views)
-function Net({ state, w }) {
-  const html = R && state ? R.netSVG(state, w || 240, { thumb: true }) : "";
+// diagram through the shared renderer (front/back diamond views); mask =
+// facelet indices to neutral-fill (step trainers show only their pieces)
+function Net({ state, w, mask }) {
+  const html = R && state ? R.netSVG(state, w || 240, { thumb: true, mask }) : "";
   return <div className="skewbnet" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -79,6 +84,14 @@ export default function FtoTrainer() {
   const [fcTarget, setFcTarget] = useState(0);        // 0 = any, else exact optimal length
   const [fcStats, setFcStats] = useState({});         // metric -> { n, opt } (persisted)
   const [fcSession, setFcSession] = useState([]);     // recent [{ count, more, optimal, correct }]
+
+  // ---------- first-two-triples step trainer ----------
+  const f2tRef = useRef(null);                        // OOTables.loadOrBuildF2T bundle
+  const f2tSolsCache = useRef(null);                  // { drill, res } — reveal memo
+  const [f2tStatus, setF2tStatus] = useState("idle"); // idle | building | ready | error
+  const [f2tMode, setF2tMode] = useState("both");     // first | second | both
+  const [f2tStats, setF2tStats] = useState({});       // mode -> { n, opt } (persisted)
+  const [f2tSession, setF2tSession] = useState([]);   // recent [{ count, more, optimal, correct }]
 
   const model = () => modelRef.current;
   const subsetOn = useCallback((key) => {
@@ -122,7 +135,7 @@ export default function FtoTrainer() {
             if (Array.isArray(d.caseOff)) setCaseOff(new Set(d.caseOff.filter((x) => typeof x === "string")));
             if (Array.isArray(d.caseKnown)) setCaseKnown(new Set(d.caseKnown.filter((x) => typeof x === "string")));
             if (["all", "learning", "known"].includes(d.scope)) setScope(d.scope);
-            if (["drill", "recap", "fc"].includes(d.mode)) setMode(d.mode);
+            if (["drill", "recap", "fc", "f2t"].includes(d.mode)) setMode(d.mode);
             if (typeof d.setupOpen === "boolean") setSetupOpen(d.setupOpen);
             if (["token", "native"].includes(d.fcMetric)) setFcMetric(d.fcMetric);
             if (Number.isInteger(d.fcTarget) && d.fcTarget >= 0 && d.fcTarget <= 7) setFcTarget(d.fcTarget);
@@ -133,6 +146,15 @@ export default function FtoTrainer() {
                 if (st && typeof st.n === "number" && typeof st.opt === "number") fs[k] = { n: st.n, opt: st.opt };
               }
               setFcStats(fs);
+            }
+            if (["first", "second", "both"].includes(d.f2tMode)) setF2tMode(d.f2tMode);
+            if (d.f2tStats && typeof d.f2tStats === "object") {
+              const fs = {};
+              for (const k of ["first", "second", "both"]) {
+                const st = d.f2tStats[k];
+                if (st && typeof st.n === "number" && typeof st.opt === "number") fs[k] = { n: st.n, opt: st.opt };
+              }
+              setF2tStats(fs);
             }
             if (d.caseStats && typeof d.caseStats === "object") {
               const cs = {};
@@ -166,10 +188,10 @@ export default function FtoTrainer() {
     try {
       window.storage.set(STORE_KEY, JSON.stringify({
         subsetSel, groupSel, caseOff: [...caseOff], caseKnown: [...caseKnown],
-        scope, mode, setupOpen, caseStats, fcMetric, fcTarget, fcStats, ...over,
+        scope, mode, setupOpen, caseStats, fcMetric, fcTarget, fcStats, f2tMode, f2tStats, ...over,
       })).catch(() => {});
     } catch (e) {}
-  }, [subsetSel, groupSel, caseOff, caseKnown, scope, mode, setupOpen, caseStats, fcMetric, fcTarget, fcStats]);
+  }, [subsetSel, groupSel, caseOff, caseKnown, scope, mode, setupOpen, caseStats, fcMetric, fcTarget, fcStats, f2tMode, f2tStats]);
   useEffect(() => {
     if (!loadedStore.current) return;
     clearTimeout(saveTimer.current);
@@ -221,6 +243,26 @@ export default function FtoTrainer() {
     return metric === "native" ? 7 : 6;   // the pinned values, until the build lands
   };
 
+  // ---------- first-two-triples tables (IndexedDB-cached; built once) ----------
+  // Same cancellation discipline as the fc effect, plus an async build: the
+  // cleanup flag keeps a slow build from resurrecting a left mode.
+  useEffect(() => {
+    if (mode !== "f2t" || f2tRef.current) return;
+    setF2tStatus("building");
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      try {
+        const FT = await window.OOTables.loadOrBuildF2T(E);
+        if (cancelled) return;
+        f2tRef.current = FT;
+        setF2tStatus("ready");
+      } catch (e) {
+        if (!cancelled) setF2tStatus("error: " + String((e && e.message) || e));
+      }
+    }, 30);
+    return () => { cancelled = true; clearTimeout(id); if (!f2tRef.current) setF2tStatus("idle"); };
+  }, [mode]);
+
   // ---------- problem generation ----------
   const nextDrill = useCallback(() => {
     if (!entries.length) { setCurrent(null); return; }
@@ -243,6 +285,14 @@ export default function FtoTrainer() {
     });
   }, [fcMetric, fcTarget]);
 
+  const nextF2t = useCallback(() => {
+    const FT = f2tRef.current;
+    if (!FT) { setCurrent(null); return; }
+    const d = core.makeF2tDrill(FT, { mode: f2tMode });
+    if (!d) { setCurrent(null); return; }
+    setCurrent({ ...d, subset: "F2T", uid: "F2T" + SEP + d.mode + "-" + d.optimal });
+  }, [f2tMode]);
+
   const startRecap = useCallback(() => {
     const queue = shuffled(entries);
     setRecap({ queue, idx: 0 });
@@ -251,6 +301,7 @@ export default function FtoTrainer() {
 
   const advance = useCallback(() => {
     if (mode === "fc") { nextFc(); return; }
+    if (mode === "f2t") { nextF2t(); return; }
     if (mode === "drill") { nextDrill(); return; }
     setRecap((r) => {
       if (!r) return r;
@@ -259,7 +310,7 @@ export default function FtoTrainer() {
       setCurrent(core.makeDrill(r.queue[idx]));
       return { ...r, idx };
     });
-  }, [mode, nextDrill, nextFc]);
+  }, [mode, nextDrill, nextFc, nextF2t]);
 
   // Regenerate on boot/mode switch (stage reset) and on pool edits. A pool
   // edit only swaps the PENDING problem — it must not clear a stop-screen
@@ -270,14 +321,15 @@ export default function FtoTrainer() {
     if (!ready) return;
     const modeSwitch = genMode.current !== mode;
     genMode.current = mode;
-    // First center has no timer: any regeneration (new metric/target, or the
+    // Step trainers have no timer: any regeneration (new options, or the
     // build landing) resets to a fresh scramble awaiting an answer.
     if (mode === "fc") { setPhase("ready"); setLast(null); nextFc(); return; }
+    if (mode === "f2t") { setPhase("ready"); setLast(null); nextF2t(); return; }
     if (modeSwitch || phase === "running") { setPhase("ready"); setLast(null); }
     if (mode === "drill") nextDrill();
     else startRecap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, mode, entries, fcStatus, fcMetric, fcTarget]);
+  }, [ready, mode, entries, fcStatus, fcMetric, fcTarget, f2tStatus, f2tMode]);
 
   // ---------- timer ----------
   const tick = useCallback(() => {
@@ -315,34 +367,43 @@ export default function FtoTrainer() {
     startTimer();
   }, [ready, phase, startTimer, stopTimer]);
 
-  // ---------- first-center answer flow (no timer: self-reported move count) ----------
-  // The buttons offered for a drill whose optimal is `opt`: the optimal itself
-  // and a few above, then an "opt+4 or more" bucket. There is no below-optimal
-  // button — the optimal is proven, so you cannot legitimately beat it.
+  // ---------- step-trainer answer flow (no timer: self-reported move count) ----------
+  // Shared by the first-center and first-two-triples modes. The buttons
+  // offered for a drill whose optimal is `opt`: the optimal itself and a few
+  // above, then an "opt+4 or more" bucket. There is no below-optimal button —
+  // the optimal is proven, so you cannot legitimately beat it.
+  const isStepKind = (d) => !!d && (d.kind === "fc" || d.kind === "f2t");
   const fcAnswerButtons = (opt) => {
     const out = [];
     for (let k = 0; k <= 3; k++) out.push({ count: opt + k, label: String(opt + k), more: false });
     out.push({ count: opt + 4, label: opt + 4 + "+", more: true });
     return out;
   };
-  const answerFc = (count, more) => {
+  const answerStep = (count, more) => {
     const d = current;
-    if (!d || d.kind !== "fc" || phase === "stopped") return;
+    if (!isStepKind(d) || phase === "stopped") return;
     const correct = !more && count === d.optimal;
     setLast({ drill: d, answer: count, more: !!more, optimal: d.optimal, correct });
     setPhase("stopped");
-    setFcStats((s) => {
-      const prev = s[d.metric] || { n: 0, opt: 0 };
-      return { ...s, [d.metric]: { n: prev.n + 1, opt: prev.opt + (correct ? 1 : 0) } };
-    });
-    setFcSession((ss) => [...ss.slice(-49), { count, more: !!more, optimal: d.optimal, correct }]);
+    const row = { count, more: !!more, optimal: d.optimal, correct };
+    const bump = (s, key) => {
+      const prev = s[key] || { n: 0, opt: 0 };
+      return { ...s, [key]: { n: prev.n + 1, opt: prev.opt + (correct ? 1 : 0) } };
+    };
+    if (d.kind === "fc") {
+      setFcStats((s) => bump(s, d.metric));
+      setFcSession((ss) => [...ss.slice(-49), row]);
+    } else {
+      setF2tStats((s) => bump(s, d.mode));
+      setF2tSession((ss) => [...ss.slice(-49), row]);
+    }
   };
-  const revealFc = () => {                       // "I'm stuck" — show solutions, not an attempt
-    if (!current || current.kind !== "fc" || phase === "stopped") return;
+  const revealStep = () => {                     // "I'm stuck" — show solutions, not an attempt
+    if (!isStepKind(current) || phase === "stopped") return;
     setLast({ drill: current, answer: null, more: false, optimal: current.optimal, correct: false });
     setPhase("stopped");
   };
-  const advanceFc = () => { setPhase("ready"); setLast(null); nextFc(); };
+  const advanceStep = () => { setPhase("ready"); setLast(null); advance(); };
 
   // ---------- keyboard ----------
   useEffect(() => {
@@ -351,17 +412,17 @@ export default function FtoTrainer() {
       const tag = e.target && e.target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (caseBrowser) { if (e.code === "Escape") setCaseBrowser(null); return; }
-      if (mode === "fc") {
+      if (mode === "fc" || mode === "f2t") {
         if (phase === "stopped") {
-          if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); advanceFc(); }
+          if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); advanceStep(); }
           return;
         }
         const dm = /^(?:Digit|Numpad)([0-9])$/.exec(e.code);
-        if (dm && current && current.kind === "fc") {
+        if (dm && isStepKind(current)) {
           const d = +dm[1], opt = current.optimal;
-          if (d >= opt) { e.preventDefault(); answerFc(d >= opt + 4 ? opt + 4 : d, d >= opt + 4); }
+          if (d >= opt) { e.preventDefault(); answerStep(d >= opt + 4 ? opt + 4 : d, d >= opt + 4); }
         }
-        return;   // First center never drives the timer
+        return;   // step trainers never drive the timer
       }
       if (phase === "stopped" && e.code === "KeyK" && last && last.drill.kind !== "fc") {
         e.preventDefault();
@@ -429,8 +490,10 @@ export default function FtoTrainer() {
     setSession([]);
     setFcStats({});
     setFcSession([]);
+    setF2tStats({});
+    setF2tSession([]);
     setLast(null);
-    persist({ caseStats: {}, fcStats: {} });
+    persist({ caseStats: {}, fcStats: {}, f2tStats: {} });
   };
 
   // ---------- alg list for a finished drill ----------
@@ -480,6 +543,37 @@ export default function FtoTrainer() {
             <span className="ychip mono">{"→ " + l.landing}</span>
             <AlgText text={l.text} />
             {l.sliceCount ? <span className="ratetag">{l.sliceCount} slice{l.sliceCount === 1 ? "" : "s"}</span> : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ---------- optimal solutions for a finished first-two-triples drill ----------
+  // Solver-style lines: one {X,Y} entry bracket into the Bencisco hold, then
+  // R / U / Rw tokens with relative {X,Y} re-grips where the grip walk needs
+  // them. Every line is re-proved end-to-end before display (f2tSolutions
+  // drops anything unproved); brackets are free re-orientations — the target
+  // counts turns only. Cached per drill (same reason as FcSolutions).
+  function F2tSolutions({ drill }) {
+    const FT = f2tRef.current;
+    if (!FT) return null;
+    let res;
+    if (f2tSolsCache.current && f2tSolsCache.current.drill === drill) res = f2tSolsCache.current.res;
+    else { res = core.f2tSolutions(FT, drill, 10); f2tSolsCache.current = { drill, res }; }
+    return (
+      <div className="alglist">
+        <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>
+          {res.capped ? res.total + "+" : res.total} optimal solution{res.total === 1 && !res.capped ? "" : "s"}
+          {res.total > res.lines.length || res.capped ? " · showing " + res.lines.length : ""}
+          {" · {X,Y} brackets are free re-orientations"}
+          {drill.goal === "either" ? " · chip = which triple the line solves" : ""}
+        </div>
+        {res.lines.map((l, i) => (
+          <div key={i} className="algrow">
+            <span className={"ychip mono" + (l.corner ? "" : " blank")}>{l.corner ? "→ " + l.corner : ""}</span>
+            <AlgText text={l.text} />
+            {l.brackets ? <span className="ratetag">{l.brackets} rotation{l.brackets === 1 ? "" : "s"}</span> : null}
           </div>
         ))}
       </div>
@@ -561,11 +655,11 @@ export default function FtoTrainer() {
 
         <div className="chips" style={{ alignItems: "center" }}>
           <div className="modes">
-            {[["drill", "Drill"], ["recap", "Recap"], ["fc", "First center"]].map(([v, l]) => (
+            {[["drill", "Drill"], ["recap", "Recap"], ["fc", "First center"], ["f2t", "Triples"]].map(([v, l]) => (
               <button key={v} className={"mode" + (mode === v ? " on" : "")} onClick={() => setMode(v)}>{l}</button>
             ))}
           </div>
-          {mode !== "fc" && <>
+          {mode !== "fc" && mode !== "f2t" && <>
             <span className="grouplabel">practice</span>
             <div className="modes">
               {[["all", "All"], ["learning", "Learning"], ["known", "Known"]].map(([v, l]) => (
@@ -575,7 +669,44 @@ export default function FtoTrainer() {
           </>}
         </div>
 
-        {mode === "fc" ? (
+        {mode === "f2t" ? (
+          <div className="card setupcard">
+            <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
+              <strong>Setup</strong>
+              <span className="setupsum">
+                first two triples · {f2tMode === "first" ? "first triple" : f2tMode === "second" ? "second triple" : "both triples"}
+              </span>
+              <span className="chev">{setupOpen ? "▾" : "▸"}</span>
+            </button>
+            {setupOpen && (
+              <div className="setupbody">
+                <div className="chips" style={{ alignItems: "center" }}>
+                  <span className="grouplabel">solve</span>
+                  <div className="modes">
+                    {[["first", "First triple"], ["second", "Second triple"], ["both", "Both triples"]].map(([v, l]) => (
+                      <button key={v} className={"mode" + (f2tMode === v ? " on" : "")} onClick={() => setF2tMode(v)}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
+                  Scramble a solved puzzle with white on top — the short scramble never touches the
+                  white center, so you start exactly at the triples step. Then follow a {"{X,Y}"} bracket
+                  into the solving hold (white center on BL) and solve
+                  {f2tMode === "first" ? " one bottom triple — whichever is easier" :
+                   f2tMode === "second" ? " the remaining bottom triple (the other one is already solved)" :
+                   " both bottom triples"} with R, U and Rw turns.
+                  The diagram shows only the pieces that matter: the white center, the two bottom
+                  corners, and every candidate source triangle.
+                </div>
+                <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
+                  Each scramble shows its exact optimal turn count as the target. {"{X,Y}"} brackets are
+                  free re-orientations — count only the turns. Solve, then pick how many turns you used
+                  to see whether you matched the optimal.
+                </div>
+              </div>
+            )}
+          </div>
+        ) : mode === "fc" ? (
           <div className="card setupcard">
             <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
               <strong>Setup</strong>
@@ -697,6 +828,10 @@ export default function FtoTrainer() {
                 ? (fcStatus.startsWith("error") ? "Couldn’t build the first-center tables: " + fcStatus.slice(7)
                   : fcStatus === "ready" ? "Couldn’t generate a scramble. Try another optimal length."
                   : "Building the first-center distance tables… (a moment, first time only)")
+                : mode === "f2t"
+                ? (f2tStatus.startsWith("error") ? "Couldn’t build the triples tables: " + f2tStatus.slice(7)
+                  : f2tStatus === "ready" ? "Couldn’t generate a scramble — try again."
+                  : "Building the triples distance tables… (a few seconds, first time only)")
                 : entries.length === 0
                 ? (scope === "learning" ? "Nothing left to learn in this selection — every enabled case is marked known."
                   : scope === "known" ? "No cases marked known yet in this selection."
@@ -704,15 +839,22 @@ export default function FtoTrainer() {
                 : "Couldn’t generate a scramble — try other cases."}
             </div>
           </div>
-        ) : current.kind === "fc" ? (
+        ) : isStepKind(current) ? (
           <div className="stage" style={{ cursor: "default" }}>
             <div className="stagegrid">
               <div className="scramble">{current.scramble}</div>
-              <Net state={current.state} w={240} />
+              <Net state={current.state} w={240} mask={current.mask} />
             </div>
             <div className="hint" style={{ marginTop: 6 }}>
-              solve the white center — target <strong>{current.optimal}</strong> move{current.optimal === 1 ? "" : "s"}
-              {current.metric === "native" ? " (face turns)" : ""}
+              {current.kind === "fc" ? <>
+                solve the white center — target <strong>{current.optimal}</strong> move{current.optimal === 1 ? "" : "s"}
+                {current.metric === "native" ? " (face turns)" : ""}
+              </> : <>
+                solve {current.mode === "first" ? "either bottom triple"
+                  : current.mode === "second" ? "the remaining bottom triple"
+                  : "both bottom triples"} — target <strong>{current.optimal}</strong> turn{current.optimal === 1 ? "" : "s"}
+                {current.mode === "second" ? " · the " + (current.presolved === 3 ? "back" : "right") + " corner triple is already solved" : ""}
+              </>}
             </div>
             {phase === "stopped" && last ? (
               <>
@@ -731,19 +873,21 @@ export default function FtoTrainer() {
                     : "Not optimal — you used " + last.answer + ", the best is " + last.optimal + "."}
                 </div>
                 <div className="analysis" onPointerDown={(e) => e.stopPropagation()}>
-                  <FcSolutions drill={last.drill} />
+                  {last.drill.kind === "fc" ? <FcSolutions drill={last.drill} /> : <F2tSolutions drill={last.drill} />}
                 </div>
-                <button className="restart" onClick={advanceFc}>Next scramble</button>
+                <button className="restart" onClick={advanceStep}>Next scramble</button>
               </>
             ) : (
               <div style={{ textAlign: "center", marginTop: 14 }}>
-                <div className="hint" style={{ marginBottom: 8 }}>How many moves did your solve take?</div>
+                <div className="hint" style={{ marginBottom: 8 }}>
+                  How many {current.kind === "f2t" ? "turns" : "moves"} did your solve take?
+                </div>
                 <div className="chips" style={{ justifyContent: "center" }}>
                   {fcAnswerButtons(current.optimal).map((b) => (
-                    <button key={b.count} className="mode" onClick={() => answerFc(b.count, b.more)}>{b.label}</button>
+                    <button key={b.count} className="mode" onClick={() => answerStep(b.count, b.more)}>{b.label}</button>
                   ))}
                 </div>
-                <button className="preset" style={{ marginTop: 10 }} onClick={revealFc}>I’m stuck — show the solutions</button>
+                <button className="preset" style={{ marginTop: 10 }} onClick={revealStep}>I’m stuck — show the solutions</button>
               </div>
             )}
           </div>
@@ -761,7 +905,7 @@ export default function FtoTrainer() {
                 </span>
                 <span className="casename">{last.drill.c.name}</span>
                 {last.drill.c.group ? <span className="bartag">{last.drill.c.group}</span> : null}
-                {last.drill.kind !== "fc" && (() => {
+                {!isStepKind(last.drill) && (() => {
                   const k = last.drill.uid;
                   const isK = caseKnown.has(k);
                   return (
@@ -779,6 +923,8 @@ export default function FtoTrainer() {
               <div className="analysis" onPointerDown={(e) => e.stopPropagation()}>
                 {last.drill.kind === "fc" ? (
                   <FcSolutions drill={last.drill} />
+                ) : last.drill.kind === "f2t" ? (
+                  <F2tSolutions drill={last.drill} />
                 ) : (
                   <>
                     {last.drill.c.recognition ? <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>{last.drill.c.recognition}</div> : null}
@@ -791,7 +937,49 @@ export default function FtoTrainer() {
         )}
 
         {/* ---------- stats + session ---------- */}
-        {mode === "fc" ? (
+        {mode === "f2t" ? (
+        <div className="panelrow">
+          <div className="card">
+            <h3>Optimal-solve rate</h3>
+            {(() => {
+              const NAMES = { first: "first triple", second: "second triple", both: "both triples" };
+              const rows = ["first", "second", "both"].filter((k) => f2tStats[k] && f2tStats[k].n)
+                .map((k) => ({ k, ...f2tStats[k] }));
+              if (!rows.length) return <div className="empty">Solve a few and your optimal-solve rate lands here, split by drill.</div>;
+              return (
+                <table>
+                  <thead><tr><th>Drill</th><th>Solves</th><th>Optimal</th><th>Rate</th></tr></thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.k}>
+                        <td className="name">{NAMES[r.k]}</td>
+                        <td className="mono">{r.n}</td>
+                        <td className="mono">{r.opt}</td>
+                        <td className="mono">{Math.round((100 * r.opt) / r.n)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
+          <div className="card">
+            <h3>Session</h3>
+            {f2tSession.length === 0 ? (
+              <div className="empty">Each solve lands here — green if you matched the optimal.</div>
+            ) : (
+              <div className="times">
+                {f2tSession.slice(-24).map((r, i) => (
+                  <span key={i} className="timepill" title={"optimal was " + r.optimal}
+                    style={{ "--cdot": r.correct ? "#27975a" : "#cf4d44" }}>
+                    {r.correct ? "✓ " + r.count : (r.more ? r.count + "+" : r.count)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        ) : mode === "fc" ? (
         <div className="panelrow">
           <div className="card">
             <h3>Optimal-solve rate</h3>

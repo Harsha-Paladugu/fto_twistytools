@@ -15,6 +15,13 @@
  * and every drill + displayed solution re-proved on full states. Derivation
  * 2026-07-13, adversarially reviewed; docs/fto-ground-truth.md §Methods.
  *
+ * Plus the FIRST TWO TRIPLES step trainer (2026-07-15): the sealed
+ * turn-metric marginal tables (eccentricities pinned), the white anchor /
+ * physical sealed alphabet / entry brackets, per-mode drills (short
+ * white-center-sealing scrambles, mode conditions, the 26-facelet mask),
+ * exact optimals cross-checked by a heuristic-free brute force, and every
+ * displayed solver-style line re-proved end-to-end from the drill state.
+ *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
  */
 import fs from 'fs';
@@ -367,6 +374,177 @@ t('verifyFcDrill: rejects a tampered state, scramble, coordinate, or optimal', (
     !core.verifyFcDrill(FC, { ...d, scramble: d.scramble + ' R' }) &&
     !core.verifyFcDrill(FC, { ...d, coord: (d.coord + 1) % FC.N }) &&
     !core.verifyFcDrill(FC, { ...d, optimal: d.optimal + 1 });
+});
+
+// ================ first-two-triples step trainer ================
+const FT = await T.buildF2T(E);
+const F2T_ENV = core.f2tEnv(FT);
+const F2T_TOK = /^(U|F|BR|BL|D)'?$/;
+const lcg = (seed) => { let x = seed; return () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return x / 0x80000000; }; };
+const f2tWhiteHomePhys = (s) =>
+  E.EDGES.every((q, i) => q[2] !== E.FIDX.U || s.ep[i] === i) &&
+  s.ctr[0] === 0 && s.ctr[1] === 0 && s.ctr[2] === 0;
+// heuristic-free exhaustive proof that no sealed word shorter than L solves `goal`
+function f2tNoShorter(s0, goal, L) {
+  if (core.f2tGoalOK(s0, goal)) return false;
+  let found = false;
+  const rec = (s, g, lastFace) => {
+    if (found || g >= L - 1) return;
+    for (const m of FT.BL.SEALED_MOVES) {
+      const f = m >> 1;
+      if (f === lastFace || (E.OPPF[f] === lastFace && f > lastFace)) continue;
+      const s2 = E.move(s, m);
+      if (core.f2tGoalOK(s2, goal)) { found = true; return; }
+      rec(s2, g + 1, f);
+      if (found) return;
+    }
+  };
+  if (L > 1) rec(s0, 0, -1);
+  return !found;
+}
+
+t('F2T tables: full sealed reachability, turn-metric eccentricities pinned', () => {
+  const ecc = {};
+  for (const fam of ['dA', 'dC']) for (const k of Object.keys(FT[fam])) {
+    let max = 0;
+    for (const v of FT[fam][k]) { if (v === T.UNREACHED) return false; if (v > max) max = v; }
+    ecc[fam + '.' + k] = max;
+  }
+  return ecc['dA.6,9'] === 4 && ecc['dA.5,8'] === 4 && ecc['dA.5,6,8,9'] === 6 &&
+    ecc['dC.3'] === 3 && ecc['dC.5'] === 3 && ecc['dC.3,5'] === 4;
+});
+t('F2T tables: 1-Lipschitz along sealed moves; dist 0 ⇔ the goal slots read solved', () => {
+  const rnd = lcg(20260715);
+  let s = E.solved();
+  for (let i = 0; i < 400; i++) {
+    const m = FT.BL.SEALED_MOVES[(rnd() * 10) | 0];
+    const s2 = E.move(s, m);
+    for (const [k, want] of [['6,9', [[6, 2], [9, 3]]], ['5,8', [[5, 1], [8, 2]]], ['5,6,8,9', [[5, 1], [6, 2], [8, 2], [9, 3]]]]) {
+      const a = FT.dA[k][FT.encA(s.ctr)], b = FT.dA[k][FT.encA(s2.ctr)];
+      if (Math.abs(a - b) > 1) return false;
+      if ((b === 0) !== want.every(([x, c]) => s2.ctr[x] === c)) return false;
+    }
+    for (const [k, slots] of [['3', [3]], ['5', [5]], ['3,5', [3, 5]]]) {
+      const a = FT.dC[k][FT.cornerIndex(s.cp, s.co)], b = FT.dC[k][FT.cornerIndex(s2.cp, s2.co)];
+      if (Math.abs(a - b) > 1) return false;
+      if ((b === 0) !== slots.every((v) => s2.cp[v] === v && s2.co[v] === 0)) return false;
+    }
+    s = s2;
+  }
+  return true;
+});
+t('F2T env: anchor {D,L}; physical sealed alphabet = {U,F,BR,BL,D}±; entry brackets walk-proved', () => {
+  if (F2T_ENV.anchorSpell !== '{D,L}') return false;
+  const faces = [...new Set(F2T_ENV.PHYS.map((m) => m >> 1))].sort((a, b) => a - b);
+  if (faces.join() !== [E.FIDX.U, E.FIDX.F, E.FIDX.BR, E.FIDX.BL, E.FIDX.D].sort((a, b) => a - b).join()) return false;
+  if (F2T_ENV.ENTRY.join(' ') !== '{F,BL} {BL,BR} {BR,F}') return false;
+  // each entry bracket lands exactly the anchor∘grip hold it claims
+  return F2T_ENV.ENTRY.every((spell, j) =>
+    E.walkParsed(E.parseAlg(spell), () => {}).join() ===
+    E.walkParsed(E.parseAlg(F2T_ENV.anchorSpell + ' ' + FT.BL.SPELLS[j]), () => {}).join());
+});
+t('makeF2tDrill: per mode — plain sealed letters, no same-face runs, state re-proved,\n  white center exactly home, mode conditions, verifyF2tDrill agrees', () => {
+  for (const mode of ['first', 'second', 'both']) {
+    for (let i = 0; i < 6; i++) {
+      const d = core.makeF2tDrill(FT, { mode }, lcg(1000 * i + mode.length));
+      if (!d || d.mode !== mode) return false;
+      const toks = d.scramble.split(/\s+/).filter(Boolean);
+      if (!toks.every((x) => F2T_TOK.test(x))) return false;
+      if (mode !== 'second' && toks.length !== 16) return false;
+      if (toks.length > 28) return false;
+      for (let j = 1; j < toks.length; j++)
+        if (toks[j].replace("'", '') === toks[j - 1].replace("'", '')) return false;
+      const st = E.applyParsed(E.parseAlg(d.scramble), E.solved());
+      if (!E.eq(st, d.state) || !f2tWhiteHomePhys(st)) return false;
+      const sM = d.stateM;
+      if (mode === 'second') {
+        if (![3, 5].includes(d.presolved)) return false;
+        if (!core.f2tTripleOK(sM, d.presolved) || core.f2tTripleOK(sM, d.presolved === 3 ? 5 : 3)) return false;
+      } else if (d.presolved !== 0 || core.f2tTripleOK(sM, 3) || core.f2tTripleOK(sM, 5)) return false;
+      if (d.optimal < 1 || !core.verifyF2tDrill(FT, d)) return false;
+    }
+  }
+  return true;
+});
+t('makeF2tDrill: mask keeps exactly 26 facelets — the home white hexagon, both triple\n  corners, and the 9 candidate triangles; everything else neutral', () => {
+  for (const mode of ['first', 'second', 'both']) {
+    const d = core.makeF2tDrill(FT, { mode }, lcg(77 + mode.length));
+    if (!d || d.mask.length !== 72 - 26) return false;
+    const keep = new Set();
+    for (let i = 0; i < 72; i++) keep.add(i);
+    for (const i of d.mask) keep.delete(i);
+    if (keep.size !== 26) return false;
+    // the white hexagon home facelets are all kept
+    for (let i = 0; i < 72; i++) {
+      const ft = E.FEAT[i];
+      const isWhiteHex = (ft.t === 'x' && ft.f === E.FIDX.U) ||
+        (ft.t === 'e' && E.EDGES.some((q, e) => q[2] === E.FIDX.U && q[0] === ft.v && q[1] === ft.v2 && ft.f !== undefined &&
+          (ft.f === q[2] || ft.f === q[3])));
+      if (isWhiteHex && !keep.has(i)) return false;
+    }
+    // kept feature census: 3 white-hex centres + 9 triangles = 12 'x', 6 edge stickers, 8 corner stickers
+    let x = 0, e = 0, c = 0;
+    for (const i of keep) { const ft = E.FEAT[i]; if (ft.t === 'x') x++; else if (ft.t === 'e') e++; else c++; }
+    if (x !== 12 || e !== 6 || c !== 8) return false;
+  }
+  return true;
+});
+t('F2T optimal is exact: a heuristic-free brute force finds nothing shorter (per mode)', () => {
+  for (const mode of ['first', 'second', 'both']) {
+    let checked = 0;
+    for (let i = 0; i < 40 && checked < 3; i++) {
+      const d = core.makeF2tDrill(FT, { mode }, lcg(9000 + 31 * i + mode.length));
+      if (!d || d.optimal > 5) continue;               // keep the brute force tractable
+      if (!f2tNoShorter(d.stateM, d.goal, d.optimal)) return false;
+      checked++;
+    }
+    if (checked < 3) return false;
+  }
+  return true;
+});
+t('f2tSolutions: every line proved end-to-end — entry bracket + tokens from the drill\n  state reach the goal with the white center home; turn count = optimal; none dropped', () => {
+  for (const mode of ['first', 'second', 'both']) {
+    for (let i = 0; i < 4; i++) {
+      const d = core.makeF2tDrill(FT, { mode }, lcg(400 + 13 * i + mode.length));
+      if (!d) return false;
+      const res = core.f2tSolutions(FT, d, 10);
+      if (!res.lines.length || res.dropped !== 0) return false;
+      if (!res.capped && res.total < res.lines.length) return false;
+      for (const l of res.lines) {
+        const toks = l.text.split(/\s+/).filter(Boolean);
+        if (!/^\{[A-Z]+,[A-Z]+\}$/.test(toks[0])) return false;          // entry bracket first
+        if (!toks.slice(1).every((x) => /^\{[A-Z]+,[A-Z]+\}$/.test(x) || /^(R|U|Rw)'?$/.test(x))) return false;
+        const parsed = E.parseAlg(l.text);
+        if (E.countMoves(parsed) !== d.optimal) return false;
+        const st2 = E.applyParsed(parsed, d.state);
+        if (!f2tWhiteHomePhys(st2)) return false;                        // physical-frame re-proof
+        const sM2 = core.f2tEnv(FT) && (() => {                          // method-frame goal re-proof
+          const F = E.toFacelets(st2), P = E.rotFaceletPerm(F2T_ENV.M), F2 = new Array(72);
+          for (let k = 0; k < 72; k++) F2[k] = E.faceImg(F2T_ENV.M, F[P[k]]);
+          return E.fromFacelets(F2);
+        })();
+        if (mode === 'first') {
+          if (!core.f2tTripleOK(sM2, 3) && !core.f2tTripleOK(sM2, 5)) return false;
+          if (!['back', 'right', 'both'].includes(l.corner)) return false;
+        } else {
+          if (!core.f2tTripleOK(sM2, 3) || !core.f2tTripleOK(sM2, 5)) return false;
+          if (l.corner !== null) return false;
+        }
+      }
+    }
+  }
+  return true;
+});
+t('makeF2tDrill: a stuck injected rng exhausts the attempt cap and returns null (no hang)', () =>
+  core.makeF2tDrill(FT, { mode: 'both' }, () => 0) === null);
+t('verifyF2tDrill: rejects a tampered state, scramble, optimal, presolved, or mode', () => {
+  const d = core.makeF2tDrill(FT, { mode: 'second' }, lcg(5150));
+  if (!d || !core.verifyF2tDrill(FT, d)) return false;
+  return !core.verifyF2tDrill(FT, { ...d, state: E.move(d.state, 2 * E.FIDX.R) }) &&
+    !core.verifyF2tDrill(FT, { ...d, scramble: d.scramble + ' R' }) &&
+    !core.verifyF2tDrill(FT, { ...d, optimal: d.optimal + 1 }) &&
+    !core.verifyF2tDrill(FT, { ...d, presolved: d.presolved === 3 ? 5 : 3 }) &&
+    !core.verifyF2tDrill(FT, { ...d, mode: 'both', presolved: 0 });
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

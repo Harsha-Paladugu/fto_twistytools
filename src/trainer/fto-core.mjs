@@ -363,6 +363,364 @@ export function createCore(E) {
     return fcStateOK(FC, st) === false;
   }
 
+  // ---------------- first-two-triples step drill (Bencisco step trainers, v2) ----------------
+  // FT is the bundle from window.OOTables.buildF2T/loadOrBuildF2T(E): the
+  // Bencisco hold (makeBLHold) plus corner/orbit-A distance-to-goal tables in
+  // the sealed group's 10-native-move TURN metric — with free re-grips every
+  // sealed move is one hold token from every grip, so that metric IS "how
+  // many turns", the only optimal a move-count drill may claim (the solver's
+  // re-grip reading penalty would overestimate it).
+  //
+  // The drill: a SHORT scramble (16 canonical moves over the 10 physical
+  // moves that seal the white-on-top hexagon — the method-frame sealed group
+  // conjugated back through the primary white anchor), rejection-sampled so
+  // the white center ends exactly home and the drilled triples end unsolved;
+  // 'second' mode then appends an optimal solve of one bottom triple so it
+  // starts pre-solved. The user re-orients into the Bencisco hold and solves
+  // with R / U / Rw; the reveal enumerates ALL optimal sealed words, respells
+  // each as one continuous solver-style line (one {X,Y} entry bracket, then
+  // triple tokens with relative {X,Y} re-grips where the grip walk needs
+  // them), and re-proves every line end-to-end from the drill state.
+
+  const F2T_LEN = 16;                         // scramble walk length (vs 30 for full scrambles)
+  const F2T_TRIES = 4000;                     // rejection cap (white-home alone is ~1/3)
+  const F2T_ENUM_CAP = 512;                   // optimal-word harvest cap
+  const F2T_NODES = 3e6;                      // enumeration node budget per call
+  const F2T_LMAX = 16;                        // no F2T state needs more turns (asserted by search)
+  const F2T_SLOTS = { 3: [6, 9], 5: [5, 8] }; // method corner -> its orbit-A slots (solver pin)
+  const F2T_CORNER_NAME = { 3: 'back', 5: 'right' };  // solver stepLabel naming
+
+  function conjState(M, s) {                  // physical rotation of the arrangement
+    const F = E.toFacelets(s), P = E.rotFaceletPerm(M), F2 = new Array(72);
+    for (let i = 0; i < 72; i++) F2[i] = E.faceImg(M, F[P[i]]);
+    return E.fromFacelets(F2);
+  }
+
+  // method-frame step predicates (the solver's hexOK('D') / tripleOK)
+  const f2tHexOK = (s) => s.ep[9] === 9 && s.ep[10] === 10 && s.ep[11] === 11 &&
+    s.ctr[18] === 6 && s.ctr[19] === 6 && s.ctr[20] === 6;
+  function f2tTripleOK(s, c) {
+    if (s.cp[c] !== c || s.co[c] !== 0) return false;
+    for (const x of F2T_SLOTS[c]) if (s.ctr[x] !== ((x / 3) | 0)) return false;
+    return true;
+  }
+  // goals: '3' / '5' (one specific triple), 'either' (mode first), 'pair'
+  // (modes second + both). Every goal keeps the first center exactly home.
+  function f2tGoalOK(s, goal) {
+    if (!f2tHexOK(s)) return false;
+    if (goal === '3' || goal === '5') return f2tTripleOK(s, +goal);
+    if (goal === 'either') return f2tTripleOK(s, 3) || f2tTripleOK(s, 5);
+    return f2tTripleOK(s, 3) && f2tTripleOK(s, 5);
+  }
+
+  // shared environment, derived once from the engine and asserted (anchor,
+  // physical alphabet, entry/re-grip spells, slot -> facelet maps)
+  let _f2tEnv = null;
+  function f2tEnv(FT) {
+    if (_f2tEnv) return _f2tEnv;
+    const BL = FT.BL, FIDX = E.FIDX, FACES = E.FACES;
+    const holdOf = (t) => E.walkParsed(E.parseAlg(t), () => {});
+    const spellOfHold = (h) => '{' + FACES[h[0]] + ',' + FACES[h[1]] + '}';
+    // primary white anchor: the first ROT24 rotation mapping white (engine U)
+    // onto the method's D region — the solver's primary spin
+    const M = E.ROT24.find((R) => E.faceImg(R, FIDX.U) === FIDX.D);
+    const Minv = E.mInv(M);
+    const anchorHold = [0, 1, 2, 3, 4, 5, 6, 7].map((p) => E.faceImg(Minv, p));
+    const anchorSpell = spellOfHold(anchorHold);
+    if (!['{D,L}', '{D,R}', '{D,B}'].includes(anchorSpell) ||
+        holdOf(anchorSpell).join() !== anchorHold.join())
+      throw new Error('f2t: anchor spell ' + anchorSpell);
+    // entry brackets: identity hold (the scramble is plain letters) into
+    // anchor∘grip j, spelled as ONE {X,Y} token and re-proved by the walk
+    const ENTRY = BL.SPELLS.map((gs) => {
+      const h = holdOf(anchorSpell + ' ' + gs);
+      const spell = spellOfHold(h);
+      if (holdOf(spell).join() !== h.join()) throw new Error('f2t: entry spell ' + spell);
+      return spell;
+    });
+    // mid-word re-grips: the solver's relative-bracket construction
+    const REGRIP = BL.holds.map((hj, j) => BL.holds.map((ht, t) => t === j ? ''
+      : '{' + FACES[hj.indexOf(ht[0])] + ',' + FACES[hj.indexOf(ht[1])] + '}'));
+    for (let j = 0; j < 3; j++) for (let t = 0; t < 3; t++) {
+      if (t === j) continue;
+      if (holdOf(BL.SPELLS[j] + ' ' + REGRIP[j][t]).join() !== BL.holds[t].join())
+        throw new Error('f2t: re-grip bracket ' + REGRIP[j][t]);
+    }
+    // physical sealed alphabet: the sealed moves conjugated back into the
+    // scrambling hold (proper rotations preserve cw), pinned on a probe
+    const PHYS = BL.SEALED_MOVES.map((m) => 2 * E.faceImg(Minv, m >> 1) + (m & 1));
+    const physFaces = [...new Set(PHYS.map((m) => m >> 1))].sort((a, b) => a - b);
+    if (physFaces.join() !== [FIDX.U, FIDX.F, FIDX.BR, FIDX.BL, FIDX.D].sort((a, b) => a - b).join())
+      throw new Error('f2t: physical sealed set ' + physFaces);
+    let probe = E.solved();
+    for (const m of [0, 5, 12, 9, 3, 14]) probe = E.move(probe, m);
+    for (let k = 0; k < PHYS.length; k++)
+      if (!E.eq(conjState(M, E.move(probe, PHYS[k])), E.move(conjState(M, probe), BL.SEALED_MOVES[k])))
+        throw new Error('f2t: sealed conjugation mismatch at ' + k);
+    // token spelling tables: per grip, engine move -> triple token (R/U/Rw
+    // only — the triple alphabet), and engine face -> the grip whose plain U
+    // reads it (the composite's target grip)
+    const TOKOF = [0, 1, 2].map((j) => {
+      const map = {};
+      for (let k = 0; k < 6; k++) map[BL.gen[j][k].m] = k;
+      return map;
+    });
+    const gripOfFace = {};
+    for (let j = 0; j < 3; j++) gripOfFace[BL.gen[j][2].m >> 1] = j;
+    // slot -> facelet maps (mask): centre slot 3f+k, corner vertex, edge slot
+    const CTRF = new Array(24);
+    const CORNF = Array.from({ length: 6 }, () => []);
+    const EDGEF = Array.from({ length: 12 }, () => []);
+    for (let i = 0; i < 72; i++) {
+      const ft = E.FEAT[i];
+      if (ft.t === 'x') CTRF[3 * ft.f + (ft.v % 3)] = i;
+      else if (ft.t === 'c') CORNF[ft.v].push(i);
+      else EDGEF[E.EDGES.findIndex((q) => q[0] === ft.v && q[1] === ft.v2)].push(i);
+    }
+    const U_EDGE_SLOTS = E.EDGES.map((q, i) => (q[2] === FIDX.U ? i : -1)).filter((i) => i >= 0);
+    const P = E.rotFaceletPerm(M);            // method facelet i lives at physical facelet P[i]
+    _f2tEnv = { BL, M, Minv, anchorSpell, ENTRY, REGRIP, PHYS, TOKOF, gripOfFace,
+                CTRF, CORNF, EDGEF, U_EDGE_SLOTS, P };
+    return _f2tEnv;
+  }
+
+  const f2tWhiteHome = (env, s) =>
+    env.U_EDGE_SLOTS.every((e) => s.ep[e] === e) &&
+    s.ctr[0] === 0 && s.ctr[1] === 0 && s.ctr[2] === 0;
+
+  // admissible turn-metric heuristic: max of the marginal tables (min over
+  // the two corners for the 'either' goal) and the ≥1 realign bound when the
+  // first center is spun. 99 = sealed-unreachable (prunes instantly).
+  function f2tH(FT, goal) {
+    const dC = FT.dC, dA = FT.dA;
+    const one = (cKey, aKey) => (s) => {
+      const a = dC[cKey][FT.cornerIndex(s.cp, s.co)], b = dA[aKey][FT.encA(s.ctr)];
+      return a > b ? a : b;
+    };
+    const h3 = one('3', '6,9'), h5 = one('5', '5,8'), hp = one('3,5', '5,6,8,9');
+    const base = goal === '3' ? h3 : goal === '5' ? h5
+      : goal === 'either' ? (s) => Math.min(h3(s), h5(s)) : hp;
+    return (s) => {
+      const h = base(s);
+      return h === 0 && s.ep[9] !== 9 ? 1 : h;
+    };
+  }
+
+  // canonical sealed-word DFS: harvest words of length exactly L reaching
+  // the goal (same successor rules as the solver's native DFS). cap = 1 is
+  // the find-first probe f2tSearchLen iterates with.
+  const F2T_STACK = [];
+  function f2tStack(d) {
+    while (F2T_STACK.length <= d)
+      F2T_STACK.push({ cp: new Array(6), co: new Array(6), ep: new Array(12), ctr: new Array(24) });
+    return F2T_STACK[d];
+  }
+  function f2tMoveInto(m, s, o) {
+    const t = E.moveTables[m];
+    for (let v = 0; v < 6; v++) { o.cp[v] = s.cp[t.cperm[v]]; o.co[v] = s.co[t.cperm[v]] ^ t.cflip[v]; }
+    for (let e = 0; e < 12; e++) o.ep[e] = s.ep[t.eperm[e]];
+    for (let x = 0; x < 24; x++) o.ctr[x] = s.ctr[t.xperm[x]];
+  }
+  function f2tEnumerate(FT, s0, goal, L, cap) {
+    const h = f2tH(FT, goal);
+    const moves = FT.BL.SEALED_MOVES;
+    const words = [];
+    const path = [];
+    let nodes = 0, capped = false;
+    const rec = (s, g, lastFace) => {
+      if (capped || ++nodes > F2T_NODES) { capped = true; return; }
+      if (g === L) {
+        if (f2tGoalOK(s, goal)) {
+          words.push(path.slice());
+          if (words.length >= (cap || F2T_ENUM_CAP)) capped = true;
+        }
+        return;
+      }
+      if (h(s) > L - g) return;
+      const t = f2tStack(g);
+      for (const m of moves) {
+        const f = m >> 1;
+        if (f === lastFace) continue;
+        if (E.OPPF[f] === lastFace && f > lastFace) continue;
+        f2tMoveInto(m, s, t);
+        path.push(m);
+        rec(t, g + 1, f);
+        path.pop();
+        if (capped) return;
+      }
+    };
+    if (L > 0) rec(s0, 0, -1);
+    return { words, capped };
+  }
+  // exact optimal turn count (or null past F2T_LMAX / on a budget trip)
+  function f2tSearchLen(FT, s0, goal) {
+    if (f2tGoalOK(s0, goal)) return 0;
+    const h0 = f2tH(FT, goal)(s0);
+    if (h0 >= 99) return null;
+    for (let bound = Math.max(1, h0); bound <= F2T_LMAX; bound++) {
+      const r = f2tEnumerate(FT, s0, goal, bound, 1);
+      if (r.words.length) return bound;
+      if (r.capped) return null;
+    }
+    return null;
+  }
+
+  // deterministic hold-token respell of a sealed engine word: engine U/D
+  // turns are the grip-independent R / Rw tokens (Rw drifts the grip,
+  // walkParsed semantics); an engine L/R/B turn is the plain U of its grip,
+  // with a relative {X,Y} re-grip bracket fused in front when the walk sits
+  // elsewhere. The entry bracket covers the start grip, so all three are
+  // tried and the fewest-bracket spelling wins (the solver's display taste).
+  function f2tRespell(env, word) {
+    let best = null;
+    for (let j0 = 0; j0 < 3; j0++) {
+      let j = j0, brackets = 0;
+      const out = [];
+      for (const m of word) {
+        let k = env.TOKOF[j][m];
+        if (k === undefined) {
+          const t = env.gripOfFace[m >> 1];
+          if (t === undefined) return null;
+          out.push(env.REGRIP[j][t]);
+          brackets++;
+          j = t;
+          k = env.TOKOF[j][m];
+          if (k === undefined) return null;
+        }
+        out.push(env.BL.TOKS[k]);
+        j = env.BL.gen[j][k].nj;
+      }
+      if (!best || brackets < best.brackets)
+        best = { brackets, text: out.join(' '), j0, jEnd: j };
+    }
+    return best;
+  }
+
+  // diagram mask: neutral-fill everything except the drill's pieces — the
+  // white hexagon (home by construction), the two bottom-triple corners
+  // wherever they sit, and every candidate source triangle (the orbit-A
+  // F/BR/BL colors: within a color the 3 triangles are identical, so ALL of
+  // them are legitimate sources — the sheets' two-usable-triangles freedom).
+  function f2tMask(env, sM) {
+    const keepM = [];
+    for (const e of [9, 10, 11]) keepM.push(...env.EDGEF[e]);
+    for (const x of [18, 19, 20]) keepM.push(env.CTRF[x]);
+    for (const c of [3, 5]) keepM.push(...env.CORNF[sM.cp.indexOf(c)]);
+    for (let x = 0; x < 12; x++) if (sM.ctr[x] >= 1 && sM.ctr[x] <= 3) keepM.push(env.CTRF[x]);
+    const keep = new Set(keepM.map((i) => env.P[i]));
+    const mask = [];
+    for (let i = 0; i < 72; i++) if (!keep.has(i)) mask.push(i);
+    return mask;
+  }
+
+  // scramble + drill. mode: 'first' (solve either bottom triple), 'second'
+  // (one pre-solved, solve the other), 'both'. Returns null only on
+  // rejection-cap exhaustion (practically: a stuck injected rng).
+  function makeF2tDrill(FT, opts, rng) {
+    const rnd = rng || Math.random;
+    const env = f2tEnv(FT);
+    const mode = opts && (opts.mode === 'first' || opts.mode === 'second') ? opts.mode : 'both';
+    const goal = mode === 'first' ? 'either' : 'pair';
+    for (let att = 0; att < F2T_TRIES; att++) {
+      let seq = [];
+      let last = -1, guard = 0;
+      while (seq.length < F2T_LEN) {
+        if (++guard > 600) break;               // a stuck rng must exhaust attempts, not hang
+        const m = env.PHYS[(rnd() * 10) | 0];
+        const f = m >> 1;
+        if (f === last) continue;
+        if (E.OPPF[f] === last && f > last) continue;
+        seq.push(m); last = f;
+      }
+      if (seq.length < F2T_LEN) continue;
+      let st = E.solved();
+      for (const m of seq) st = E.move(st, m);
+      if (!f2tWhiteHome(env, st)) continue;     // the walk may only SPIN the white center
+      let sM = conjState(env.M, st);
+      if (f2tTripleOK(sM, 3) || f2tTripleOK(sM, 5)) continue;
+      let presolved = 0;
+      if (mode === 'second') {
+        const c = rnd() < 0.5 ? 3 : 5;
+        const L1 = f2tSearchLen(FT, sM, String(c));
+        if (L1 == null || L1 < 1) continue;
+        const w = f2tEnumerate(FT, sM, String(c), L1, 1).words[0];
+        if (!w) continue;
+        seq = mergeMoves(seq.concat(w.map((m) => 2 * E.faceImg(env.Minv, m >> 1) + (m & 1))));
+        st = E.solved();
+        for (const m of seq) st = E.move(st, m);
+        sM = conjState(env.M, st);
+        if (!f2tWhiteHome(env, st) || !f2tTripleOK(sM, c) || f2tTripleOK(sM, c === 3 ? 5 : 3)) continue;
+        presolved = c;
+      }
+      const optimal = f2tSearchLen(FT, sM, goal);
+      if (optimal == null || optimal < 1) continue;
+      return {
+        kind: 'f2t', mode, goal, presolved,
+        scramble: seq.map((m) => E.MOVES[m]).join(' '),
+        state: st, stateM: sM, optimal,
+        mask: f2tMask(env, sM),
+      };
+    }
+    return null;
+  }
+
+  // all optimal solutions for a drill, solver-style: each line is ONE
+  // continuous engine text ({X,Y} entry bracket + triple tokens + relative
+  // re-grip brackets), sorted plainest-first, and re-proved end-to-end on
+  // the full drill state before it is emitted.
+  function f2tSolutions(FT, drill, show) {
+    const env = f2tEnv(FT);
+    const res = f2tEnumerate(FT, drill.stateM, drill.goal, drill.optimal);
+    const spelled = [];
+    let dropped = 0;
+    for (const w of res.words) {
+      const sp = f2tRespell(env, w);
+      if (sp) spelled.push(sp); else dropped++;
+    }
+    spelled.sort((a, b) => a.brackets - b.brackets || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
+    const lines = [];
+    for (const sp of spelled) {
+      if (lines.length >= (show || 10)) break;
+      const text = env.ENTRY[sp.j0] + ' ' + sp.text;
+      const parsed = E.parseAlg(text);
+      if (!parsed || E.countMoves(parsed) !== drill.optimal) { dropped++; continue; }
+      const sM2 = conjState(env.M, E.applyParsed(parsed, drill.state));
+      if (!f2tGoalOK(sM2, drill.goal)) { dropped++; continue; }
+      lines.push({
+        text, brackets: sp.brackets,
+        corner: drill.goal !== 'either' ? null
+          : f2tTripleOK(sM2, 3) && f2tTripleOK(sM2, 5) ? 'both'
+          : f2tTripleOK(sM2, 3) ? F2T_CORNER_NAME[3] : F2T_CORNER_NAME[5],
+      });
+    }
+    return { total: res.words.length, capped: res.capped, dropped, lines };
+  }
+
+  // full re-proof of a drill from scratch (tests + UI spot checks)
+  function verifyF2tDrill(FT, d) {
+    if (!d || d.kind !== 'f2t') return false;
+    const env = f2tEnv(FT);
+    const toks = d.scramble.split(/\s+/).filter(Boolean);
+    if (!toks.length || toks.length > F2T_LEN + 12) return false;
+    if (!toks.every((x) => /^(U|F|BR|BL|D)'?$/.test(x))) return false;
+    for (let i = 1; i < toks.length; i++)
+      if (toks[i].replace("'", '') === toks[i - 1].replace("'", '')) return false;
+    const p = E.parseAlg(d.scramble);
+    if (!p) return false;
+    let st = E.solved();
+    E.walkParsed(p, (m) => { st = E.move(st, m); });
+    if (!E.eq(st, d.state) || !f2tWhiteHome(env, st)) return false;
+    const sM = conjState(env.M, st);
+    if (!E.eq(sM, d.stateM)) return false;
+    if (d.mode === 'second') {
+      if (!f2tTripleOK(sM, d.presolved) || f2tTripleOK(sM, d.presolved === 3 ? 5 : 3)) return false;
+    } else if (d.presolved !== 0 || f2tTripleOK(sM, 3) || f2tTripleOK(sM, 5)) return false;
+    if (f2tGoalOK(sM, d.goal)) return false;    // never a solved drill
+    return f2tSearchLen(FT, sM, d.goal) === d.optimal;
+  }
+
   return { buildModel, nativeMovesOf, mergeMoves, caseSpec, makeDrill, rowAufToken, verifyDrill,
-           fcStateOK, makeFcDrill, fcSolutions, fcRespell, verifyFcDrill };
+           fcStateOK, makeFcDrill, fcSolutions, fcRespell, verifyFcDrill,
+           f2tEnv, f2tGoalOK, f2tTripleOK, f2tSearchLen, f2tEnumerate, f2tRespell,
+           makeF2tDrill, f2tSolutions, verifyF2tDrill };
 }

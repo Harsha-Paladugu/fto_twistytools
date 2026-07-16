@@ -469,6 +469,35 @@ The USER supplies the actual sheets; this section is context, not authority.
   reading is pinned NON-circularly by the LBT sheet's case 7 "same alg
   notated differently" twin (the wide spelling only reproduces its plain
   twin's letters under it). All pinned in tools/test-trainer.mjs.
+- **First-two-triples step space (trainer derivation, machine-verified
+  2026-07-15)**: the F2T drill's optimal is measured in the sealed group's
+  **10-native-move TURN metric** ({U, L, R, D, B}± in the method frame).
+  Re-grips are free rotations and every sealed move is exactly one hold
+  token from every grip, so this metric IS "how many R/U/Rw turns" — the
+  fair, unbeatable target for a move-count drill. The solver's search
+  metric (re-grip composites cost 2 — a READING penalty) can exceed it, so
+  the r* PDBs are inadmissible for the trainer and it carries its own
+  tables (js/tables.js `buildF2T`; goal sets = the solver's rA/rC
+  families). Turn-metric eccentricities: single-triple centre pairs ≤ 4,
+  both-triples centres ≤ 6, single corners ≤ 3, corner pair ≤ 4; the whole
+  restricted space is sealed-reachable (no sentinels). Scrambles use the
+  PHYSICAL sealed alphabet — the sealed group conjugated back through the
+  primary `{D,L}` white anchor = **{U, F, BR, BL, D}±**, the 10 moves that
+  preserve the white-on-top hexagon (they can only spin it; scrambles are
+  rejection-sampled to land it exactly home, so the drill starts at the
+  triples step with the white center literally solved). Entry into the
+  execution hold from the scrambling hold is one {X,Y} bracket per grip:
+  **{F,BL} / {BL,BR} / {BR,F}** (walk-proved). Displayed lines respell the
+  optimal sealed words deterministically: engine U/D turns → R / Rw (Rw
+  carrying walkParsed's grip drift), engine L/R/B → the plain U of the
+  grip that reads them, mid-word re-grips → relative {X,Y} brackets; the
+  fewest-bracket spelling among the 3 start grips is shown and every line
+  is re-proved end-to-end from the drill state. A useful spelled-out
+  consequence, pinned in tests: with free re-grips a pure-token search and
+  a sealed-native-move search coincide, which is why the trainer can
+  enumerate optimal solutions as canonical ENGINE words (grip-independent,
+  well-defined counts) and respell afterwards. All pinned in
+  tools/test-trainer.mjs.
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶

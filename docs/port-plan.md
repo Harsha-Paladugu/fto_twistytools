@@ -332,10 +332,51 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   workflow agents (a second BFS with a different encoding reproduced the
   histograms digit for digit); headless-Edge E2E 24 checks / 0 console
   errors (both verdict paths, the optimal-solve-rate table, and a
-  build-effect deadlock regression); build + check:fresh green. Next step
-  trainers (triples, second
-  center, …) follow this pattern: a coordinate + goal set in tables.js, a
-  drill layer in the core, a mode chip.
+  build-effect deadlock regression); build + check:fresh green.
+  **STEP TRAINERS v2 (2026-07-15): the First two triples (Triples) mode is
+  LIVE** — the user's spec this session: a first triple / second triple /
+  both selector, scrambles that assume the white center solved (and so stay
+  SHORT), a diagram showing only the white-center + triple pieces, the
+  self-reported move-count check, and reveals in the solver's
+  triple-solution style. Mechanics: scrambles are 16 canonical moves over
+  the 10 PHYSICAL moves that seal the white-on-top hexagon —
+  {U, F, BR, BL, D}±, the method-frame sealed group conjugated back through
+  the primary `{D,L}` white anchor (conjugation asserted against the engine
+  on a probe at init) — rejection-sampled until the white center lands
+  exactly home and the drilled triples are unsolved; 'second' appends a
+  machine-optimal solve of one random bottom triple (plain letters, merged)
+  so it starts pre-solved. The TARGET is the TRUE turn optimal, measured in
+  the sealed group's 10-native-move TURN metric: re-grips are free
+  rotations and every sealed move is one hold token from every grip, so
+  this optimal is unbeatable — the solver's search metric (re-grip
+  composites cost 2, a reading penalty) can prefer a plainer word one turn
+  longer, so the r* PDBs are inadmissible here and the trainer carries its
+  own tables: js/tables.js gained `bfsTableSealed` +
+  `buildF2T`/`loadOrBuildF2T` (the rA/rC goal sets rebuilt in the turn
+  metric; eccentricities single-triple centres 4 / pair 6, corners 3 /
+  pair 4, whole space sealed-reachable; ~1.2 s build, ~1.1 MB, IndexedDB
+  'fto-f2t-v1'). fto-core gained the drill layer: exact optimal search +
+  exhaustive canonical enumeration (caps 512 words / 3e6 nodes), the
+  deterministic hold-token respell (engine U/D → R/Rw with walkParsed's
+  grip drift, engine L/R/B → the grip's plain U with a relative {X,Y}
+  re-grip bracket; entry into the hold printed as ONE {X,Y} bracket —
+  {F,BL} / {BL,BR} / {BR,F}, walk-proved; fewest-bracket spelling among the
+  3 start grips wins), the 26-facelet mask (white hexagon + both triple
+  corners + all 9 candidate source triangles — the sheets'
+  identical-triangle freedom), and verifyF2tDrill; every displayed line is
+  re-proved end-to-end by applyParsed from the drill state (unproved lines
+  are never emitted). Measured: drill gen ≤ ~20 ms, reveals ~50 ms avg /
+  ~1 s worst on deep 'both' enumerations; optimal spreads first 1-5 /
+  second 1-7 / both 3-9 turns. UI: fourth mode chip, sub-mode selector,
+  the fc answer flow shared (no timer, digit keys, opt..opt+4+ buttons),
+  per-sub-mode optimal-solve rates and session pills. Gates: test:trainer
+  **49** green (turn-metric eccentricity pins, 1-Lipschitz, heuristic-free
+  brute-force optimality cross-check, mask census, end-to-end line proofs,
+  tamper rejection); headless-Edge E2E 20 checks / 0 console errors
+  (masked diagram, both verdict paths, second/first sub-modes, IndexedDB
+  cached reboot 175 ms, mode persistence); build + check:fresh green.
+  Next step trainers (second center, …) follow this pattern: a coordinate
+  + goal set in tables.js, a drill layer in the core, a mode chip.
 - [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step
   Bencisco solves** (the USER's method decision this session), every line
   machine-proved end-to-end. **The sizing task came in far under the
@@ -582,10 +623,10 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   Bencisco method** (matching the supplied LBT/1L3T sheets); further methods
   would be new step decompositions over the same machinery.
 - Trainer tool lineup beyond case drill (M4 shipped drill + recap from the M3
-  data; **step trainers started 2026-07-13 with the First center mode** — the
-  user's decision; triples/second-center step modes are the natural next
-  additions, same pattern; full-solve/recognition/one-look modes still await
-  the user's spec).
+  data; **step trainers started 2026-07-13 with the First center mode, joined
+  2026-07-15 by the First two triples mode** — the user's decisions;
+  second-center step modes are the natural next additions, same pattern;
+  full-solve/recognition/one-look modes still await the user's spec).
 - Notation presentation: the 8 face letters are settled, but rotation spelling
   (`Ro` vs `Rv` vs `[R]`), slice spelling (`Rs` vs `2U` vs lowercase), and
   lowercase-means-wide-or-slice are NOT community-settled (ground-truth
