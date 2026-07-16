@@ -498,26 +498,16 @@ The USER supplies the actual sheets; this section is context, not authority.
   enumerate optimal solutions as canonical ENGINE words (grip-independent,
   well-defined counts) and respell afterwards. All pinned in
   tools/test-trainer.mjs.
-- **Second-through-fourth-center step space (trainer derivation,
-  machine-verified 2026-07-15)**: the Centers drill (Bencisco second/third/
-  fourth centers, incl. L2C = Last Two Centers) measures
+- **Second/third-center step space (trainer derivation, machine-verified
+  2026-07-15)**: the Centers drill (Bencisco second/third centers) measures
   its target in the same sealed 10-native-move TURN metric as F2T — the
   center steps' hold alphabet {R, U, Rw, BL} still spells every sealed move
   as exactly one token from every grip, so plain sealed BFS distance IS
   "how many turns". Goals are placement-neutral, matching the solver's
   "search picks": 'second' = ANY one of the L/R/B method hexagons formed,
-  'third'/'both' = any two, 'fourth'/'l2c' = all three (the centers stage
-  complete) — always with the first center exactly home and
+  'third'/'both' = any two — always with the first center exactly home and
   BOTH bottom triples re-solved at the end (a center word may break them
-  mid-way). Two structural consequences, both pinned: the all-centers goal
-  is a CONJUNCTION (every heuristic table prunes alone), so L2C searches
-  run FASTER than the disjunctive pair goals despite being deeper; and the
-  FOURTH center is EDGES-ONLY — any two orbit-B blocks plus D force the
-  third block, so the last hexagon's triangles are always already correct,
-  only its 3 edges remain (an even 3-perm: identity or one of two
-  3-cycles), and the measured optimal is ALWAYS 1 or 3 turns (80/80
-  sample; whether the bare face turn works depends on which corners and
-  source-triangle slots that face touches). The sealed group's invariants shrink every coordinate: engine
+  mid-way). The sealed group's invariants shrink every coordinate: engine
   D's edge and centre slots are invariant, so a hexagon's 3 edges live
   among 9 slots (one-hexagon exact = 42,336 sealed-reachable cells of the
   290,400 codec, turn-metric eccentricity 12), a pair's 6 edges among 9
@@ -542,10 +532,16 @@ The USER supplies the actual sheets; this section is context, not authority.
   through a (position × grip) DP over the full 8-token alphabet: engine D
   has two spellings (Rw with grip drift / BL in place) and the DP picks
   the bracket-minimal one (ties resolve in BL.TOKS order — Rw first).
-  Measured optimals: 'second' 1-11, 'third' 5-14, 'both' 7-15, 'l2c' 5-15,
-  'fourth' ∈ {1,3}; the deepest
+  Measured optimals: 'second' 1-11, 'third' 5-14, 'both' 7-15; the deepest
   states take multi-second exact searches (async in the trainer UI). All
-  pinned in tools/test-trainer.mjs.
+  pinned in tools/test-trainer.mjs. A fourth-center corollary,
+  machine-measured before the user retired that mode as redundant
+  (2026-07-16; implementation in git history at 7c105c1): with the white
+  center, both triples and two hexagons formed, the last hexagon's
+  triangles are FORCED — any two orbit-B blocks plus D determine the
+  third — leaving an edges-only even 3-perm (identity or one of two
+  3-cycles) whose optimal is always 1 or 3 turns (80/80 sample). That is
+  WHY the centers stage needs no drill beyond the third center.
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶

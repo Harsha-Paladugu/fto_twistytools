@@ -14,13 +14,12 @@ import { createCore, SEP } from "./fto-core.mjs";
 //   first/second/both selector, masked diagram (white center + triple
 //   pieces only), exact optimal turn target, solver-style {R,U,Rw} reveal
 //   lines (tables via OOTables.loadOrBuildF2T, IndexedDB-cached).
-//   Centers (second through fourth centers, incl. L2C): scrambles whose
-//   appended machine-optimal words pre-solve the white center + both
-//   triples (and, per sub-mode, one or two more centers), a five-way
-//   selector (second / third / fourth / second+third / last two),
+//   Centers (second/third centers): scrambles whose appended machine-
+//   optimal words pre-solve the white center + both triples (and, for the
+//   third-center drill, one more center), a second/third/both selector,
 //   masked diagram, exact optimal turn target, solver-style {R,U,Rw,BL}
 //   reveal lines (tables via OOTables.loadOrBuildC23 + the F2T bundle;
-//   generation is async — deep center searches can take seconds).
+//   generation is async — deep second+third searches can take seconds).
 // Further step trainers follow this pattern; full-solve/recognition/
 // one-look modes are scoped with the user.
 // ============================================================
@@ -173,10 +172,10 @@ export default function FtoTrainer() {
               }
               setF2tStats(fs);
             }
-            if (["second", "third", "both", "fourth", "l2c"].includes(d.c23Mode)) setC23Mode(d.c23Mode);
+            if (["second", "third", "both"].includes(d.c23Mode)) setC23Mode(d.c23Mode);
             if (d.c23Stats && typeof d.c23Stats === "object") {
               const fs = {};
-              for (const k of ["second", "third", "both", "fourth", "l2c"]) {
+              for (const k of ["second", "third", "both"]) {
                 const st = d.c23Stats[k];
                 if (st && typeof st.n === "number" && typeof st.opt === "number") fs[k] = { n: st.n, opt: st.opt };
               }
@@ -781,8 +780,7 @@ export default function FtoTrainer() {
             <button className="setuphead" onClick={() => setSetupOpen((o) => !o)}>
               <strong>Setup</strong>
               <span className="setupsum">
-                centers · {{ second: "second center", third: "third center", both: "second + third",
-                             fourth: "fourth center", l2c: "last two centers (L2C)" }[c23Mode]}
+                second + third centers · {c23Mode === "second" ? "second center" : c23Mode === "third" ? "third center" : "both centers"}
               </span>
               <span className="chev">{setupOpen ? "▾" : "▸"}</span>
             </button>
@@ -791,27 +789,20 @@ export default function FtoTrainer() {
                 <div className="chips" style={{ alignItems: "center" }}>
                   <span className="grouplabel">solve</span>
                   <div className="modes">
-                    {[["second", "Second center"], ["third", "Third center"], ["fourth", "Fourth center"],
-                      ["both", "Second + third"], ["l2c", "Last two (L2C)"]].map(([v, l]) => (
+                    {[["second", "Second center"], ["third", "Third center"], ["both", "Both centers"]].map(([v, l]) => (
                       <button key={v} className={"mode" + (c23Mode === v ? " on" : "")} onClick={() => setC23Mode(v)}>{l}</button>
                     ))}
                   </div>
                 </div>
                 <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
                   Scramble a solved puzzle with white on top — the scramble leaves the white center and
-                  both bottom triples solved{{ third: ", plus one more center (named under the diagram)",
-                    fourth: ", plus two more centers (named under the diagram)",
-                    l2c: ", plus one more center (named under the diagram)" }[c23Mode] || ""},
-                  so you start exactly at the {{ second: "second-center", third: "third-center", both: "second-center",
-                    fourth: "fourth-center", l2c: "last-two-centers" }[c23Mode]} step.
+                  both bottom triples solved{c23Mode === "third" ? ", plus one more center (named under the diagram)" : ""},
+                  so you start exactly at the {c23Mode === "third" ? "third" : "second"}-center step.
                   Then follow a {"{X,Y}"} bracket into the solving hold (white center on BL) and form
-                  {{ second: " one more center — around any of the three remaining candidate faces —",
-                     third: " one more center — any two formed in total count —",
-                     both: " two more centers — any two of the three candidates —",
-                     fourth: " the last center — finishing all four —",
-                     l2c: " the last two centers — finishing all four —" }[c23Mode]} with R, U, Rw and BL turns,
+                  {c23Mode === "second" ? " one more center — around any of the three remaining candidate faces —" :
+                   c23Mode === "third" ? " one more center — any two formed in total count —" :
+                   " two more centers — any two of the three candidates —"} with R, U, Rw and BL turns,
                   ending with the triples back in place. The diagram shows only the pieces that matter.
-                  {c23Mode === "fourth" ? " The fourth center is edges-only (its triangles are forced by the other three): the optimal is always 1 or 3 turns." : ""}
                 </div>
                 <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
                   Each scramble shows its exact optimal turn count as the target. {"{X,Y}"} brackets are
@@ -1007,16 +998,10 @@ export default function FtoTrainer() {
                 solve the white center — target <strong>{current.optimal}</strong> move{current.optimal === 1 ? "" : "s"}
                 {current.metric === "native" ? " (face turns)" : ""}
               </> : current.kind === "c23" ? <>
-                form {{ second: "your second center (any of the three candidates)",
-                        third: "your third center (any two formed in total)",
-                        both: "your second and third centers (any two of the three)",
-                        fourth: "your fourth center (all four done)",
-                        l2c: "the last two centers (all four done)" }[current.mode]} — target <strong>{current.optimal}</strong> turn{current.optimal === 1 ? "" : "s"}
-                {current.presolvedFaces && current.presolvedFaces.length
-                  ? " · the center" + (current.presolvedFaces.length > 1 ? "s" : "") + " around the "
-                    + current.presolvedFaces.join(" and ") + " face" + (current.presolvedFaces.length > 1 ? "s are" : " is")
-                    + " already solved"
-                  : ""}
+                form {current.mode === "second" ? "your second center (any of the three candidates)"
+                  : current.mode === "third" ? "your third center (any two formed in total)"
+                  : "your second and third centers (any two of the three)"} — target <strong>{current.optimal}</strong> turn{current.optimal === 1 ? "" : "s"}
+                {current.mode === "third" ? " · the center around the " + current.presolvedFace + " face is already solved" : ""}
               </> : <>
                 solve {current.mode === "first" ? "either bottom triple"
                   : current.mode === "second" ? "the remaining bottom triple"
@@ -1112,9 +1097,8 @@ export default function FtoTrainer() {
           <div className="card">
             <h3>Optimal-solve rate</h3>
             {(() => {
-              const NAMES = { second: "second center", third: "third center", fourth: "fourth center",
-                              both: "second + third", l2c: "last two (L2C)" };
-              const rows = ["second", "third", "fourth", "both", "l2c"].filter((k) => c23Stats[k] && c23Stats[k].n)
+              const NAMES = { second: "second center", third: "third center", both: "both centers" };
+              const rows = ["second", "third", "both"].filter((k) => c23Stats[k] && c23Stats[k].n)
                 .map((k) => ({ k, ...c23Stats[k] }));
               if (!rows.length) return <div className="empty">Solve a few and your optimal-solve rate lands here, split by drill.</div>;
               return (

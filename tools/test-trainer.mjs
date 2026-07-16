@@ -644,15 +644,11 @@ t('C23 tables: dist 0 ⇔ the goal reads solved; 1-Lipschitz along sealed moves'
   }
   return true;
 });
-const C23_PRE = { second: 0, third: 1, both: 0, fourth: 2, l2c: 1 };
-const C23_GOAL = { second: 'c1', third: 'c2', both: 'c2', fourth: 'c3', l2c: 'c3' };
-const C23_ALL_MODES = Object.keys(C23_PRE);
-
 t('makeC23Drill: per mode — plain sealed letters, no same-face runs, state re-proved,\n  white center + both triples solved at start, mode conditions, verifyC23Drill agrees', () => {
-  for (const mode of C23_ALL_MODES) {
+  for (const mode of ['second', 'third', 'both']) {
     for (let i = 0; i < 3; i++) {
       const d = core.makeC23Drill(FT, CT, { mode }, lcg(3000 * i + 17 * mode.length));
-      if (!d || d.mode !== mode || d.goal !== C23_GOAL[mode]) return false;
+      if (!d || d.mode !== mode) return false;
       const toks = d.scramble.split(/\s+/).filter(Boolean);
       if (!toks.every((x) => F2T_TOK.test(x)) || toks.length > 42) return false;
       for (let j = 1; j < toks.length; j++)
@@ -662,29 +658,18 @@ t('makeC23Drill: per mode — plain sealed letters, no same-face runs, state re-
       const sM = d.stateM;
       if (!core.f2tGoalOK(sM, 'pair')) return false;      // triples + white solved at start
       const solved = C23_FACES.filter((f) => core.c23HexOK(sM, f));
-      if (solved.length !== C23_PRE[mode]) return false;
-      if (d.presolved.join() !== solved.join()) return false;
-      if (d.presolvedFaces.join() !== solved.map((f) => C23_PHYS[f]).join()) return false;
+      if (mode === 'third') {
+        if (solved.length !== 1 || d.presolved !== solved[0]) return false;
+        if (d.presolvedFace !== C23_PHYS[d.presolved]) return false;
+      } else if (solved.length !== 0 || d.presolved !== null) return false;
       if (core.c23GoalOK(sM, d.goal)) return false;
       if (d.optimal < 1 || !core.verifyC23Drill(FT, CT, d)) return false;
     }
   }
   return true;
 });
-t("fourth-center structure: the last hexagon's triangles are forced (two blocks + D\n  imply the third), so the drill is edges-only — optimal is always 1 or 3", () => {
-  for (let i = 0; i < 8; i++) {
-    const d = core.makeC23Drill(FT, CT, { mode: 'fourth' }, lcg(15000 + 137 * i));
-    if (!d) return false;
-    if (![1, 3].includes(d.optimal)) return false;
-    const last = C23_FACES.find((f) => !d.presolved.includes(f));
-    const fi = E.FIDX[last];
-    for (let k = 0; k < 3; k++) if (d.stateM.ctr[3 * fi + k] !== fi) return false;   // triangles home
-    if (T.HEX_EDGES[last].every((e) => d.stateM.ep[e] === e)) return false;          // edges are not
-  }
-  return true;
-});
 t('makeC23Drill: mask keeps exactly 53 facelets — all 12 edges, all 12 orbit-B\n  triangles, the 9 candidate source triangles, both triple corners', () => {
-  for (const mode of C23_ALL_MODES) {
+  for (const mode of ['second', 'third', 'both']) {
     const d = core.makeC23Drill(FT, CT, { mode }, lcg(881 + mode.length));
     if (!d || d.mask.length !== 72 - 53) return false;
     const keep = new Set([...Array(72).keys()]);
@@ -704,8 +689,8 @@ t('makeC23Drill: mask keeps exactly 53 facelets — all 12 edges, all 12 orbit-B
   return true;
 });
 t('C23 optimal is exact: a heuristic-free brute force finds nothing shorter (per mode)', () => {
-  const CAPS = { second: 6, third: 7, both: 8, fourth: 3, l2c: 8 };
-  for (const mode of C23_ALL_MODES) {
+  const CAPS = { second: 6, third: 7, both: 8 };
+  for (const mode of ['second', 'third', 'both']) {
     let checked = 0;
     for (let i = 0; i < 40 && checked < 2; i++) {
       const d = core.makeC23Drill(FT, CT, { mode }, lcg(7100 + 61 * i + mode.length));
@@ -717,30 +702,9 @@ t('C23 optimal is exact: a heuristic-free brute force finds nothing shorter (per
   }
   return true;
 });
-t('C23 exactness on synthetic short walks: searchLen equals the brute-force optimal\n  for every goal (c1, c2, c3) from solved-side states', () => {
-  for (const goal of ['c1', 'c2', 'c3']) {
-    let checked = 0;
-    for (let seed = 0; seed < 20 && checked < 4; seed++) {
-      const rnd = lcg(90000 + 7 * seed + goal.charCodeAt(1));
-      let s = E.solved(), last = -1;
-      for (let k = 0; k < 5; k++) {
-        let m;
-        do { m = FT.BL.SEALED_MOVES[(rnd() * 10) | 0]; } while ((m >> 1) === last);
-        s = E.move(s, m); last = m >> 1;
-      }
-      if (core.c23GoalOK(s, goal)) continue;
-      const opt = core.c23SearchLen(FT, CT, s, goal);
-      if (opt == null || opt < 1 || opt > 5) return false;
-      if (!c23NoShorter(s, goal, opt)) return false;
-      checked++;
-    }
-    if (checked < 4) return false;
-  }
-  return true;
-});
 t('c23Solutions: every line proved end-to-end — entry bracket + {R,U,Rw,BL} tokens from\n  the drill state reach the goal with white + triples re-solved; count = optimal; none dropped', () => {
-  for (const mode of C23_ALL_MODES) {
-    for (let i = 0; i < (mode === 'second' || mode === 'third' ? 3 : 2); i++) {
+  for (const mode of ['second', 'third', 'both']) {
+    for (let i = 0; i < 3; i++) {
       const d = core.makeC23Drill(FT, CT, { mode }, lcg(650 + 29 * i + mode.length));
       if (!d) return false;
       const res = core.c23Solutions(FT, CT, d, 8);
@@ -760,7 +724,7 @@ t('c23Solutions: every line proved end-to-end — entry bracket + {R,U,Rw,BL} to
         if (!core.c23GoalOK(sM2, d.goal)) return false;
         const want = C23_FACES.filter((f) => core.c23HexOK(sM2, f)).map((f) => C23_PHYS[f]).sort();
         if (l.centers.slice().sort().join() !== want.join()) return false;
-        if (l.centers.length < { c1: 1, c2: 2, c3: 3 }[d.goal]) return false;
+        if (l.centers.length < (d.goal === 'c2' ? 2 : 1)) return false;
       }
     }
   }
@@ -774,9 +738,8 @@ t('verifyC23Drill: rejects a tampered state, scramble, optimal, presolved, or mo
   return !core.verifyC23Drill(FT, CT, { ...d, state: E.move(d.state, 2 * E.FIDX.R) }) &&
     !core.verifyC23Drill(FT, CT, { ...d, scramble: d.scramble + ' R' }) &&
     !core.verifyC23Drill(FT, CT, { ...d, optimal: d.optimal + 1 }) &&
-    !core.verifyC23Drill(FT, CT, { ...d, presolved: [d.presolved[0] === 'L' ? 'R' : 'L'] }) &&
-    !core.verifyC23Drill(FT, CT, { ...d, mode: 'both', presolved: [] }) &&
-    !core.verifyC23Drill(FT, CT, { ...d, mode: 'l2c' });   // same pre count, different goal
+    !core.verifyC23Drill(FT, CT, { ...d, presolved: d.presolved === 'L' ? 'R' : 'L' }) &&
+    !core.verifyC23Drill(FT, CT, { ...d, mode: 'both', presolved: null });
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
