@@ -499,42 +499,52 @@ The USER supplies the actual sheets; this section is context, not authority.
   well-defined counts) and respell afterwards. All pinned in
   tools/test-trainer.mjs.
 - **Second/third-center step space (trainer derivation, machine-verified
-  2026-07-15)**: the Centers drill (Bencisco second/third centers) measures
-  its target in the same sealed 10-native-move TURN metric as F2T — the
-  center steps' hold alphabet {R, U, Rw, BL} still spells every sealed move
-  as exactly one token from every grip, so plain sealed BFS distance IS
-  "how many turns". Goals are placement-neutral, matching the solver's
-  "search picks": 'second' = ANY one of the L/R/B method hexagons formed,
-  'third'/'both' = any two — always with the first center exactly home and
-  BOTH bottom triples re-solved at the end (a center word may break them
-  mid-way). The sealed group's invariants shrink every coordinate: engine
-  D's edge and centre slots are invariant, so a hexagon's 3 edges live
-  among 9 slots (one-hexagon exact = 42,336 sealed-reachable cells of the
-  290,400 codec, turn-metric eccentricity 12), a pair's 6 edges among 9
-  (60,480 cells over the e3×e3 coding, ecc 12), and the white triangles
-  never leave their block — the whole orbit-B pattern collapses to the
-  (L-mask, R-mask) pair (1,680 valid cells; any two hexagon blocks + D
-  force the third, so every pair triangle goal is the single 'all' goal,
-  ecc 9; single blocks ecc 5; the orbit-A per-color marginals for the
-  triples' source slots have ecc 2/3/2). The drill search is an
-  index-carrying DFS — ten small coordinates stepped through Int32
-  transition tables, no full states inside the search (~20× the node rate
-  of the F2T-style full-state DFS, measured; the two implementations
-  agreed on all 52 cross-checked drill optimals) — with admissible
-  max/min-composed bounds from those tables plus the F2T dC/dA families;
-  emitted words are re-proved on full states by the display/verify layer,
-  so the search and the proof stay independent. Scrambles are the F2T
-  16-move sealed walk plus APPENDED machine-optimal words — a both-triples
-  solve (its goal includes the D hexagon exactly home, so it also
-  re-aligns any white spin and the walk needs no white-home rejection)
-  and, for 'third', a second-center solve — landing the drill exactly
-  where a real solve enters the step. Reveals respell optimal sealed words
-  through a (position × grip) DP over the full 8-token alphabet: engine D
-  has two spellings (Rw with grip drift / BL in place) and the DP picks
-  the bracket-minimal one (ties resolve in BL.TOKS order — Rw first).
-  Measured optimals: 'second' 1-11, 'third' 5-14, 'both' 7-15; the deepest
-  states take multi-second exact searches (async in the trainer UI). All
-  pinned in tools/test-trainer.mjs. A fourth-center corollary,
+  2026-07-15; RESTRICTED triple-preserving metric 2026-07-16)**: the
+  Centers drill (Bencisco second/third centers) measures its target in the
+  RESTRICTED metric — words that can NEVER take the solved triples out of
+  place, with no mid-solve rotations (user spec 2026-07-16). The center
+  alphabet is exactly **{R, U, Rw}** from ONE fixed {F,BL} entry bracket.
+  The theorem behind it (derived from the engine's own tables,
+  init-asserted in tables.js makeRestricted, fuzz-pinned in tests): the
+  solved BLOCK — white hexagon + both bottom triples: corner slots {3,5},
+  edge slots {9,10,11}, ctr slots {5,6,8,9} + {18,19,20} — is fixed by
+  engine U± (the hold's R token) and, per block position b, by exactly ONE
+  of {L,R,B}± (the working face); engine D± (the Rw token) moves the block
+  RIGIDLY: block(b) = D^b(home), b = net signed D power. Rw's grip drift
+  tracks b exactly — the working face at position b is wantU[(j0+b) mod 3]
+  — so from the single aligned entry grip (j0 = 0, entry {F,BL}, working
+  faces L/R/B by drift) the plain U token is ALWAYS the safe face: a
+  {R,U,Rw} word physically cannot disturb the triples or the white center
+  relative to them, at ANY prefix. BL (engine D in place, NO drift) breaks
+  the alignment — the very next U token would rip a triple — and since
+  engine U and D both commute with D, a BL commutes past every token still
+  legal after it: mid-word BL pairs cancel and a trailing BL is Rw's
+  driftless twin, so optimal restricted words never contain BL at all.
+  White exactly home ⇔ b ≡ 0 (only D turns touch its edges), and the
+  triples' re-solve is the same condition — so the search node is
+  (coordinates, b) with every goal at b = 0, and the triples' own
+  coordinates (corners, orbit-A masks, the D-edge placement) drop out of
+  the search entirely. Goals stay placement-neutral ('second' = ANY one of
+  the L/R/B hexagons formed, 'third'/'both' = any two, always block-home
+  at the end). Restricted-metric tables over (cell × 3 drifts): one-hexagon
+  exact ecc 16/17/17 (L/R/B; was 12 sealed), pair edges 17/17/18, orbit-B
+  mask-pair singles 8 / 'all' 12; EVERY sealed-reachable cell remains
+  reachable at every drift (127,008 = 42,336×3 one-hexagon nodes, 181,440
+  = 60,480×3 pair placements, 5,040 = 1,680×3 valid mask pairs) — the
+  restriction never strands a drill. The index-carrying DFS steps six
+  small indices (3 e3 placements, 2 orbit-B masks, b) and the
+  (cell,b)-exact tables prune so hard the old multi-second tails vanished:
+  measured over 50 drills/mode — optimals 'second' 1-11 (median 8),
+  'third' 3-16 (median 9), 'both' 2-20 (median 14); generation median
+  1-3 ms, p90 ≤ 100 ms, max ~0.6 s; reveal enumeration ≤ 5 ms. Reveal
+  lines are pure token strings (fixed {F,BL} entry + R/U/Rw), and every
+  displayed line passes BOTH the end-to-end applyParsed proof and a
+  per-prefix block-intactness walk (block = D^b(home) after every single
+  move — the "triples never leave their place" contract, machine-checked
+  per line). The solver's own center steps (sc/c3/c4) still search the
+  sealed {R,U,Rw,BL}+re-grip metric — the trainer restriction is a
+  deliberate, stricter execution contract for humans. All pinned in
+  tools/test-trainer.mjs. A fourth-center corollary,
   machine-measured before the user retired that mode as redundant
   (2026-07-16; implementation in git history at 7c105c1): with the white
   center, both triples and two hexagons formed, the last hexagon's

@@ -893,43 +893,54 @@
 
   // ---------------- second/third-center trainer tables (step trainers v3) ----------------
   // The Centers drill (second/third Bencisco centers) measures its target in
-  // the same sealed 10-native-move TURN metric as F2T — the center steps'
-  // hold alphabet is {R, U, Rw, BL} and with free re-grips every sealed move
-  // is still exactly one token from every grip, so plain BFS distance over
-  // the sealed moves IS "how many turns" (the solver's r* families price
-  // re-grip composites at 2 and would overestimate — inadmissible here).
-  //
-  // The center searches run 10+ turns deep, so the drill layer's DFS carries
-  // small per-piece COORDINATES through transition tables instead of full
-  // states (a ~20x node-rate win, measured). The sealed group makes them
-  // tiny: engine D's edge and centre slots are invariant, so the white
-  // (D-color) triangles NEVER leave their block — the whole orbit-B pattern
-  // reduces to the (L-mask, R-mask) pair with B's mask the complement, and
-  // the D-triangle part of every goal is free. What the bundle carries:
+  // the RESTRICTED triple-preserving metric (user spec 2026-07-16: once the
+  // triples are in, nothing may ever take them out of place, and no mid-solve
+  // rotations — Rw does the re-gripping). Machine-derived and init-asserted
+  // by makeRestricted below:
+  //   - the solved block (white hexagon + both bottom triples: corner slots
+  //     {3,5}, edge slots {9,10,11}, ctr slots {5,6,8,9} + {18,19,20}) is
+  //     fixed by engine U± and by exactly ONE of {L,R,B}± per block position
+  //     (the WORKING face); engine D± moves the whole block RIGIDLY, so
+  //     block(b) = D^b(home) for b = the net engine-D power applied.
+  //   - the hold spells these as {R, U, Rw}: R = engine U, U = the grip's
+  //     plain U — and Rw's grip drift tracks the block position EXACTLY, so
+  //     from the one aligned entry grip the U token is always the working
+  //     face. BL (engine D in place, no drift) breaks that alignment — the
+  //     next U token would hit a triple — and BL commutes with every token
+  //     still legal after it, so optimal restricted words never need it:
+  //     the center alphabet is exactly {R, U, Rw}, no brackets, no BL.
+  //   - a restricted word therefore NEVER moves the triples (or the white
+  //     center relative to them); the white center is exactly home iff the
+  //     net drift b is 0. Search nodes are (coordinate, b) and every goal
+  //     lives at b = 0. All 42,336 sealed-reachable one-hexagon cells stay
+  //     reachable at every b (machine-checked) — no drill becomes
+  //     unsolvable, only the optimal grows (one-hexagon ecc 12 -> 16).
+  // What the bundle carries (distances over (cell, b), Int8, sentinel 99):
   //   dH1[f]    f in L/R/B — one-hexagon EXACT distances over the H1
-  //             coordinate (3-edge placement x color mask, 290,400)
-  //   dE33[fg]  hexagon-pair edges over (e3 x e3) = 1,320^2 — the exact
-  //             6-edge coupling keyed by the two carried e3 indices
-  //   dB[f|all] orbit-B triangle distances over mask pairs (220^2): one
-  //             face's block solved / the whole orbit solved (two hexagon
-  //             blocks + D force the third, so every pair goal collapses
-  //             to 'all')
-  //   dAm[c]    per-color orbit-A marginals over masks (220): the triples'
-  //             source-triangle slots re-filled (F->5, BR->{6,8}, BL->9)
-  //   rt        Int32 transition tables the DFS steps indices with (mC
-  //             corners, mE3 3-edge placements, mMA/mMB per-orbit masks) —
-  //             small enough to rebuild on every load
+  //             coordinate x b (3-edge placement x color mask x 3, 871,200)
+  //   dE33[fg]  hexagon-pair edges over (e3 x e3 x 3) — the exact 6-edge
+  //             coupling keyed by the two carried e3 indices and b
+  //   dB[f|all] orbit-B triangle distances over (mask pair x 3): one face's
+  //             block solved / the whole orbit solved (two hexagon blocks +
+  //             D force the third, so every pair goal collapses to 'all')
+  //   RES       the restricted system: entry grip j0, working face XF[b],
+  //             move rows MOVES[b] ([native move, b-shift] pairs), block
+  //             slot images SLOTS[b], reference features REF[b]
+  //   rt        Int32 transition tables the drill DFS steps indices with
+  //             (mE3 3-edge placements, mMB orbit-B masks)
   //   MKB/MBITS mask-pair -> complement-mask / mask -> 12-bit occupancy
   //   HOME      goal cells for every carried index
-  // The triples' own joint tables (dC/dA) come from the F2T bundle — the
-  // drill layer reads both. Only dH1 and dE33 are worth persisting
-  // (~6.1 MB); everything else rebuilds in well under a second.
-  const KEY_C23 = 'fto-c23-v1';
+  // The triples' own tables (dC/dA/dAm) are GONE from this drill: restricted
+  // words cannot disturb the triples, so there is nothing to prune or
+  // re-check below the b counter. dH1 + dE33 persist (~18 MB); everything
+  // else rebuilds in well under a second. (v1 was the sealed 10-move metric
+  // with {R,U,Rw,BL} + free re-grip brackets — retired 2026-07-16.)
+  const KEY_C23 = 'fto-c23-v2';
   const C23_H1 = ['L', 'R', 'B'];
   const C23_E33 = ['LR', 'LB', 'RB'];
   const NE33 = NE3 * NE3;
   const NMK2 = NMASK * NMASK;
-  const C23_FAMS = [['dH1', C23_H1, NH1], ['dE33', C23_E33, NE33]];
+  const C23_FAMS = [['dH1', C23_H1, NH1 * 3], ['dE33', C23_E33, NE33 * 3]];
   const MBITS = (() => {                    // mask index -> 12-bit slot occupancy
     const bits = new Int32Array(NMASK);
     for (let a = 0; a < 12; a++) for (let b = a + 1; b < 12; b++) for (let c = b + 1; c < 12; c++)
@@ -959,35 +970,98 @@
     return next;
   }
 
-  // generic sealed BFS over an implicit graph: step(u, m) -> u'
-  function bfsSealedFn(n, step, goals, moves) {
-    const dist = new Int8Array(n).fill(-1);
+  // The restricted (triple-preserving) move system, derived from the
+  // engine's own tables and ASSERTED — a bad engine change throws at load,
+  // not per drill. See the section comment above for the derivation.
+  function makeRestricted(E, bl) {
+    const FIDX = E.FIDX;
+    const wantU = [FIDX.L, FIDX.R, FIDX.B];      // grip j's plain U (makeBLHold pin)
+    const inv = (p) => { const q = new Array(p.length); for (let i = 0; i < p.length; i++) q[p[i]] = i; return q; };
+    const dT = E.moveTables[2 * FIDX.D];
+    const cI = inv(dT.cperm), eI = inv(dT.eperm), xI = inv(dT.xperm);
+    // block slot images per position b (positions move by the inverse pull perm)
+    const SLOTS = [];
+    {
+      let c = [3, 5], e = [9, 10, 11], x = [5, 6, 8, 9, 18, 19, 20];
+      for (let b = 0; b < 3; b++) {
+        SLOTS.push({ c, e, x });
+        c = c.map((v) => cI[v]); e = e.map((v) => eI[v]); x = x.map((v) => xI[v]);
+      }
+    }
+    const fixesBlock = (m, S) => {
+      const t = E.moveTables[m];
+      return S.c.every((v) => t.cperm[v] === v && t.cflip[v] === 0) &&
+             S.e.every((v) => t.eperm[v] === v) && S.x.every((v) => t.xperm[v] === v);
+    };
+    const XF = SLOTS.map((S, b) => {
+      if (!fixesBlock(2 * FIDX.U, S) || !fixesBlock(2 * FIDX.U + 1, S))
+        throw new Error('c23: engine U does not fix block(' + b + ')');
+      const fs = wantU.filter((f) => fixesBlock(2 * f, S) && fixesBlock(2 * f + 1, S));
+      if (fs.length !== 1) throw new Error('c23: working face at b=' + b + ': ' + fs);
+      return fs[0];
+    });
+    const j0 = wantU.indexOf(XF[0]);
+    for (let b = 0; b < 3; b++) {
+      // alignment: the grip Rw-drift reaches at position b reads the working face
+      if (XF[b] !== wantU[(j0 + b) % 3]) throw new Error('c23: grip/block misalignment at b=' + b);
+      const j = (j0 + b) % 3, rw = bl.gen[j][4], rwp = bl.gen[j][5];
+      if (rw.m !== 2 * FIDX.D || rw.nj !== (j + 1) % 3 ||
+          rwp.m !== 2 * FIDX.D + 1 || rwp.nj !== (j + 2) % 3)
+        throw new Error('c23: Rw drift direction mismatch at grip ' + j);
+    }
+    // move rows per position: [native move, b-shift]; D cw advances b by 1
+    const MOVES = XF.map((xf) => [
+      [2 * FIDX.U, 0], [2 * FIDX.U + 1, 0], [2 * xf, 0], [2 * xf + 1, 0],
+      [2 * FIDX.D, 1], [2 * FIDX.D + 1, 2],
+    ]);
+    // block reference features per position (D^b of solved, block slots only)
+    const REF = [];
+    {
+      let s = E.solved();
+      for (let b = 0; b < 3; b++) {
+        const S = SLOTS[b];
+        REF.push({
+          ep: S.e.map((v) => s.ep[v]),
+          cp: S.c.map((v) => s.cp[v]), co: S.c.map((v) => s.co[v]),
+          ctr: S.x.map((v) => s.ctr[v]),
+        });
+        s = E.move(s, 2 * FIDX.D);
+      }
+    }
+    return { j0, XF, MOVES, SLOTS, REF };
+  }
+
+  // BFS over (cell, b) in the restricted metric: step(cell, m) -> cell', the
+  // move rows come from RES.MOVES[b] (closed under inverse with mirrored
+  // b-shifts, so BFS from the goals is distance-to-goal). Goals live at b=0.
+  function bfsTableRes(n, step, goals, MOVES) {
+    const dist = new Int8Array(n * 3).fill(-1);
     let frontier = [];
-    for (const g of goals) if (dist[g] < 0) { dist[g] = 0; frontier.push(g); }
+    for (const g of goals) if (dist[g * 3] < 0) { dist[g * 3] = 0; frontier.push(g * 3); }
     let d = 0;
     while (frontier.length) {
       const nf = [];
       for (const u of frontier) {
-        for (const m of moves) {
-          const t = step(u, m);
-          if (dist[t] < 0) { dist[t] = d + 1; nf.push(t); }
+        const cell = (u / 3) | 0, b = u % 3, row = MOVES[b];
+        for (let k = 0; k < 6; k++) {
+          const v = step(cell, row[k][0]) * 3 + (b + row[k][1]) % 3;
+          if (dist[v] < 0) { dist[v] = d + 1; nf.push(v); }
         }
       }
       d++;
       frontier = nf;
     }
-    for (let i = 0; i < n; i++) if (dist[i] < 0) dist[i] = UNREACHED;
+    for (let i = 0; i < n * 3; i++) if (dist[i] < 0) dist[i] = UNREACHED;
     return dist;
   }
 
-  // runtime part of the bundle: hold, transitions, tiny tables, goal cells
+  // runtime part of the bundle: hold, restricted system, transitions, tiny
+  // tables, goal cells
   async function c23Runtime(E) {
     const bl = makeBLHold(E);
-    const SEALED = bl.SEALED_MOVES;
+    const RES = makeRestricted(E, bl);
     const mE3 = await buildEdgeMtable(E, 3, null);
-    const mMA = maskMtable(E, 'A');
     const mMB = maskMtable(E, 'B');
-    const mC = buildCornerMtable(E);
     // mask-pair complement: (L-mask, R-mask) -> B-mask, given the D block
     // {6,7,8} sealed-fixed; 255 marks pairs no sealed state realizes
     const B2M = new Int32Array(4096).fill(-1);
@@ -1005,7 +1079,7 @@
     }
     const home = Array.from({ length: 12 }, (_, i) => i);
     const HOME = {
-      eD: edgePlaceIndex(home, HEX_EDGES.D), eL: edgePlaceIndex(home, HEX_EDGES.L),
+      eL: edgePlaceIndex(home, HEX_EDGES.L),
       eR: edgePlaceIndex(home, HEX_EDGES.R), eB: edgePlaceIndex(home, HEX_EDGES.B),
       mL: maskIndex(0, 1, 2), mR: maskIndex(3, 4, 5), mB: maskIndex(9, 10, 11),
     };
@@ -1017,42 +1091,31 @@
       for (let u = 0; u < NMK2; u++) if (want((u / NMASK) | 0, u % NMASK)) goals.push(u);
       return goals;
     };
-    dB.L = bfsSealedFn(NMK2, stepMK2, mkGoals((l) => l === HOME.mL), SEALED);
-    dB.R = bfsSealedFn(NMK2, stepMK2, mkGoals((l, r) => r === HOME.mR), SEALED);
-    dB.B = bfsSealedFn(NMK2, stepMK2, mkGoals((l, r) => MKB[l * NMASK + r] === HOME.mB), SEALED);
-    dB.all = bfsSealedFn(NMK2, stepMK2, [HOME.mL * NMASK + HOME.mR], SEALED);
-    // orbit-A per-color marginals: the triples' source slots covered
-    const stepMA = (u, m) => mMA[u * 16 + m];
-    const dAm = {};
-    const maskGoals = (test) => {
-      const goals = [];
-      for (let u = 0; u < NMASK; u++) if (test(MBITS[u])) goals.push(u);
-      return goals;
-    };
-    dAm.F = bfsSealedFn(NMASK, stepMA, maskGoals((b) => b & (1 << 5)), SEALED);
-    dAm.BR = bfsSealedFn(NMASK, stepMA, maskGoals((b) => (b & 0x140) === 0x140), SEALED);
-    dAm.BL = bfsSealedFn(NMASK, stepMA, maskGoals((b) => b & (1 << 9)), SEALED);
-    return { BL: bl, rt: { mE3, mMA, mMB, mC }, MKB, MBITS, HOME, dB, dAm,
-             HEX_EDGES, cornerIndex, edgePlaceIndex, maskOfColor, encA };
+    dB.L = bfsTableRes(NMK2, stepMK2, mkGoals((l) => l === HOME.mL), RES.MOVES);
+    dB.R = bfsTableRes(NMK2, stepMK2, mkGoals((l, r) => r === HOME.mR), RES.MOVES);
+    dB.B = bfsTableRes(NMK2, stepMK2, mkGoals((l, r) => MKB[l * NMASK + r] === HOME.mB), RES.MOVES);
+    dB.all = bfsTableRes(NMK2, stepMK2, [HOME.mL * NMASK + HOME.mR], RES.MOVES);
+    return { BL: bl, RES, rt: { mE3, mMB }, MKB, MBITS, HOME, dB,
+             HEX_EDGES, edgePlaceIndex, maskOfColor };
   }
 
   async function buildC23(E, tick) {
     const out = await c23Runtime(E);
-    const SEALED = out.BL.SEALED_MOVES;
-    // hexagon-pair 6-edge coupling over (e3 x e3)
+    const RES = out.RES;
+    // hexagon-pair 6-edge coupling over (e3 x e3 x b)
     const mE3 = out.rt.mE3;
     const stepE33 = (u, m) => mE3[((u / NE3) | 0) * 16 + m] * NE3 + mE3[(u % NE3) * 16 + m];
     out.dE33 = {};
     const eHome = { L: out.HOME.eL, R: out.HOME.eR, B: out.HOME.eB };
     for (const fg of C23_E33) {
-      out.dE33[fg] = bfsSealedFn(NE33, stepE33, [eHome[fg[0]] * NE3 + eHome[fg[1]]], SEALED);
+      out.dE33[fg] = bfsTableRes(NE33, stepE33, [eHome[fg[0]] * NE3 + eHome[fg[1]]], RES.MOVES);
       if (tick) await tick();
     }
-    // one-hexagon exact tables (edges x mask coupling) in the sealed metric
+    // one-hexagon exact tables (edges x mask coupling x b)
     const hN = h1Next(E, mE3);
     out.dH1 = {};
     for (const f of C23_H1) {
-      out.dH1[f] = bfsTableSealed(NH1, hN, [h1GoalIx(f, HEX_EDGES[f])], SEALED);
+      out.dH1[f] = bfsTableRes(NH1, (c, m) => hN[c * 16 + m], [h1GoalIx(f, HEX_EDGES[f])], RES.MOVES);
       if (tick) await tick();
     }
     return out;
@@ -1080,6 +1143,7 @@
       for (const k of keys) payload[fam][k] = out[fam][k].buffer;
     }
     idbPut(KEY_C23, payload);
+    idbDel('fto-c23-v1');                       // the retired sealed-metric cache
     return out;
   }
 

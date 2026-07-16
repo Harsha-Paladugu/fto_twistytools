@@ -24,13 +24,17 @@
  * exact optimals cross-checked by a heuristic-free brute force, and every
  * displayed solver-style line re-proved end-to-end from the drill state.
  *
- * Plus the SECOND/THIRD CENTERS step trainer (2026-07-15): the sealed
- * turn-metric hexagon tables (eccentricities + sealed-reachable cell counts
- * pinned; the sealed group's invariants shrink every coordinate), the
+ * Plus the SECOND/THIRD CENTERS step trainer (2026-07-15; restricted metric
+ * 2026-07-16): the RESTRICTED triple-preserving hexagon tables over
+ * (cell, b) (eccentricities + reachable node counts pinned — every
+ * sealed-reachable cell stays reachable at every drift), the restricted
+ * move-system theorem (a {R,U,Rw} word from the aligned entry can never
+ * move the solved triples; BL immediately makes the U token unsafe), the
  * index-carrying DFS against full-state predicates, per-mode drills
  * (triples pre-solved by appended machine-optimal words, mode conditions,
  * the 53-facelet mask), exact optimals cross-checked by a heuristic-free
- * brute force, and every displayed {R,U,Rw,BL} line re-proved end-to-end.
+ * restricted brute force, and every displayed {R,U,Rw} line re-proved
+ * end-to-end INCLUDING a per-prefix block-intactness walk.
  *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
  */
@@ -585,7 +589,7 @@ t('verifyF2tDrill: rejects a tampered state, scramble, optimal, presolved, or mo
 
 // ================ second/third-center step trainer ================
 const CT = await T.buildC23(E);
-const C23_TOK = /^(R|U|Rw|BL)'?$/;
+const C23_TOK = /^(R|U|Rw)'?$/;          // the restricted alphabet: no BL, no brackets
 const C23_FACES = ['L', 'R', 'B'];
 const C23_PHYS = {};                    // method-frame face -> scrambling-hold letter
 for (const f of C23_FACES) C23_PHYS[f] = E.FACES[E.faceImg(F2T_ENV.Minv, E.FIDX[f])];
@@ -594,81 +598,130 @@ const orbitView = (ctr, orbit) => {
   for (let i = 0; i < 12; i++) p[i] = orbit === 'A' ? ctr[i] : ctr[12 + i] - 4;
   return p;
 };
-// heuristic-free exhaustive proof that no sealed word shorter than L reaches `goal`
+const D_CW = 2 * E.FIDX.D;
+const bShift = (m) => (m === D_CW ? 1 : m === D_CW + 1 ? 2 : 0);
+// heuristic-free exhaustive proof that no RESTRICTED word shorter than L
+// reaches `goal` (the target metric is triple-preserving words only)
 function c23NoShorter(s0, goal, L) {
   if (core.c23GoalOK(s0, goal)) return false;
   let found = false;
-  const rec = (s, g, lastFace) => {
+  const rec = (s, b, g, lastFace) => {
     if (found || g >= L - 1) return;
-    for (const m of FT.BL.SEALED_MOVES) {
+    for (const [m, db] of CT.RES.MOVES[b]) {
       const f = m >> 1;
       if (f === lastFace || (E.OPPF[f] === lastFace && f > lastFace)) continue;
       const s2 = E.move(s, m);
       if (core.c23GoalOK(s2, goal)) { found = true; return; }
-      rec(s2, g + 1, f);
+      rec(s2, (b + db) % 3, g + 1, f);
       if (found) return;
     }
   };
-  if (L > 1) rec(s0, 0, -1);
+  if (L > 1) rec(s0, 0, 0, -1);
   return !found;
 }
+// independent per-prefix block predicate (does NOT reuse core.c23BlockOK):
+// after b net drifts the block must read exactly as D^b applied to solved
+const C23_REFS = (() => {
+  const refs = [];
+  let s = E.solved();
+  for (let b = 0; b < 3; b++) { refs.push(s); s = E.move(s, D_CW); }
+  return refs;
+})();
+const C23_SLOTS = (() => {
+  const inv = (p) => { const q = new Array(p.length); for (let i = 0; i < p.length; i++) q[p[i]] = i; return q; };
+  const t0 = E.moveTables[D_CW];
+  const cI = inv(t0.cperm), eI = inv(t0.eperm), xI = inv(t0.xperm);
+  const out = [];
+  let c = [3, 5], e = [9, 10, 11], x = [5, 6, 8, 9, 18, 19, 20];
+  for (let b = 0; b < 3; b++) {
+    out.push({ c, e, x });
+    c = c.map((v) => cI[v]); e = e.map((v) => eI[v]); x = x.map((v) => xI[v]);
+  }
+  return out;
+})();
+function blockIntact(s, b) {
+  const S = C23_SLOTS[b], R = C23_REFS[b];
+  return S.e.every((v) => s.ep[v] === R.ep[v]) &&
+    S.c.every((v) => s.cp[v] === R.cp[v] && s.co[v] === R.co[v]) &&
+    S.x.every((v) => s.ctr[v] === R.ctr[v]);
+}
 
-t('C23 tables: eccentricities + sealed-reachable cell counts pinned', () => {
+t('C23 restricted system: engine derivation pinned — working faces L/R/B by drift,\n  aligned entry grip, {R,U,Rw} words NEVER move the block, BL immediately would', () => {
+  if (CT.RES.j0 !== 0) return false;
+  if (CT.RES.XF.join() !== [E.FIDX.L, E.FIDX.R, E.FIDX.B].join()) return false;
+  // fuzz: random restricted words from solved keep block = D^b(home) at every prefix
+  const rnd = lcg(773311);
+  for (let trial = 0; trial < 60; trial++) {
+    let s = E.solved(), b = 0;
+    const len = 1 + ((rnd() * 22) | 0);
+    for (let i = 0; i < len; i++) {
+      const [m, db] = CT.RES.MOVES[b][(rnd() * 6) | 0];
+      s = E.move(s, m); b = (b + db) % 3;
+      if (!blockIntact(s, b)) return false;
+    }
+  }
+  // BL (engine D with NO drift) breaks the alignment: the very next U token
+  // (the grip's unchanged working face) takes a triple out of place
+  const sBL = E.move(E.solved(), D_CW);              // token BL from the entry grip
+  if (!blockIntact(sBL, 1)) return false;            // the block itself just rotated
+  const wrongU = E.move(sBL, 2 * CT.RES.XF[0]);      // grip unchanged -> face XF[0], block at b=1
+  return !blockIntact(wrongU, 1);
+});
+t('C23 tables: restricted (cell x drift) eccentricities + reachable node counts pinned —\n  every sealed-reachable cell stays reachable at every drift', () => {
   const scan = (arr) => {
     let max = 0, reach = 0;
     for (const v of arr) { if (v === T.UNREACHED) continue; reach++; if (v > max) max = v; }
     return { max, reach };
   };
+  const H1_MAX = { L: 16, R: 17, B: 17 };
   for (const f of C23_FACES) {
     const { max, reach } = scan(CT.dH1[f]);
-    if (max !== 12 || reach !== 42336) return false;       // 9P3 x C(9,3): D slots sealed
+    if (max !== H1_MAX[f] || reach !== 127008) return false;   // 42,336 sealed cells x 3 drifts
   }
+  const E33_MAX = { LR: 17, LB: 17, RB: 18 };
   for (const fg of ['LR', 'LB', 'RB']) {
     const { max, reach } = scan(CT.dE33[fg]);
-    if (max !== 12 || reach !== 60480) return false;       // 9P6 disjoint placements
+    if (max !== E33_MAX[fg] || reach !== 181440) return false; // 60,480 placements x 3 drifts
   }
-  if (scan(CT.dB.L).max !== 5 || scan(CT.dB.R).max !== 5 || scan(CT.dB.B).max !== 5) return false;
+  if (scan(CT.dB.L).max !== 8 || scan(CT.dB.R).max !== 8 || scan(CT.dB.B).max !== 8) return false;
   const all = scan(CT.dB.all);
-  if (all.max !== 9 || all.reach !== 1680) return false;   // 9!/(3!)^3 valid mask pairs
-  if (scan(CT.dAm.F).max !== 2 || scan(CT.dAm.BR).max !== 3 || scan(CT.dAm.BL).max !== 2) return false;
-  return CT.dAm.F.every((v) => v !== T.UNREACHED);          // single masks: fully sealed-reachable
+  return all.max === 12 && all.reach === 5040;                 // 1,680 valid mask pairs x 3
 });
-t('C23 tables: dist 0 ⇔ the goal reads solved; 1-Lipschitz along sealed moves', () => {
+t('C23 tables: dist 0 ⇔ the goal reads solved at drift 0; 1-Lipschitz along restricted moves', () => {
   const rnd = lcg(20260716);
+  // start from a sealed-scrambled state so the walk covers deep cells
   let s = E.solved();
+  for (let i = 0; i < 30; i++) s = E.move(s, FT.BL.SEALED_MOVES[(rnd() * 10) | 0]);
+  let b = 0;
   const ixOf = (st) => ({
     h1: Object.fromEntries(C23_FACES.map((f) => [f, T.h1Index(st.ep, st.ctr, f, T.HEX_EDGES[f])])),
     e3: Object.fromEntries(['L', 'R', 'B'].map((f) => [f, T.edgePlaceIndex(st.ep, T.HEX_EDGES[f])])),
     mk: [T.maskOfColor(orbitView(st.ctr, 'B'), 0), T.maskOfColor(orbitView(st.ctr, 'B'), 1)],
-    ma: [1, 2, 3].map((c) => T.maskOfColor(orbitView(st.ctr, 'A'), c)),
   });
   let prev = ixOf(s);
   for (let i = 0; i < 400; i++) {
-    const m = FT.BL.SEALED_MOVES[(rnd() * 10) | 0];
+    const [m, db] = CT.RES.MOVES[b][(rnd() * 6) | 0];
     const s2 = E.move(s, m);
+    const b2 = (b + db) % 3;
     const cur = ixOf(s2);
     for (const f of C23_FACES) {
-      const a = CT.dH1[f][prev.h1[f]], b = CT.dH1[f][cur.h1[f]];
-      if (a === T.UNREACHED || b === T.UNREACHED || Math.abs(a - b) > 1) return false;
-      if ((b === 0) !== core.c23HexOK(s2, f)) return false;
+      const a = CT.dH1[f][prev.h1[f] * 3 + b], v = CT.dH1[f][cur.h1[f] * 3 + b2];
+      if (a === T.UNREACHED || v === T.UNREACHED || Math.abs(a - v) > 1) return false;
+      if ((v === 0) !== (b2 === 0 && core.c23HexOK(s2, f))) return false;
     }
     for (const [fg, i1, i2] of [['LR', 'L', 'R'], ['LB', 'L', 'B'], ['RB', 'R', 'B']]) {
-      const a = CT.dE33[fg][prev.e3[i1] * 1320 + prev.e3[i2]];
-      const b = CT.dE33[fg][cur.e3[i1] * 1320 + cur.e3[i2]];
-      if (a === T.UNREACHED || b === T.UNREACHED || Math.abs(a - b) > 1) return false;
-      if ((b === 0) !== [...T.HEX_EDGES[i1], ...T.HEX_EDGES[i2]].every((e) => s2.ep[e] === e)) return false;
+      const a = CT.dE33[fg][(prev.e3[i1] * 1320 + prev.e3[i2]) * 3 + b];
+      const v = CT.dE33[fg][(cur.e3[i1] * 1320 + cur.e3[i2]) * 3 + b2];
+      if (a === T.UNREACHED || v === T.UNREACHED || Math.abs(a - v) > 1) return false;
+      const edgesHome = [...T.HEX_EDGES[i1], ...T.HEX_EDGES[i2]].every((e) => s2.ep[e] === e);
+      if ((v === 0) !== (b2 === 0 && edgesHome)) return false;
     }
-    const ua = prev.mk[0] * 220 + prev.mk[1], ub = cur.mk[0] * 220 + cur.mk[1];
+    const ua = (prev.mk[0] * 220 + prev.mk[1]) * 3 + b, ub = (cur.mk[0] * 220 + cur.mk[1]) * 3 + b2;
     const ba = CT.dB.all[ua], bb = CT.dB.all[ub];
     if (ba === T.UNREACHED || bb === T.UNREACHED || Math.abs(ba - bb) > 1) return false;
-    if ((bb === 0) !== [...Array(12).keys()].every((k) => s2.ctr[12 + k] === 4 + ((k / 3) | 0))) return false;
-    const wantA = [[5, 1], [6, 2], [8, 2], [9, 3]];
-    const aOK = [wantA.slice(0, 1), wantA.slice(1, 3), wantA.slice(3)].map((w) => w.every(([x, c]) => s2.ctr[x] === c));
-    [CT.dAm.F, CT.dAm.BR, CT.dAm.BL].forEach((tab, k) => {
-      const a = tab[prev.ma[k]], b = tab[cur.ma[k]];
-      if (Math.abs(a - b) > 1 || (b === 0) !== aOK[k]) throw new Error('dAm ' + k);
-    });
-    s = s2; prev = cur;
+    const orbitHome = [...Array(12).keys()].every((k) => s2.ctr[12 + k] === 4 + ((k / 3) | 0));
+    if ((bb === 0) !== (b2 === 0 && orbitHome)) return false;
+    s = s2; b = b2; prev = cur;
   }
   return true;
 });
@@ -678,7 +731,7 @@ t('makeC23Drill: per mode — plain sealed letters, no same-face runs, state re-
       const d = core.makeC23Drill(FT, CT, { mode }, lcg(3000 * i + 17 * mode.length));
       if (!d || d.mode !== mode) return false;
       const toks = d.scramble.split(/\s+/).filter(Boolean);
-      if (!toks.every((x) => F2T_TOK.test(x)) || toks.length > 42) return false;
+      if (!toks.every((x) => F2T_TOK.test(x)) || toks.length > 48) return false;
       for (let j = 1; j < toks.length; j++)
         if (toks[j].replace("'", '') === toks[j - 1].replace("'", '')) return false;
       const st = E.applyParsed(E.parseAlg(d.scramble), E.solved());
@@ -716,8 +769,8 @@ t('makeC23Drill: mask keeps exactly 53 facelets — all 12 edges, all 12 orbit-B
   }
   return true;
 });
-t('C23 optimal is exact: a heuristic-free brute force finds nothing shorter (per mode)', () => {
-  const CAPS = { second: 6, third: 7, both: 8 };
+t('C23 optimal is exact: a heuristic-free restricted brute force finds nothing shorter (per mode)', () => {
+  const CAPS = { second: 7, third: 8, both: 9 };
   for (const mode of ['second', 'third', 'both']) {
     let checked = 0;
     for (let i = 0; i < 40 && checked < 2; i++) {
@@ -730,7 +783,7 @@ t('C23 optimal is exact: a heuristic-free brute force finds nothing shorter (per
   }
   return true;
 });
-t('c23Solutions: every line proved end-to-end — entry bracket + {R,U,Rw,BL} tokens from\n  the drill state reach the goal with white + triples re-solved; count = optimal; none dropped', () => {
+t('c23Solutions: every line proved end-to-end — the ONE fixed entry bracket, then plain\n  {R,U,Rw} tokens (no BL, no rotations); the solved triples never leave their place at\n  ANY prefix; count = optimal; none dropped', () => {
   for (const mode of ['second', 'third', 'both']) {
     for (let i = 0; i < 3; i++) {
       const d = core.makeC23Drill(FT, CT, { mode }, lcg(650 + 29 * i + mode.length));
@@ -740,15 +793,26 @@ t('c23Solutions: every line proved end-to-end — entry bracket + {R,U,Rw,BL} to
       if (!res.capped && res.total < res.lines.length) return false;
       for (const l of res.lines) {
         const toks = l.text.split(/\s+/).filter(Boolean);
-        if (!/^\{[A-Z]+,[A-Z]+\}$/.test(toks[0])) return false;
-        if (!toks.slice(1).every((x) => /^\{[A-Z]+,[A-Z]+\}$/.test(x) || C23_TOK.test(x))) return false;
+        if (toks[0] !== '{F,BL}') return false;            // the aligned entry grip, constant
+        if (!toks.slice(1).every((x) => C23_TOK.test(x))) return false;
         const parsed = E.parseAlg(l.text);
         if (E.countMoves(parsed) !== d.optimal) return false;
+        // per-prefix walk in the method frame: the block (white hexagon +
+        // both triples) must sit exactly at D^b(home) after EVERY move
+        let sP = d.stateM, bP = 0, intact = true;
+        E.walkParsed(parsed, (mp) => {
+          const mM = 2 * E.faceImg(F2T_ENV.M, mp >> 1) + (mp & 1);
+          sP = E.move(sP, mM);
+          bP = (bP + bShift(mM)) % 3;
+          if (!blockIntact(sP, bP)) intact = false;
+        });
+        if (!intact || bP !== 0) return false;
         const st2 = E.applyParsed(parsed, d.state);
         if (!f2tWhiteHomePhys(st2)) return false;
         const F = E.toFacelets(st2), P = E.rotFaceletPerm(F2T_ENV.M), F2 = new Array(72);
         for (let k = 0; k < 72; k++) F2[k] = E.faceImg(F2T_ENV.M, F[P[k]]);
         const sM2 = E.fromFacelets(F2);
+        if (!E.eq(sM2, sP)) return false;                  // the walk and the end proof agree
         if (!core.c23GoalOK(sM2, d.goal)) return false;
         const want = C23_FACES.filter((f) => core.c23HexOK(sM2, f)).map((f) => C23_PHYS[f]).sort();
         if (l.centers.slice().sort().join() !== want.join()) return false;

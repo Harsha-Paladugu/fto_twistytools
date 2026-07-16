@@ -456,6 +456,49 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   diagram, both verdict paths, difficulty chips, second-center async
   drill, persistence, the legacy-blob migration), build + check:fresh
   green.
+  RESTRICTED METRIC REWORK 2026-07-16 (user spec: "the solved triples
+  should not be taken out of place ever… no rotations should be
+  happening. instead do Rw moves, that will also ensure the triples are
+  preserved"): the second/third/both sub-modes now measure, search and
+  display in the RESTRICTED triple-preserving metric — the center
+  alphabet is exactly **{R, U, Rw}** with ONE fixed {F,BL} entry
+  bracket, no BL and no mid-solve rotations. Machine-derived theorem
+  (init-asserted in tables.js makeRestricted, pinned in test-trainer):
+  the solved block (white hexagon + both triples — corners {3,5}, edges
+  {9,10,11}, ctr slots {5,6,8,9}+{18,19,20}) is fixed by engine U± and
+  by exactly one of {L,R,B}± per block position, and engine D± moves it
+  rigidly (block(b) = D^b(home)); Rw's grip drift tracks b exactly, so
+  from the one aligned entry grip the plain U token is ALWAYS the safe
+  working face — a {R,U,Rw} word physically cannot disturb the triples,
+  while BL (engine D in place, no drift) misaligns the grip so the very
+  next U token would rip a triple, and BL commutes with everything still
+  legal after it, so optimal restricted words never contain it. White
+  exactly home ⇔ net drift b = 0, so the search node is (coordinates,
+  b): tables rebuilt over (cell × 3 drifts) — dH1 ecc 16/17/17 (L/R/B),
+  dE33 17/17/18, dB singles 8 / all 12, every sealed-reachable cell
+  reachable at every drift (127,008 = 42,336×3; 181,440 = 60,480×3;
+  goal never gets out of reach) — IndexedDB key bumped to 'fto-c23-v2'
+  (~17.4 MiB persisted, the v1 cache deleted on upgrade; build now
+  ~0.15 s — the restricted frontiers are small). The drill DFS dropped
+  the triples' coordinates entirely (corners + orbit-A masks + eD:
+  subsumed by b), the F2T dC/dA reads are gone, and the (cell,b)-exact
+  tables prune so hard the deep tails VANISHED: measured over 50 drills
+  per mode — second 1-11 (median 8), third 3-16 (median 9), both 2-20
+  (median 14); gen median 1-3 ms / p90 ≤ 100 ms / max ~0.6 s (the old
+  sealed metric had multi-second tails at shallower optimals); reveal
+  enumeration ≤ 5 ms. Reveal lines are pure token strings ({F,BL} entry
+  + R/U/Rw), sorted fewest-wides-first, each re-proved end-to-end AND
+  through a per-prefix block-intactness walk (c23LineWalkOK — the
+  "triples never leave their place" contract is machine-checked on
+  every displayed line, move by move). fcStats/c23Stats persist
+  unchanged (targets are now restricted-metric optimals). Gates:
+  test:trainer **59** green (restricted-system theorem test joined:
+  {R,U,Rw} fuzz keeps block = D^b(home) at every prefix, BL+U breaks
+  it; new table pins; restricted brute-force optimality cross-check;
+  per-prefix line proofs), test:solver 28 green (the solver's own
+  sealed-metric machinery is untouched), build + check:fresh green,
+  headless-Edge E2E 15 checks / 0 console errors (all four sub-modes,
+  reveal alphabet asserted in-DOM, v2 cache + v1 removal, persistence).
   A fourth-center/L2C extension (goal 'c3' = all three hexagons, a
   five-way selector) was built, fully gated and RETIRED the same day —
   the user's decision (2026-07-16): redundant, the centers stage is done

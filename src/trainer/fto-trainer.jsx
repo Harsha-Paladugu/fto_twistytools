@@ -19,7 +19,8 @@ import { createCore, SEP } from "./fto-core.mjs";
 //   sub-modes are the second/third-center drills — scrambles whose
 //   appended machine-optimal words pre-solve the white center + both
 //   triples (and, for 'third', one more center), masked diagram, exact
-//   optimal turn target, solver-style {R,U,Rw,BL} reveal lines (tables via
+//   optimal turn target, solver-style {R,U,Rw} reveal lines — the restricted
+//   triple-preserving metric: no rotations, no BL, triples never move (via
 //   OOTables.loadOrBuildC23 + the F2T bundle; generation is async — deep
 //   second+third searches can take seconds).
 // Further step trainers follow this pattern; full-solve/recognition/
@@ -658,11 +659,12 @@ export default function FtoTrainer() {
   }
 
   // ---------- optimal solutions for a finished centers drill ----------
-  // Solver-style lines: one {X,Y} entry bracket into the Bencisco hold, then
-  // R / U / Rw / BL tokens with relative {X,Y} re-grips where the respell DP
-  // needs them. Every line is re-proved end-to-end before display
-  // (c23Solutions drops anything unproved); the chip names the faces (in the
-  // scrambling hold) whose centers the line leaves formed.
+  // Solver-style lines: the ONE fixed {X,Y} entry bracket into the aligned
+  // Bencisco grip, then plain R / U / Rw tokens — no BL, no mid-solve
+  // rotations, and the solved triples never leave their place (each line
+  // carries a per-prefix machine proof of that; c23Solutions drops anything
+  // unproved). The chip names the faces (in the scrambling hold) whose
+  // centers the line leaves formed.
   function C23Solutions({ drill }) {
     const refs = c23Ref.current;
     if (!refs) return null;
@@ -674,13 +676,12 @@ export default function FtoTrainer() {
         <div className="hint" style={{ textAlign: "left", marginBottom: 4 }}>
           {res.capped ? res.total + "+" : res.total} optimal solution{res.total === 1 && !res.capped ? "" : "s"}
           {res.total > res.lines.length || res.capped ? " · showing " + res.lines.length : ""}
-          {" · {X,Y} brackets are free re-orientations · chip = which centers end formed"}
+          {" · the {X,Y} bracket is the fixed entry hold · chip = which centers end formed"}
         </div>
         {res.lines.map((l, i) => (
           <div key={i} className="algrow">
             <span className={"ychip mono" + (l.centers.length ? "" : " blank")}>{l.centers.length ? "→ " + l.centers.join("+") : ""}</span>
             <AlgText text={l.text} />
-            {l.brackets ? <span className="ratetag">{l.brackets} rotation{l.brackets === 1 ? "" : "s"}</span> : null}
           </div>
         ))}
       </div>
@@ -846,16 +847,18 @@ export default function FtoTrainer() {
                       Scramble a solved puzzle with white on top — the scramble leaves the white center and
                       both bottom triples solved{c23Mode === "third" ? ", plus one more center (named under the diagram)" : ""},
                       so you start exactly at the {c23Mode === "third" ? "third" : "second"}-center step.
-                      Then follow a {"{X,Y}"} bracket into the solving hold (white center on BL) and form
+                      Then follow the {"{X,Y}"} bracket into the solving hold (white center on BL) and form
                       {c23Mode === "second" ? " one more center — around any of the three remaining candidate faces —" :
                        c23Mode === "third" ? " one more center — any two formed in total count —" :
-                       " two more centers — any two of the three candidates —"} with R, U, Rw and BL turns,
-                      ending with the triples back in place. The diagram shows only the pieces that matter.
+                       " two more centers — any two of the three candidates —"} with R, U and Rw turns only.
+                      The solved triples never leave their place — Rw re-grips for you, so no rotations and
+                      no BL turns are ever needed. The diagram shows only the pieces that matter.
                     </div>
                     <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
-                      Each scramble shows its exact optimal turn count as the target. {"{X,Y}"} brackets are
-                      free re-orientations — count only the turns. Deep scrambles can take a few seconds to
-                      prepare. Solve, then pick how many turns you used to see whether you matched the optimal.
+                      Each scramble shows its exact optimal turn count as the target — optimal over
+                      triple-preserving words, so it is fair for a solve that keeps the triples in. The one
+                      {" {X,Y}"} bracket is the entry hold, not a move. Deep scrambles can take a few seconds
+                      to prepare. Solve, then pick how many turns you used to see whether you matched the optimal.
                     </div>
                   </>
                 )}

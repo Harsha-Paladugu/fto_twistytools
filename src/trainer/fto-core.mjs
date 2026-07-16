@@ -762,26 +762,33 @@ export function createCore(E) {
   // ---------------- second/third-center step drill (Bencisco step trainers, v3) ----------------
   // CT is the bundle from window.OOTables.buildC23/loadOrBuildC23(E): the
   // one-hexagon exact / hexagon-pair edge / orbit-B pattern distance tables
-  // in the same sealed 10-native-move TURN metric as F2T (the center steps'
-  // alphabet {R, U, Rw, BL} still spells every sealed move as one token from
-  // every grip, so that metric IS "how many turns"). The triples' own tables
-  // come from the F2T bundle — a center word may break the solved triples
-  // mid-way but must END with them re-solved, so both read at every node.
+  // in the RESTRICTED triple-preserving metric (user spec 2026-07-16: the
+  // solved triples must never be taken out of place, and no mid-solve
+  // rotations — Rw does the re-gripping). The alphabet is exactly
+  // {R, U, Rw}: R = engine U, U = the working {L,R,B} face the current
+  // grip reads (Rw's drift tracks the block position, so from the one
+  // aligned entry grip the U token can never hit a triple), Rw = engine D
+  // with drift. A restricted word CANNOT disturb the triples or the white
+  // center relative to them — the block sits at D^b(home) for b = the net
+  // drift — so the F2T triple tables are gone from this search entirely;
+  // the goal needs b = 0 (white exactly home) plus the formed hexagons.
   //
   // The drill starts where a real Bencisco solve stands after the first two
   // triples: the printed scramble is a 16-move canonical sealed walk PLUS a
   // machine-optimal solve of both bottom triples (which also lands the white
   // center exactly home), and mode 'third' appends a machine-optimal
-  // second-center solve on top. Goals are placement-neutral, matching the
-  // solver's "search picks" semantics: 'second' forms ANY one of the three
-  // remaining hexagons, 'third' and 'both' reach any two of them — always
-  // with the white center and both triples exactly solved again at the end.
+  // second-center solve on top (searched in this same restricted metric).
+  // Goals are placement-neutral, matching the solver's "search picks"
+  // semantics: 'second' forms ANY one of the three remaining hexagons,
+  // 'third' and 'both' reach any two of them — always with the white center
+  // and both triples exactly solved again at the end (which the restricted
+  // system guarantees at b = 0 by construction).
 
   const C23_LEN = 16;                         // scramble walk length (before the appended solves)
   const C23_TRIES = 40;                       // attempts are cheap to reject, expensive to finish
   const C23_ENUM_CAP = 512;                   // optimal-word harvest cap
   const C23_NODES = 2e7;                      // enumeration node budget per call
-  const C23_LMAX = 22;                        // bound guard for the iterative deepening
+  const C23_LMAX = 26;                        // bound guard for the iterative deepening
   const C23_FACES = ['L', 'R', 'B'];          // the method-frame candidate hexagons
   const C23_EDGES = {};                       // face -> its 3 edge slots (derived like the solver)
   for (const f of C23_FACES) {
@@ -805,126 +812,117 @@ export function createCore(E) {
   }
 
   // The center searches run 10+ turns deep, so unlike the F2T DFS this one
-  // never carries full states: a node is ten small indices stepped through
-  // CT.rt's Int32 transition tables (corners; the four hexagons' 3-edge
-  // placements; the orbit-B L/R color masks, B's mask being the complement
-  // via CT.MKB since the sealed group pins the white triangles; the three
-  // orbit-A color masks for the triples' source slots). The goal test and
-  // every pruning bound are O(1) table reads on those indices, and the
-  // emitted words are re-proved on full states by the solutions/verify
-  // layer — the search and the proof stay independent.
+  // never carries full states: a node is five small indices plus the drift
+  // counter b, stepped through CT.rt's Int32 transition tables (the three
+  // candidate hexagons' 3-edge placements; the orbit-B L/R color masks,
+  // B's mask being the complement via CT.MKB since the restricted group
+  // pins the white triangles). The block never appears in the node at all:
+  // restricted words keep it at D^b(home) by construction (init-asserted in
+  // tables.js), so "white + triples re-solved" is exactly b === 0. The goal
+  // test and every pruning bound are O(1) table reads on those indices, and
+  // the emitted words are re-proved on full states — including a per-prefix
+  // block-intactness walk — by the solutions/verify layer, so the search
+  // and the proof stay independent.
   //
-  // Admissible bounds, all in the sealed turn metric: the triples' corner
-  // table and orbit-A marginals (the drill must END with the triples
-  // re-solved) enter as a MAX; the hexagon goal is a disjunction over
-  // faces ('c1') / pairs ('c2'), so its part is a MIN over candidates,
-  // each candidate a MAX of the exact one-hexagon table, the orbit-B
-  // mask-pair table and (pairs) the exact 6-edge coupling. Any two hexagon
-  // blocks plus D force the whole orbit, so every 'c2' candidate shares
-  // the single dB.all bound.
+  // Admissible bounds, all in the restricted metric and all resolved at the
+  // node's own b: the hexagon goal is a disjunction over faces ('c1') /
+  // pairs ('c2'), so its part is a MIN over candidates, each candidate a
+  // MAX of the exact one-hexagon table, the orbit-B mask-pair table and
+  // (pairs) the exact 6-edge coupling. Any two hexagon blocks plus D force
+  // the whole orbit, so every 'c2' candidate shares the single dB.all bound.
   const NMKc = 220, NE3c = 1320;              // CT codec sizes (mask / 3-edge placement)
   function c23IxOf(CT, s) {
-    const pA = new Array(12), pB = new Array(12);
-    for (let i = 0; i < 12; i++) { pA[i] = s.ctr[i]; pB[i] = s.ctr[12 + i] - 4; }
+    const pB = new Array(12);
+    for (let i = 0; i < 12; i++) pB[i] = s.ctr[12 + i] - 4;
     return [
-      CT.cornerIndex(s.cp, s.co),
-      CT.edgePlaceIndex(s.ep, CT.HEX_EDGES.D),
       CT.edgePlaceIndex(s.ep, CT.HEX_EDGES.L),
       CT.edgePlaceIndex(s.ep, CT.HEX_EDGES.R),
       CT.edgePlaceIndex(s.ep, CT.HEX_EDGES.B),
       CT.maskOfColor(pB, 0), CT.maskOfColor(pB, 1),
-      CT.maskOfColor(pA, 1), CT.maskOfColor(pA, 2), CT.maskOfColor(pA, 3),
     ];
   }
   function c23DFS(FT, CT, s0, goal, L, cap, budget) {
-    const mE3 = CT.rt.mE3, mMA = CT.rt.mMA, mMB = CT.rt.mMB, mC = CT.rt.mC;
-    const dC = FT.dC['3,5'];
-    const dAF = CT.dAm.F, dABR = CT.dAm.BR, dABL = CT.dAm.BL;
+    const mE3 = CT.rt.mE3, mMB = CT.rt.mMB;
     const dBL_ = CT.dB.L, dBR_ = CT.dB.R, dBB_ = CT.dB.B, dBall = CT.dB.all;
     const hL_ = CT.dH1.L, hR_ = CT.dH1.R, hB_ = CT.dH1.B;
     const eLR = CT.dE33.LR, eLB = CT.dE33.LB, eRB = CT.dE33.RB;
-    const MKB = CT.MKB, MBITS = CT.MBITS, HOME = CT.HOME;
+    const MKB = CT.MKB, HOME = CT.HOME, MOVES = CT.RES.MOVES;
     const pair = goal === 'c2';
     const need = pair ? 2 : 1;
-    const moves = FT.BL.SEALED_MOVES;
     const words = [], path = [];
     let nodes = 0, capped = false;
-    // slot bits of the triples' source slots: F->5, BR->{6,8}, BL->9
-    const goalIx = (c, eD, eL, eR, eB, mL, mR, aF, aBR, aBL) => {
-      if (dC[c] !== 0 || eD !== HOME.eD) return false;
-      if (!(MBITS[aF] & 32) || (MBITS[aBR] & 320) !== 320 || !(MBITS[aBL] & 512)) return false;
+    const goalIx = (eL, eR, eB, mL, mR, b) => {
+      if (b !== 0) return false;              // white home + triples ⇔ zero net drift
       let n = (eL === HOME.eL && mL === HOME.mL ? 1 : 0) + (eR === HOME.eR && mR === HOME.mR ? 1 : 0);
       if (n < need && eB === HOME.eB && MKB[mL * NMKc + mR] === HOME.mB) n++;
       return n >= need;
     };
-    const rec = (c, eD, eL, eR, eB, mL, mR, aF, aBR, aBL, g, lastFace) => {
+    const rec = (eL, eR, eB, mL, mR, b, g, lastFace) => {
       if (capped || ++nodes > budget) { capped = true; return; }
       if (g === L) {
-        if (goalIx(c, eD, eL, eR, eB, mL, mR, aF, aBR, aBL)) {
+        if (goalIx(eL, eR, eB, mL, mR, b)) {
           words.push(path.slice());
           if (words.length >= cap) capped = true;
         }
         return;
       }
       const lim = L - g;
-      if (dC[c] > lim || dAF[aF] > lim || dABR[aBR] > lim || dABL[aBL] > lim) return;
       const u = mL * NMKc + mR;
+      const u3 = u * 3 + b;
       if (pair) {
-        if (dBall[u] > lim) return;
-        const hL = hL_[eL * NMKc + mL], hR = hR_[eR * NMKc + mR];
-        let fits = hL <= lim && hR <= lim && eLR[eL * NE3c + eR] <= lim;
+        if (dBall[u3] > lim) return;
+        const hL = hL_[(eL * NMKc + mL) * 3 + b], hR = hR_[(eR * NMKc + mR) * 3 + b];
+        let fits = hL <= lim && hR <= lim && eLR[(eL * NE3c + eR) * 3 + b] <= lim;
         if (!fits) {
-          const hB = hB_[eB * NMKc + MKB[u]];
-          fits = (hL <= lim && hB <= lim && eLB[eL * NE3c + eB] <= lim) ||
-                 (hR <= lim && hB <= lim && eRB[eR * NE3c + eB] <= lim);
+          const hB = hB_[(eB * NMKc + MKB[u]) * 3 + b];
+          fits = (hL <= lim && hB <= lim && eLB[(eL * NE3c + eB) * 3 + b] <= lim) ||
+                 (hR <= lim && hB <= lim && eRB[(eR * NE3c + eB) * 3 + b] <= lim);
         }
         if (!fits) return;
       } else {
-        const fits = (dBL_[u] <= lim && hL_[eL * NMKc + mL] <= lim) ||
-                     (dBR_[u] <= lim && hR_[eR * NMKc + mR] <= lim) ||
-                     (dBB_[u] <= lim && hB_[eB * NMKc + MKB[u]] <= lim);
+        const fits = (dBL_[u3] <= lim && hL_[(eL * NMKc + mL) * 3 + b] <= lim) ||
+                     (dBR_[u3] <= lim && hR_[(eR * NMKc + mR) * 3 + b] <= lim) ||
+                     (dBB_[u3] <= lim && hB_[(eB * NMKc + MKB[u]) * 3 + b] <= lim);
         if (!fits) return;
       }
-      for (const m of moves) {
-        const f = m >> 1;
+      const row = MOVES[b];
+      for (let k = 0; k < 6; k++) {
+        const m = row[k][0], f = m >> 1;
         if (f === lastFace) continue;
         if (E.OPPF[f] === lastFace && f > lastFace) continue;
         path.push(m);
-        rec(mC[c * 16 + m], mE3[eD * 16 + m], mE3[eL * 16 + m], mE3[eR * 16 + m], mE3[eB * 16 + m],
-            mMB[mL * 16 + m], mMB[mR * 16 + m], mMA[aF * 16 + m], mMA[aBR * 16 + m], mMA[aBL * 16 + m],
-            g + 1, f);
+        rec(mE3[eL * 16 + m], mE3[eR * 16 + m], mE3[eB * 16 + m],
+            mMB[mL * 16 + m], mMB[mR * 16 + m],
+            (b + row[k][1]) % 3, g + 1, f);
         path.pop();
         if (capped) return;
       }
     };
     if (L > 0) {
       const ix = c23IxOf(CT, s0);
-      rec(ix[0], ix[1], ix[2], ix[3], ix[4], ix[5], ix[6], ix[7], ix[8], ix[9], 0, -1);
+      rec(ix[0], ix[1], ix[2], ix[3], ix[4], 0, 0, -1);
     }
     return { words, capped };
   }
 
-  // exact-root admissible bound: the DFS components plus the F2T joint
-  // orbit-A table (whose per-color marginals the DFS relaxes for speed)
+  // exact-root admissible bound over the same tables (the root is always a
+  // drill state: block home, b = 0)
   function c23HVal(FT, CT, s, goal) {
-    const ix = c23IxOf(CT, s);
-    const c = ix[0], eL = ix[2], eR = ix[3], eB = ix[4], mL = ix[5], mR = ix[6];
+    const [eL, eR, eB, mL, mR] = c23IxOf(CT, s);
     const u = mL * NMKc + mR;
     const mB = CT.MKB[u];
-    let h = FT.dC['3,5'][c];
+    let h = 0;
     const bump = (v) => { if (v > h) h = v; };
-    bump(FT.dA['5,6,8,9'][FT.encA(s.ctr)]);
-    bump(CT.dAm.F[ix[7]]); bump(CT.dAm.BR[ix[8]]); bump(CT.dAm.BL[ix[9]]);
-    const hL = CT.dH1.L[eL * NMKc + mL], hR = CT.dH1.R[eR * NMKc + mR];
-    const hB = mB === 255 ? 99 : CT.dH1.B[eB * NMKc + mB];
+    const hL = CT.dH1.L[(eL * NMKc + mL) * 3], hR = CT.dH1.R[(eR * NMKc + mR) * 3];
+    const hB = mB === 255 ? 99 : CT.dH1.B[(eB * NMKc + mB) * 3];
     if (goal === 'c2') {
-      bump(CT.dB.all[u]);
+      bump(CT.dB.all[u * 3]);
       bump(Math.min(
-        Math.max(hL, hR, CT.dE33.LR[eL * NE3c + eR]),
-        Math.max(hL, hB, CT.dE33.LB[eL * NE3c + eB]),
-        Math.max(hR, hB, CT.dE33.RB[eR * NE3c + eB])));
+        Math.max(hL, hR, CT.dE33.LR[(eL * NE3c + eR) * 3]),
+        Math.max(hL, hB, CT.dE33.LB[(eL * NE3c + eB) * 3]),
+        Math.max(hR, hB, CT.dE33.RB[(eR * NE3c + eB) * 3])));
     } else {
-      bump(Math.min(Math.max(CT.dB.L[u], hL), Math.max(CT.dB.R[u], hR), Math.max(CT.dB.B[u], hB)));
+      bump(Math.min(Math.max(CT.dB.L[u * 3], hL), Math.max(CT.dB.R[u * 3], hR), Math.max(CT.dB.B[u * 3], hB)));
     }
     return h === 0 && !c23GoalOK(s, goal) ? 1 : h;
   }
@@ -945,56 +943,53 @@ export function createCore(E) {
     return null;
   }
 
-  // deterministic hold-token respell for CENTER words: the alphabet adds BL
-  // (engine D in place — Rw's driftless state twin), so an engine D turn has
-  // two spellings and the bracket-minimal one over the whole word is found by
-  // a tiny DP over (position, grip) instead of the triples' greedy walk. An
-  // engine L/R/B turn read from the wrong grip costs one relative {X,Y}
-  // bracket fused to the U token (the solver's convention). Ties resolve to
-  // the first option in BL.TOKS order (Rw before BL), lowest grip first.
-  function c23Respell(env, word) {
-    const gen = env.BL.gen, n = word.length, INF = 1e9;
-    const minB = Array.from({ length: n + 1 }, () => [0, 0, 0]);
-    for (let i = n - 1; i >= 0; i--) {
-      const m = word[i];
-      for (let j = 0; j < 3; j++) {
-        let best = INF;
-        for (let k = 0; k < 8; k++) if (gen[j][k].m === m) {
-          const v = minB[i + 1][gen[j][k].nj];
-          if (v < best) best = v;
-        }
-        for (let t = 0; t < 3; t++) {
-          if (t === j) continue;
-          for (const k of [2, 3]) if (gen[t][k].m === m) {
-            const v = 1 + minB[i + 1][gen[t][k].nj];
-            if (v < best) best = v;
-          }
-        }
-        minB[i][j] = best;
-      }
-    }
-    let j0 = 0;
-    for (let j = 1; j < 3; j++) if (minB[0][j] < minB[0][j0]) j0 = j;
-    if (minB[0][j0] >= INF) return null;
+  // deterministic token spelling for restricted CENTER words: engine U turns
+  // are R, engine D turns are Rw (drifting b), and the working-face turn at
+  // the current b is the plain U — nothing else can occur in a restricted
+  // word, so the spelling is a 1:1 walk with no DP, no brackets and no BL.
+  function c23Spell(CT, word) {
+    const D2 = 2 * E.FIDX.D;
     const out = [];
-    let j = j0;
-    for (let i = 0; i < n; i++) {
-      const m = word[i];
-      let done = false;
-      for (let k = 0; k < 8 && !done; k++)
-        if (gen[j][k].m === m && minB[i + 1][gen[j][k].nj] === minB[i][j]) {
-          out.push(env.BL.TOKS[k]); j = gen[j][k].nj; done = true;
-        }
-      for (let t = 0; t < 3 && !done; t++) {
-        if (t === j) continue;
-        for (const k of [2, 3])
-          if (gen[t][k].m === m && 1 + minB[i + 1][gen[t][k].nj] === minB[i][j]) {
-            out.push(env.REGRIP[j][t], env.BL.TOKS[k]); j = gen[t][k].nj; done = true; break;
-          }
-      }
-      if (!done) return null;                  // cannot happen for sealed words
+    let b = 0, wides = 0;
+    for (const m of word) {
+      if (m === 0) out.push('R');
+      else if (m === 1) out.push("R'");
+      else if (m === D2) { out.push('Rw'); wides++; b = (b + 1) % 3; }
+      else if (m === D2 + 1) { out.push("Rw'"); wides++; b = (b + 2) % 3; }
+      else if (m >> 1 === CT.RES.XF[b]) out.push((m & 1) ? "U'" : 'U');
+      else return null;                        // cannot happen for restricted words
     }
-    return { brackets: minB[0][j0], text: out.join(' '), j0, jEnd: j };
+    if (b !== 0) return null;                  // goal words always net-align
+    return { wides, text: out.join(' ') };
+  }
+
+  // per-prefix block proof for a displayed line: the text's fired moves must
+  // BE the word (the entry bracket fires nothing), and after every single
+  // move the method-frame block must sit exactly at D^b(home) — the user's
+  // "triples never leave their place" contract, checked on full states.
+  const c23BlockOK = (CT, s, b) => {
+    const S = CT.RES.SLOTS[b], R = CT.RES.REF[b];
+    for (let i = 0; i < S.e.length; i++) if (s.ep[S.e[i]] !== R.ep[i]) return false;
+    for (let i = 0; i < S.c.length; i++) if (s.cp[S.c[i]] !== R.cp[i] || s.co[S.c[i]] !== R.co[i]) return false;
+    for (let i = 0; i < S.x.length; i++) if (s.ctr[S.x[i]] !== R.ctr[i]) return false;
+    return true;
+  };
+  function c23LineWalkOK(env, CT, drill, text, word) {
+    const parsed = E.parseAlg(text);
+    if (!parsed) return false;
+    const fired = [];
+    E.walkParsed(parsed, (m) => fired.push(m));
+    if (fired.length !== word.length) return false;
+    for (let i = 0; i < word.length; i++)      // physical fired moves ↔ method word
+      if (2 * E.faceImg(env.M, fired[i] >> 1) + (fired[i] & 1) !== word[i]) return false;
+    const D2 = 2 * E.FIDX.D;
+    let sM = drill.stateM, b = 0;
+    for (const m of word) {
+      sM = E.move(sM, m);
+      b = (b + (m === D2 ? 1 : m === D2 + 1 ? 2 : 0)) % 3;
+      if (!c23BlockOK(CT, sM, b)) return false;
+    }
+    return b === 0;
   }
 
   // the method-frame face's letter in the SCRAMBLING hold (what the diagram
@@ -1092,31 +1087,35 @@ export function createCore(E) {
     return null;
   }
 
-  // all optimal solutions for a drill, solver-style: one {X,Y} entry bracket,
-  // then {R, U, Rw, BL} tokens with relative {X,Y} re-grips where the DP
-  // needs them; sorted plainest-first, every line re-proved end-to-end on the
-  // full drill state before it is emitted. The chip lists the faces (in the
-  // scrambling hold) whose hexagons the line leaves formed.
+  // all optimal solutions for a drill, solver-style: the ONE fixed {X,Y}
+  // entry bracket (the aligned grip), then plain {R, U, Rw} tokens — no BL,
+  // no mid-solve rotations; sorted fewest-wides-first, every line re-proved
+  // end-to-end on the full drill state before it is emitted, INCLUDING the
+  // per-prefix proof that the solved triples never leave their place. The
+  // chip lists the faces (in the scrambling hold) whose hexagons the line
+  // leaves formed.
   function c23Solutions(FT, CT, drill, show) {
     const env = f2tEnv(FT);
     const res = c23Enumerate(FT, CT, drill.stateM, drill.goal, drill.optimal);
     const spelled = [];
     let dropped = 0;
     for (const w of res.words) {
-      const sp = c23Respell(env, w);
-      if (sp) spelled.push(sp); else dropped++;
+      const sp = c23Spell(CT, w);
+      if (sp) spelled.push({ ...sp, word: w }); else dropped++;
     }
-    spelled.sort((a, b) => a.brackets - b.brackets || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
+    spelled.sort((a, b) => a.wides - b.wides || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
+    const entry = env.ENTRY[CT.RES.j0];
     const lines = [];
     for (const sp of spelled) {
       if (lines.length >= (show || 10)) break;
-      const text = env.ENTRY[sp.j0] + ' ' + sp.text;
+      const text = entry + ' ' + sp.text;
       const parsed = E.parseAlg(text);
       if (!parsed || E.countMoves(parsed) !== drill.optimal) { dropped++; continue; }
       const sM2 = conjState(env.M, E.applyParsed(parsed, drill.state));
       if (!c23GoalOK(sM2, drill.goal)) { dropped++; continue; }
+      if (!c23LineWalkOK(env, CT, drill, text, sp.word)) { dropped++; continue; }
       lines.push({
-        text, brackets: sp.brackets,
+        text, wides: sp.wides,
         centers: C23_FACES.filter((f) => c23HexOK(sM2, f)).map((f) => c23PhysFace(env, f)),
       });
     }
@@ -1128,7 +1127,7 @@ export function createCore(E) {
     if (!d || d.kind !== 'c23') return false;
     const env = f2tEnv(FT);
     const toks = d.scramble.split(/\s+/).filter(Boolean);
-    if (!toks.length || toks.length > C23_LEN + 26) return false;
+    if (!toks.length || toks.length > C23_LEN + 32) return false;
     if (!toks.every((x) => /^(U|F|BR|BL|D)'?$/.test(x))) return false;
     for (let i = 1; i < toks.length; i++)
       if (toks[i].replace("'", '') === toks[i - 1].replace("'", '')) return false;
@@ -1153,6 +1152,6 @@ export function createCore(E) {
            fcStateOK, makeFcDrill, fcSolutions, fcRespell, verifyFcDrill,
            f2tEnv, f2tGoalOK, f2tTripleOK, f2tSearchLen, f2tEnumerate, f2tRespell,
            makeF2tDrill, f2tSolutions, verifyF2tDrill,
-           c23HexOK, c23GoalOK, c23SearchLen, c23Enumerate, c23Respell,
-           makeC23Drill, c23Solutions, verifyC23Drill };
+           c23HexOK, c23GoalOK, c23SearchLen, c23Enumerate, c23Spell,
+           c23BlockOK, c23LineWalkOK, makeC23Drill, c23Solutions, verifyC23Drill };
 }
