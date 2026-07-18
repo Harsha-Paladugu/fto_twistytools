@@ -36,6 +36,32 @@
  * restricted brute force, and every displayed {R,U,Rw} line re-proved
  * end-to-end INCLUDING a per-prefix block-intactness walk.
  *
+ * Plus the BENCISCO STEP SPANS (step trainers v4, 2026-07-16): spanPlan's
+ * contiguity rule and routing (single-regime selections = the drills above;
+ * fc-led selections reach at most t2), the 12 landing anchors + rebase
+ * (every Q-rotated solved state reads SOLVED in all 3 of its method views —
+ * built independently from uniform facelet arrays), per-span drills
+ * (30-native-move scrambles fc-led / sealed walks + presolves tri-led,
+ * start conditions, breakdown sums, the 30-facelet fc-led union mask), the
+ * PHASED step-optimal target cross-checked by an independent phased brute
+ * force (raw full-alphabet fc DFS over every optimal endstate + table-free
+ * sealed/restricted existence searches), and every continuous reveal line
+ * re-proved: count = target, split sums, phase goals through the line's own
+ * landing view, per-prefix block intactness across center segments.
+ *
+ * Plus the LBT / L3T FINISH drills (step trainers v5, 2026-07-17): the
+ * buildFinish bundle over the fetched alg data (the {U,S,H} coset with BFS
+ * scramble words, the grip-folded 1L3T+TCP exact index, the 1LP appearance
+ * matcher, the TCP ≤2-look finish maps, the LBT entry set), CANONICAL
+ * physical counting (finCanonText: our AUF/re-grip decorations merged with
+ * the algs' own edge turns — targets must be unbeatable, cross-checked by
+ * an independent merge-counter that also expands S/H macros), uniform LBT
+ * sampling (inverse-entry construction + 1/k thinning), the both-systems
+ * L3T drill space (every drill shows a proven 1L3T line AND a proven
+ * 1LP→TCP chain), the c4gap span rule (center steps never span into the
+ * finish steps — the retired last-center edges residue sits between), and
+ * the lbt+l3t span's phased target with per-line boundary proofs.
+ *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
  */
 import fs from 'fs';
@@ -832,6 +858,661 @@ t('verifyC23Drill: rejects a tampered state, scramble, optimal, presolved, or mo
     !core.verifyC23Drill(FT, CT, { ...d, optimal: d.optimal + 1 }) &&
     !core.verifyC23Drill(FT, CT, { ...d, presolved: d.presolved === 'L' ? 'R' : 'L' }) &&
     !core.verifyC23Drill(FT, CT, { ...d, mode: 'both', presolved: null });
+});
+
+// ================ Bencisco step spans (step trainers v4) ================
+const SPANV = core.spanEnv(FT, FC);        // init-asserted: anchors, spells, rebase pairing
+const SPAN_NATIVE_TOK = /^(BR|BL|[UFRLDB])'?$/;
+// independent method-frame conjugation (the f2t re-proof pattern)
+const conjM = (s) => {
+  const F = E.toFacelets(s), P = E.rotFaceletPerm(F2T_ENV.M), F2 = new Array(72);
+  for (let k = 0; k < 72; k++) F2[k] = E.faceImg(F2T_ENV.M, F[P[k]]);
+  return E.fromFacelets(F2);
+};
+// independent exact sealed / restricted lengths by pure existence DFS (no tables)
+function indepSealedLen(s0, goal, cap) {
+  if (core.f2tGoalOK(s0, goal)) return 0;
+  for (let L = 1; L <= cap; L++) {
+    let found = false;
+    const rec = (s, g, lastFace) => {
+      if (found) return;
+      for (const m of FT.BL.SEALED_MOVES) {
+        const f = m >> 1;
+        if (f === lastFace || (E.OPPF[f] === lastFace && f > lastFace)) continue;
+        const s2 = E.move(s, m);
+        if (g + 1 === L) { if (core.f2tGoalOK(s2, goal)) { found = true; return; } }
+        else rec(s2, g + 1, f);
+        if (found) return;
+      }
+    };
+    rec(s0, 0, -1);
+    if (found) return L;
+  }
+  return null;
+}
+function indepRestrictedLen(s0, goal, cap) {
+  if (core.c23GoalOK(s0, goal)) return 0;
+  for (let L = 1; L <= cap; L++) {
+    let found = false;
+    const rec = (s, b, g, lastFace) => {
+      if (found) return;
+      for (const [m, db] of CT.RES.MOVES[b]) {
+        const f = m >> 1;
+        if (f === lastFace || (E.OPPF[f] === lastFace && f > lastFace)) continue;
+        const s2 = E.move(s, m);
+        if (g + 1 === L) { if (core.c23GoalOK(s2, goal)) { found = true; return; } }
+        else rec(s2, (b + db) % 3, g + 1, f);
+        if (found) return;
+      }
+    };
+    rec(s0, 0, 0, -1);
+    if (found) return L;
+  }
+  return null;
+}
+
+t('spanPlan: contiguity rule + routing — singles and single-regime runs map to the\n  existing drills, multi-regime runs are spans, fc past t2 and gapped picks refuse', () => {
+  const want = [
+    [['fc'], 'fc', undefined], [['t1'], 'f2t', 'first'], [['t2'], 'f2t', 'second'],
+    [['t1', 't2'], 'f2t', 'both'], [['sc'], 'c23', 'second'], [['c3'], 'c23', 'third'],
+    [['sc', 'c3'], 'c23', 'both'],
+    [['fc', 't1'], 'span', undefined], [['t1', 'fc'], 'span', undefined],   // order-insensitive
+    [['fc', 't1', 't2'], 'span', undefined], [['t1', 't2', 'sc'], 'span', undefined],
+    [['t2', 'sc'], 'span', undefined], [['t2', 'sc', 'c3'], 'span', undefined],
+    [['t1', 't2', 'sc', 'c3'], 'span', undefined],
+    [['lbt'], 'lbt', undefined], [['l3t'], 'l3t', undefined],
+    [['lbt', 'l3t'], 'span', undefined], [['l3t', 'lbt'], 'span', undefined],
+  ];
+  for (const [steps, kind, mode] of want) {
+    const p = core.spanPlan(steps);
+    if (!p.ok || p.kind !== kind || (mode !== undefined && p.mode !== mode)) return false;
+    if (p.key !== steps.slice().sort((a, b) => core.SPAN_STEPS.indexOf(a) - core.SPAN_STEPS.indexOf(b)).join('+')) return false;
+  }
+  const pf = core.spanPlan(['lbt', 'l3t']);
+  if (pf.start !== 'lbt' || pf.phases.map((x) => x.kind).join() !== 'lbt,l3t') return false;
+  for (const [steps, reason] of [
+    [[], 'empty'], [['xx'], 'empty'], [['fc', 'fc'], 'empty'],
+    [['fc', 't2'], 'gap'], [['t1', 'sc'], 'gap'], [['fc', 'c3'], 'gap'],
+    [['fc', 't1', 't2', 'sc'], 'fcreach'], [['fc', 't1', 't2', 'sc', 'c3'], 'fcreach'],
+    [['fc', 'lbt'], 'gap'], [['t2', 'lbt'], 'gap'], [['sc', 'l3t'], 'gap'],
+    [['c3', 'lbt'], 'c4gap'], [['sc', 'c3', 'lbt'], 'c4gap'],
+    [['t1', 't2', 'sc', 'c3', 'lbt', 'l3t'], 'c4gap'], [['c3', 'lbt', 'l3t'], 'c4gap'],
+  ]) {
+    const p = core.spanPlan(steps);
+    if (p.ok || p.reason !== reason) return false;
+  }
+  return true;
+});
+t('span landing views: 12 anchors (3 per tetrad-A face, the U triple = the solver\'s\n  white anchors); every Q-rotated solved state reads SOLVED in all 3 of its views', () => {
+  if (SPANV.ANCH.some((a) => a.length !== 3)) return false;
+  if (!SPANV.ANCH[E.FIDX.U].some((a) => a.M === F2T_ENV.M)) return false;
+  // independent uniform construction of each rotated solved state
+  for (const Q of E.ROT24.filter((M) => E.faceImg(M, 0) < 4)) {
+    const inv = new Array(8);
+    for (let f = 0; f < 8; f++) inv[E.faceImg(Q, f)] = f;
+    const F = new Array(72);
+    for (let f = 0; f < 8; f++) for (let k = 0; k < 9; k++) F[9 * f + k] = inv[f];
+    const rot = E.fromFacelets(F);
+    if (!core.fcStateOK(FC, rot)) return false;            // a valid first-center formation
+    const views = SPANV.viewsOf(rot);
+    if (!views || views.length !== 3) return false;
+    for (const v of views) if (!E.eq(v.sM, E.solved())) return false;
+  }
+  return true;
+});
+t('span views: every optimal first-center landing gets exactly 3 method views, each\n  with the white hexagon exactly home (independent of the landing face)', () => {
+  for (let i = 0; i < 4; i++) {
+    const d = core.makeFcDrill(FC, { metric: 'token', target: 0 }, lcg(8100 + i));
+    if (!d) return false;
+    const sols = core.fcSolutions(FC, d, 4);
+    for (const l of sols.lines) {
+      const e = E.applyParsed(E.parseAlg(l.text), d.state);
+      const views = SPANV.viewsOf(e);
+      if (!views || views.length !== 3) return false;
+      for (const v of views) {
+        if (v.sM.ep[9] !== 9 || v.sM.ep[10] !== 10 || v.sM.ep[11] !== 11) return false;
+        if (v.sM.ctr[18] !== 6 || v.sM.ctr[19] !== 6 || v.sM.ctr[20] !== 6) return false;
+      }
+    }
+  }
+  return true;
+});
+t('makeSpanDrill: per span — scramble shape (30 natives fc-led / sealed letters tri-led),\n  no same-face runs, state re-proved, start conditions, breakdown sums, verify agrees', () => {
+  const SPANS = [['fc', 't1'], ['fc', 't1', 't2'], ['t1', 't2', 'sc'], ['t2', 'sc'], ['t1', 't2', 'sc', 'c3']];
+  for (const steps of SPANS) {
+    const plan = core.spanPlan(steps);
+    if (!plan.ok || plan.kind !== 'span') return false;
+    const n = steps.includes('fc') && steps.includes('t2') ? 2 : 3;
+    for (let i = 0; i < n; i++) {
+      const d = core.makeSpanDrill(FC, FT, CT, plan, { metric: 'token' }, lcg(9000 + 31 * i + steps.length));
+      if (!d || d.kind !== 'span' || d.spanKey !== plan.key) return false;
+      const toks = d.scramble.split(/\s+/).filter(Boolean);
+      if (plan.start === 'fc') {
+        if (toks.length !== 30 || !toks.every((x) => SPAN_NATIVE_TOK.test(x))) return false;
+      } else {
+        if (!toks.every((x) => F2T_TOK.test(x))) return false;
+        if (toks.length > 28) return false;
+      }
+      for (let j = 1; j < toks.length; j++)
+        if (toks[j].replace("'", '') === toks[j - 1].replace("'", '')) return false;
+      const st = E.applyParsed(E.parseAlg(d.scramble), E.solved());
+      if (!E.eq(st, d.state)) return false;
+      if (plan.start === 'fc') {
+        if (core.fcStateOK(FC, st)) return false;          // white center displaced
+      } else {
+        if (!f2tWhiteHomePhys(st)) return false;
+        const sM = conjM(st);
+        if (plan.start === 't2') {
+          if (![3, 5].includes(d.presolved)) return false;
+          if (!core.f2tTripleOK(sM, d.presolved) || core.f2tTripleOK(sM, d.presolved === 3 ? 5 : 3)) return false;
+        } else if (d.presolved !== 0 || core.f2tTripleOK(sM, 3) || core.f2tTripleOK(sM, 5)) return false;
+      }
+      const regimes = (steps.includes('fc') ? 1 : 0) +
+        (steps.includes('t1') || steps.includes('t2') ? 1 : 0) +
+        (steps.includes('sc') || steps.includes('c3') ? 1 : 0);
+      if (d.breakdown.length !== regimes) return false;
+      if (d.breakdown.reduce((a, b) => a + b, 0) !== d.optimal || d.optimal < 1) return false;
+      if (!core.verifySpanDrill(FC, FT, CT, d)) return false;
+    }
+  }
+  return true;
+});
+t('makeSpanDrill: fc-led mask keeps exactly 30 facelets — the 9 white-center pieces,\n  the 3 white-adjacent corners, the 9 candidate source triangles (union over landings)', () => {
+  for (let i = 0; i < 3; i++) {
+    const d = core.makeSpanDrill(FC, FT, CT, core.spanPlan(['fc', 't1']), { metric: 'token' }, lcg(4300 + i));
+    if (!d || d.mask.length !== 72 - 30) return false;
+    const keep = new Set(Array.from({ length: 72 }, (_, k) => k).filter((k) => !d.mask.includes(k)));
+    let x = 0, e = 0, c = 0;
+    for (const k of keep) { const ft = E.FEAT[k]; if (ft.t === 'x') x++; else if (ft.t === 'e') e++; else c++; }
+    if (x !== 12 || e !== 6 || c !== 12) return false;
+    // the white pieces (3 white triangles + the 3 U-edge pieces) are always kept
+    const F = E.toFacelets(d.state);
+    for (let k = 0; k < 72; k++) {
+      const ft = E.FEAT[k];
+      if (ft.t === 'x' && F[k] === 0 && !keep.has(k)) return false;
+      if (ft.t === 'e') {
+        const slot = E.EDGES.findIndex((q) => q[0] === ft.v && q[1] === ft.v2);
+        const piece = d.state.ep[slot];
+        if (E.EDGES[piece][2] === E.FIDX.U && !keep.has(k)) return false;
+      }
+    }
+  }
+  return true;
+});
+t('span target is exact: an independent phased brute force (raw full-alphabet fc DFS +\n  table-free sealed/restricted searches) reproduces the step-optimal total', () => {
+  let checkedFc = 0, checkedTri = 0;
+  for (let i = 0; i < 60 && checkedFc < 2; i++) {
+    const d = core.makeSpanDrill(FC, FT, CT, core.spanPlan(['fc', 't1']), { metric: 'token' }, lcg(5200 + i));
+    if (!d || d.breakdown[0] > 4 || d.breakdown[1] > 3) continue;
+    // every fc-optimal endstate by raw DFS over ALL 24 generators (no canonical
+    // ordering, no suppression): the phased min must match the drill target
+    const L1 = d.breakdown[0];
+    const ends = new Map();
+    const rec = (s, g) => {
+      if (g === L1) { if (core.fcStateOK(FC, s)) ends.set(E.stateKey(s), s); return; }
+      for (let gi = 0; gi < FC.GENS.length; gi++) {
+        let s2 = s;
+        for (const m of FC.GENS[gi].moves) s2 = E.move(s2, m);
+        rec(s2, g + 1);
+      }
+    };
+    rec(d.state, 0);
+    if (!ends.size) return false;
+    // no shorter fc solve exists (raw DFS at every shorter length)
+    for (let L = 0; L < L1; L++) {
+      let hit = false;
+      const rec2 = (s, g) => {
+        if (hit) return;
+        if (g === L) { if (core.fcStateOK(FC, s)) hit = true; return; }
+        for (let gi = 0; gi < FC.GENS.length && !hit; gi++) {
+          let s2 = s;
+          for (const m of FC.GENS[gi].moves) s2 = E.move(s2, m);
+          rec2(s2, g + 1);
+        }
+      };
+      rec2(d.state, 0);
+      if (hit) return false;
+    }
+    // cap = the claimed continuation: anything shorter would surface and
+    // fail the equality; nothing at all leaves best at Infinity and fails it
+    let best = Infinity;
+    for (const e of ends.values()) {
+      const views = SPANV.viewsOf(e);
+      if (!views) return false;
+      for (const v of views) {
+        const len = indepSealedLen(v.sM, 'either', d.breakdown[1]);
+        if (len != null) best = Math.min(best, L1 + len);
+      }
+    }
+    if (best !== d.optimal) return false;
+    checkedFc++;
+  }
+  for (let i = 0; i < 40 && checkedTri < 2; i++) {
+    const d = core.makeSpanDrill(FC, FT, CT, core.spanPlan(['t1', 't2', 'sc']), {}, lcg(6600 + i));
+    if (!d || d.breakdown[0] > 4 || d.breakdown[1] > 5) continue;
+    const sM0 = conjM(d.state);
+    const L1 = indepSealedLen(sM0, 'pair', 6);
+    if (L1 !== d.breakdown[0]) return false;
+    // all pair-optimal endstates by raw sealed DFS (no canonical ordering)
+    const ends = new Map();
+    const rec = (s, g) => {
+      if (g === L1) { if (core.f2tGoalOK(s, 'pair')) ends.set(E.stateKey(s), s); return; }
+      for (const m of FT.BL.SEALED_MOVES) rec(E.move(s, m), g + 1);
+    };
+    rec(sM0, 0);
+    if (!ends.size) return false;
+    let best = Infinity;
+    for (const e of ends.values()) {
+      const len = indepRestrictedLen(e, 'c1', d.breakdown[1]);
+      if (len != null) best = Math.min(best, L1 + len);
+    }
+    if (best !== d.optimal) return false;
+    checkedTri++;
+  }
+  return checkedFc >= 2 && checkedTri >= 2;
+});
+t('spanSolutions: every line is ONE continuous proved text — parses, count = target,\n  split sums, phase goals hold through the line\'s own landing view, and center\n  segments keep the solved block at D^b(home) at EVERY prefix', () => {
+  const SPANS = [['fc', 't1'], ['fc', 't1', 't2'], ['t1', 't2', 'sc'], ['t2', 'sc', 'c3']];
+  for (const steps of SPANS) {
+    const plan = core.spanPlan(steps);
+    const n = steps.includes('fc') && steps.includes('t2') ? 2 : 3;
+    for (let i = 0; i < n; i++) {
+      const d = core.makeSpanDrill(FC, FT, CT, plan, { metric: 'token' }, lcg(7300 + 13 * i + steps.length));
+      if (!d) return false;
+      const res = core.spanSolutions(FC, FT, CT, d, 8);
+      if (!res.lines.length || res.dropped !== 0) return false;
+      for (const l of res.lines) {
+        const parsed = E.parseAlg(l.text);
+        if (!parsed) return false;
+        if (E.countMoves(parsed) !== d.optimal) return false;
+        if (l.split.reduce((a, b) => a + b, 0) !== d.optimal) return false;
+        if (l.split.length !== d.breakdown.length) return false;
+        const stF = E.applyParsed(parsed, d.state);
+        const triGoal = steps.includes('t1') && !steps.includes('t2') ? 'either' : 'pair';
+        if (plan.start === 'fc') {
+          // the line must end white-formed with its landing view solving the goal
+          if (!core.fcStateOK(FC, stF)) return false;
+          const views = SPANV.viewsOf(stF);
+          if (!views || !views.some((v) => core.f2tGoalOK(v.sM, triGoal))) return false;
+        } else {
+          // method-frame walk: triples segment first, then the center segment
+          // must keep the block at D^b(home) after EVERY single move
+          const fired = [];
+          E.walkParsed(parsed, (m) => fired.push(m));
+          if (fired.length !== d.optimal) return false;    // sealed/restricted words: 1 token = 1 native
+          let sP = conjM(d.state), bP = 0;
+          for (let k = 0; k < fired.length; k++) {
+            const mM = 2 * E.faceImg(F2T_ENV.M, fired[k] >> 1) + (fired[k] & 1);
+            sP = E.move(sP, mM);
+            if (k >= l.split[0]) {
+              bP = (bP + bShift(mM)) % 3;
+              if (!blockIntact(sP, bP)) return false;
+            } else if (k === l.split[0] - 1) {
+              if (!core.f2tGoalOK(sP, 'pair')) return false;     // triples done at the boundary
+            }
+          }
+          if (bP !== 0) return false;
+          if (!E.eq(sP, conjM(stF))) return false;
+          const ctrGoal = steps.includes('sc') && !steps.includes('c3') ? 'c1' : 'c2';
+          if (!core.c23GoalOK(sP, ctrGoal)) return false;
+          if (!l.centers || l.centers.length < (ctrGoal === 'c2' ? 2 : 1)) return false;
+        }
+      }
+    }
+  }
+  return true;
+});
+t('makeSpanDrill: a stuck injected rng exhausts the attempt cap and returns null (no hang)', () =>
+  core.makeSpanDrill(FC, FT, CT, core.spanPlan(['fc', 't1']), { metric: 'token' }, () => 0) === null &&
+  core.makeSpanDrill(FC, FT, CT, core.spanPlan(['t1', 't2', 'sc']), {}, () => 0) === null);
+t('verifySpanDrill: rejects a tampered state, scramble, optimal, breakdown, mask, or steps', () => {
+  const d = core.makeSpanDrill(FC, FT, CT, core.spanPlan(['fc', 't1']), { metric: 'token' }, lcg(8801));
+  if (!d || !core.verifySpanDrill(FC, FT, CT, d)) return false;
+  return !core.verifySpanDrill(FC, FT, CT, { ...d, state: E.move(d.state, 2 * E.FIDX.R) }) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, scramble: d.scramble + ' R' }) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, optimal: d.optimal + 1 }) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, breakdown: [d.optimal] }) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, mask: d.mask.slice(1) }) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, steps: ['fc', 't1', 't2'], spanKey: 'fc+t1+t2' });
+});
+
+// ---------------- LBT / L3T finish drills (step trainers v5) ----------------
+const FIN = core.buildFinish(JSON_DATA);
+
+// independent coset (test-engine §16 construction: effect-table closure)
+const indepCoset = (() => {
+  const tbl = (x) => E.effectTable(E.parseAlg(x), 'cif');
+  const gens = ['U', "U'", 'S', "S'", 'H', "H'"].map(tbl);
+  const seen = new Map([[E.stateKey(E.solved()), E.solved()]]);
+  let fr = [E.solved()];
+  while (fr.length) {
+    const nx = [];
+    for (const s of fr) for (const g of gens) {
+      const t2 = E.applyTable(g, s), k = E.stateKey(t2);
+      if (!seen.has(k)) { seen.set(k, t2); nx.push(t2); }
+    }
+    fr = nx;
+  }
+  return seen;
+})();
+// independent implementation of the axis-run floor (the adversarial review's
+// model, 2026-07-17): fired natives fold within maximal same-AXIS runs —
+// opposite-face layer turns commute, so a run's net twists (a, b) cost
+// 0 / 1 (single face, or the slice a+b≡0) / 2, realizable as engine tokens
+// plus free rotations. Everything the core's finPhysMoves must agree with,
+// written differently: face-amount maps per run + a cost function.
+function indepFloor(text) {
+  const p = E.parseAlg(text);
+  if (!p) return null;
+  const nat = [];
+  try { E.walkParsed(p, (m) => nat.push(m)); } catch (e) { return null; }
+  const runs = [];
+  for (const m of nat) {
+    const f = m >> 1, axis = Math.min(f, E.OPPF[f]);
+    if (!runs.length || runs[runs.length - 1].axis !== axis) runs.push({ axis, amt: {} });
+    const r = runs[runs.length - 1];
+    r.amt[f] = ((r.amt[f] || 0) + ((m & 1) ? 2 : 1)) % 3;
+  }
+  let total = 0;
+  for (const r of runs) {
+    const live = Object.keys(r.amt).filter((f) => r.amt[f] !== 0);
+    if (live.length === 2) total += (r.amt[live[0]] + r.amt[live[1]]) % 3 === 0 ? 1 : 2;
+    else total += live.length;
+  }
+  return total;
+}
+const indepFormed = (s) => {
+  const US = [0, 1, 2], FLK = [3, 7, 11];
+  for (let j = 0; j < 3; j++) {
+    if (s.cp[j] > 2) return false;
+    const uY = s.ctr[US[j]] === E.FIDX.U, fY = s.ctr[FLK[j]] === E.FIDX.U;
+    if (s.co[j] ? !(!uY && fY) : !(uY && !fY)) return false;
+  }
+  return true;
+};
+
+t('buildFinish: coset 4320 (1440 edges-home, 3 trivial) matches an independent closure;\n  3 grips; 360 LBT entries; 1L3T+TCP index covers 3237 of the 4317 non-trivial states', () => {
+  if (FIN.coset.size !== 4320 || indepCoset.size !== 4320) return false;
+  for (const k of FIN.coset.keys()) if (!indepCoset.has(k)) return false;
+  let eh = 0, cov = 0, nt = 0;
+  for (const [k, n] of FIN.coset) {
+    if (n.s.ep.every((v, i) => v === i)) eh++;
+    if (FIN.trivial.has(k)) continue;
+    nt++;
+    if (FIN.l3t.has(k)) cov++;
+  }
+  return eh === 1440 && FIN.trivial.size === 3 && nt === 4317 && cov === 3237 &&
+    FIN.GRIPS.length === 3 && FIN.GRIPS.map((g) => g.spell).join(' ') === ' {U,BR} {U,BL}' &&
+    FIN.lbt.length === 360;
+});
+t('buildFinish: every coset BFS word reproduces its state from solved (spot 200)', () => {
+  const keys = FIN.cosetKeys;
+  for (let i = 0; i < 200; i++) {
+    const k = keys[(i * 21 + 7) % keys.length];
+    let st = E.solved();
+    for (const m of FIN.cosetWord(k)) st = E.move(st, m);
+    if (E.stateKey(st) !== k) return false;
+  }
+  return true;
+});
+t('finCanonText folds ONLY our plain decorations (verbatim sheet texts untouched —\n  parens and (U) markers survive); finPhysMoves is the axis-run floor', () => {
+  const cc = core.finCanonText, fm = core.finPhysMoves;
+  if (!cc("B' R B R' U' U") || cc("B' R B R' U' U").text !== "B' R B R'") return false;
+  if (!cc('U U') || cc('U U').text !== "U'") return false;
+  const across = cc("U' {U,BR} U");
+  if (!across || across.text !== '{U,BR}') return false;
+  if (cc("Rw Rw'") !== null) return false;              // no plain fold: keep verbatim
+  if (cc("R' L R L'") !== null) return false;           // already canonical: keep
+  if (cc("{B,U} (U' R' D R') (U R D' R)") !== null) return false;   // sheet parens survive
+  // the floor merges what a human merges: slice/wide pairs, macro edges, AUFs
+  const want = [['U U', 1], ["U U'", 0], ["Rw Rw'", 0], ["Rw R'", 1], ["BL R'", 1],
+                ["U' Uw", 1], ['U Us', 1], ['U Uw', 2], ['R S', 3], ["R' L R L'", 4],
+                ['Rs', 1], ['R2', 1], ["B' R B R' U' U", 4], ['S', 4], ['U R BL R', 2]];
+  return want.every(([tx, n]) => fm(tx) === n && indepFloor(tx) === n);
+});
+t('buildFinish: every LBT entry and 1L3T index entry is priced at its physical floor\n  (the independent axis-run counter agrees; sampled across the index)', () => {
+  for (const en of FIN.lbt) if (indepFloor(en.text) !== en.moves) return false;
+  let i = 0;
+  for (const list of FIN.l3t.values()) for (const en of list) {
+    if (i++ % 17 !== 0) continue;                       // ~400 sampled entries
+    if (indepFloor(en.text) !== en.moves) return false;
+  }
+  return true;
+});
+t('buildFinish: TCP ≤2-look finish closes ALL 216 formed states, worst 14 floor turns\n  (the sheet\'s own "or 2-look"); the formed census matches an independent predicate', () => {
+  let formed = 0, worst = 0;
+  for (const [k, n] of FIN.coset) {
+    if (!indepFormed(n.s)) continue;
+    formed++;
+    if (k === FIN.SOLVED_KEY) continue;
+    const cands = FIN.finishCands(n.s, k);
+    if (!cands.length) return false;
+    if (cands[0].moves > worst) worst = cands[0].moves;
+  }
+  return formed === 216 && worst === 14;
+});
+
+t('makeLbtDrill: state re-proved from the scramble, before-LBT start (everything but\n  slot 4 + top solved, edges home, slot unsolved), optimal = fewest applicable entry,\n  verify agrees, mask keeps the 30 slot-region facelets', () => {
+  for (let i = 0; i < 12; i++) {
+    const d = core.makeLbtDrill(FIN, lcg(4400 + 7 * i));
+    if (!d || d.kind !== 'lbt') return false;
+    const toks = d.scramble.split(/\s+/);
+    if (!toks.every((x) => FACE_TOK.test(x))) return false;
+    for (let j = 1; j < toks.length; j++)
+      if (toks[j].replace("'", '') === toks[j - 1].replace("'", '')) return false;
+    let st = E.solved();
+    E.walkParsed(E.parseAlg(d.scramble), (m) => { st = E.move(st, m); });
+    if (!E.eq(st, d.state)) return false;
+    if (!core.beforeLbtOK(st)) return false;
+    if (st.cp[4] === 4 && st.co[4] === 0 && st.ctr[4] === 1 && st.ctr[10] === 3) return false;
+    // independent optimal: every entry replayed on the full state; a landing
+    // must sit inside the independent coset (or be solved)
+    let best = Infinity;
+    for (const en of FIN.lbt) {
+      let post = null;
+      try { post = E.applyParsed(E.parseAlg(en.text), E.copy(st), 'cif'); } catch (e) { continue; }
+      const pk = E.stateKey(post);
+      if (pk !== E.stateKey(E.solved()) && !indepCoset.has(pk)) continue;
+      const mc = indepFloor(en.text);
+      if (mc < best) best = mc;
+    }
+    if (best !== d.optimal || d.optimal < 1) return false;
+    if (!core.verifyLbtDrill(FIN, d)) return false;
+    if (d.mask.length !== 72 - 30) return false;
+    const keep = new Set(Array.from({ length: 72 }, (_, x) => x).filter((x) => !d.mask.includes(x)));
+    for (const x of keep) {
+      const ft = E.FEAT[x];
+      const okC = ft.t === 'c' && [0, 1, 2, 4].includes(ft.v);
+      const okX = ft.t === 'x' && [0, 1, 2, 3, 4, 7, 10, 11].includes(3 * ft.f + (ft.v % 3));
+      const okE = ft.t === 'e' && (ft.v === E.FIDX.U || ft.v2 === E.FIDX.U ||
+        E.EDGES.some((q, e) => q[0] === ft.v && q[1] === ft.v2 && (q[2] === E.FIDX.U || q[3] === E.FIDX.U)));
+      if (!okC && !okX && !okE) return false;
+    }
+  }
+  return true;
+});
+t('lbtSolutions: every displayed line re-proved (parses, count exact, landing inside the\n  L3T coset), best-first, and the target is UNBEATABLE by the independent merge-counter', () => {
+  for (let i = 0; i < 10; i++) {
+    const d = core.makeLbtDrill(FIN, lcg(5500 + 11 * i));
+    if (!d) return false;
+    const res = core.lbtSolutions(FIN, d, 6);
+    if (!res.lines.length || res.dropped) return false;
+    if (res.lines[0].moves !== d.optimal) return false;
+    let prev = 0;
+    for (const l of res.lines) {
+      if (l.moves < prev) return false;
+      prev = l.moves;
+      const p = E.parseAlg(l.text);
+      if (!p || E.countMoves(p) !== l.tokens || l.tokens < l.moves) return false;
+      if (indepFloor(l.text) !== l.moves) return false;   // the floor IS the price
+      const post = E.applyParsed(p, E.copy(d.state), 'cif');
+      const pk = E.stateKey(post);
+      if (pk !== E.stateKey(E.solved()) && !indepCoset.has(pk)) return false;
+    }
+  }
+  return true;
+});
+t('makeL3tDrill: state = a non-trivial coset member re-proved from the scramble; BOTH\n  sheet routes produce proven lines; target = their minimum; parts recorded; verify\n  agrees; mask keeps the 24 top-region facelets', () => {
+  for (let i = 0; i < 10; i++) {
+    const d = core.makeL3tDrill(FIN, lcg(6600 + 13 * i));
+    if (!d || d.kind !== 'l3t') return false;
+    let st = E.solved();
+    E.walkParsed(E.parseAlg(d.scramble), (m) => { st = E.move(st, m); });
+    if (!E.eq(st, d.state)) return false;
+    const k = E.stateKey(st);
+    if (!indepCoset.has(k) || FIN.trivial.has(k)) return false;
+    const res = core.l3tSolutions(FIN, d, 6);
+    if (!res.sys1.length || !res.sys2.length) return false;
+    if (Math.min(res.sys1[0].moves, res.sys2[0].moves) !== d.optimal) return false;
+    if (d.parts.l3t !== res.sys1[0].moves || d.parts.chain !== res.sys2[0].moves) return false;
+    if (!core.verifyL3tDrill(FIN, d)) return false;
+    if (d.mask.length !== 72 - 24) return false;
+  }
+  return true;
+});
+t('l3tSolutions: every line of BOTH routes re-proved from the drill state to EXACTLY\n  solved; counts exact and unbeatable by the independent merge-counter (which also\n  merges across the 1LP→TCP junctions)', () => {
+  for (let i = 0; i < 8; i++) {
+    const d = core.makeL3tDrill(FIN, lcg(7700 + 17 * i));
+    if (!d) return false;
+    const res = core.l3tSolutions(FIN, d, 6);
+    let beatable = Infinity;
+    for (const l of [...res.sys1, ...res.sys2]) {
+      const p = E.parseAlg(l.text);
+      if (!p || E.countMoves(p) !== l.tokens || l.tokens < l.moves) return false;
+      if (indepFloor(l.text) !== l.moves) return false;
+      if (!E.eq(E.applyParsed(p, E.copy(d.state), 'cif'), E.solved())) return false;
+      const mc = indepFloor(l.text);
+      if (mc < beatable) beatable = mc;
+    }
+    if (beatable < d.optimal) return false;
+    // and the full index at this key holds nothing shorter than the target
+    for (const en of FIN.l3t.get(E.stateKey(d.state)) || [])
+      if (indepFloor(en.text) < d.optimal) return false;
+  }
+  return true;
+});
+t('makeSpanDrill lbt+l3t: phased target = LBT optimal + best L3T continuation over the\n  optimal landings (independently recomputed); start conditions; verify agrees', () => {
+  const plan = core.spanPlan(['lbt', 'l3t']);
+  for (let i = 0; i < 8; i++) {
+    const d = core.makeSpanDrill(null, null, null, plan, {}, lcg(8800 + 19 * i), FIN);
+    if (!d || d.kind !== 'span' || d.start !== 'lbt' || d.metric !== null) return false;
+    let st = E.solved();
+    E.walkParsed(E.parseAlg(d.scramble), (m) => { st = E.move(st, m); });
+    if (!E.eq(st, d.state) || !core.beforeLbtOK(st)) return false;
+    // independent phase 1: replay every entry; collect optimal landings
+    let L1 = Infinity;
+    const lands = new Map();
+    for (const en of FIN.lbt) {
+      let post = null;
+      try { post = E.applyParsed(E.parseAlg(en.text), E.copy(st), 'cif'); } catch (e) { continue; }
+      const pk = E.stateKey(post);
+      if (pk !== E.stateKey(E.solved()) && !indepCoset.has(pk)) continue;
+      if (en.moves < L1) { L1 = en.moves; }
+      if (!lands.has(pk) || en.moves < lands.get(pk)) lands.set(pk, en.moves);
+    }
+    if (d.breakdown[0] !== L1) return false;
+    let v = Infinity;
+    for (const [pk, mv] of lands) {
+      if (mv !== L1) continue;
+      const vv = pk === E.stateKey(E.solved()) ? 0 : core.l3tOptOf(FIN, indepCoset.get(pk), pk);
+      if (vv != null && vv < v) v = vv;
+    }
+    if (!isFinite(v) || d.breakdown[1] !== v || d.optimal !== L1 + v) return false;
+    if (!core.verifySpanDrill(null, null, null, d, FIN)) return false;
+  }
+  return true;
+});
+t('spanSolutions lbt+l3t: every line is one continuous proved text — parses, per-phase\n  floor split sums to the target, the LBT/L3T boundary state sits inside the coset,\n  ends solved (the seam is priced per phase, never merged)', () => {
+  const plan = core.spanPlan(['lbt', 'l3t']);
+  for (let i = 0; i < 8; i++) {
+    const d = core.makeSpanDrill(null, null, null, plan, {}, lcg(9900 + 23 * i), FIN);
+    if (!d) return false;
+    const res = core.spanSolutions(null, null, null, d, 6, FIN);
+    if (!res.lines.length) return false;
+    for (const l of res.lines) {
+      const p = E.parseAlg(l.text);
+      if (!p) return false;
+      if (l.split.reduce((a, b) => a + b, 0) !== d.optimal) return false;
+      if (l.split.join() !== d.breakdown.join()) return false;
+      const fired = [];
+      E.walkParsed(p, (m) => fired.push(m));
+      // walk prefixes until the state enters the coset (the LBT phase done),
+      // then the whole text must end exactly solved
+      let mid = E.copy(d.state);
+      let enteredAt = -1;
+      for (let j = 0; j < fired.length; j++) {
+        mid = E.move(mid, fired[j]);
+        if (enteredAt < 0 && indepCoset.has(E.stateKey(mid))) enteredAt = j + 1;
+      }
+      if (enteredAt < 0) return false;
+      if (!E.eq(mid, E.solved())) return false;
+    }
+  }
+  return true;
+});
+t('the FIN_CANON_WINDOW is sufficient: windowed chain minima equal an unwindowed\n  search over a seeded coset sample (cross-seam merges never beat the window)', () => {
+  const rnd = lcg(87654321);
+  let checked = 0;
+  while (checked < 24) {
+    const k = FIN.cosetKeys[(rnd() * FIN.cosetKeys.length) | 0];
+    if (FIN.trivial.has(k)) continue;
+    checked++;
+    const s = FIN.coset.get(k).s;
+    const a = core.l3tChainLines(FIN, s, k);
+    const b = core.l3tChainLines(FIN, s, k, 99);
+    const am = a.length ? a[0].moves : null, bm = b.length ? b[0].moves : null;
+    if (am !== bm) return false;
+  }
+  return true;
+});
+t('the TCP-direct route is GATED on formed-modulo-view states: chain lines from\n  never-formed states are 1LP-routed only (no \"pairs formed\" label)', () => {
+  const rnd = lcg(24681357);
+  let formedSeen = 0, unformedSeen = 0;
+  for (let i = 0; i < 400 && (formedSeen < 8 || unformedSeen < 8); i++) {
+    const k = FIN.cosetKeys[(rnd() * FIN.cosetKeys.length) | 0];
+    if (FIN.trivial.has(k)) continue;
+    const s = FIN.coset.get(k).s;
+    const lines = core.l3tChainLines(FIN, s, k);
+    if (!lines.length) continue;
+    if (FIN.formedish(s)) formedSeen++;
+    else {
+      unformedSeen++;
+      if (lines.some((l) => /pairs formed/.test(l.label))) return false;
+    }
+  }
+  return formedSeen >= 8 && unformedSeen >= 8;
+});
+t('finSpanSolutions: a show-capped listing reports capped (the reveal header shows\n  N+, never a truncated count as exact)', () => {
+  const plan = core.spanPlan(['lbt', 'l3t']);
+  for (let i = 0; i < 40; i++) {
+    const d = core.makeSpanDrill(null, null, null, plan, {}, lcg(5000 + 17 * i), FIN);
+    if (!d) return false;
+    const big = core.spanSolutions(null, null, null, d, 60, FIN);
+    if (big.lines.length <= 1) continue;
+    const small = core.spanSolutions(null, null, null, d, 1, FIN);
+    return small.lines.length === 1 && small.capped === true;
+  }
+  return false;                               // no multi-line drill found in 40 seeds
+});
+t('makeLbtDrill / makeL3tDrill: a stuck injected rng exhausts the caps and returns null', () =>
+  core.makeLbtDrill(FIN, () => 0.99999) === null && core.makeL3tDrill(FIN, () => 0) === null);
+t('verifyLbtDrill / verifyL3tDrill / lbt-span verify: tampering rejected', () => {
+  const d1 = core.makeLbtDrill(FIN, lcg(31337));
+  if (!core.verifyLbtDrill(FIN, d1)) return false;
+  if (core.verifyLbtDrill(FIN, { ...d1, optimal: d1.optimal + 1 })) return false;
+  if (core.verifyLbtDrill(FIN, { ...d1, scramble: d1.scramble + ' U' })) return false;
+  if (core.verifyLbtDrill(FIN, { ...d1, state: E.move(E.copy(d1.state), 0) })) return false;
+  if (core.verifyLbtDrill(FIN, { ...d1, mask: d1.mask.slice(1) })) return false;
+  const d2 = core.makeL3tDrill(FIN, lcg(31338));
+  if (!core.verifyL3tDrill(FIN, d2)) return false;
+  if (core.verifyL3tDrill(FIN, { ...d2, optimal: d2.optimal + 1 })) return false;
+  if (core.verifyL3tDrill(FIN, { ...d2, parts: { ...d2.parts, chain: d2.parts.chain + 1 } })) return false;
+  const plan = core.spanPlan(['lbt', 'l3t']);
+  const d3 = core.makeSpanDrill(null, null, null, plan, {}, lcg(31339), FIN);
+  if (!core.verifySpanDrill(null, null, null, d3, FIN)) return false;
+  if (core.verifySpanDrill(null, null, null, { ...d3, breakdown: [d3.breakdown[0] + 1, d3.breakdown[1] - 1] }, FIN)) return false;
+  if (core.verifySpanDrill(null, null, null, { ...d3, optimal: d3.optimal + 1 }, FIN)) return false;
+  return true;
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -565,6 +565,133 @@ The USER supplies the actual sheets; this section is context, not authority.
   third — leaving an edges-only even 3-perm (identity or one of two
   3-cycles) whose optimal is always 1 or 3 turns (80/80 sample). That is
   WHY the centers stage needs no drill beyond the third center.
+- **Step spans and the PHASED step-optimal target (step trainers v4,
+  2026-07-17, machine-verified)**: a drill may span several CONSECUTIVE
+  Bencisco steps (chain fc → t1 → t2 → sc → c3; contiguity is the user's
+  validity rule — fc+t1+t2 works, fc+t2 does not). The steps fall into
+  three REGIMES with incompatible execution contracts (fc = free
+  16-native metric; triples = sealed 10-move turn metric with free
+  re-grips; centers = restricted {R,U,Rw}), so **no cross-regime fused
+  metric exists** and a span's target is PHASED:
+  T(s, [p, …rest]) = opt_p(s) + min over p-optimal endstates e of
+  T(e, rest) — each regime segment solved to its true fused optimum in
+  its own contract from its entry state, the total minimized over every
+  optimal-endstate chain (the lookahead a step-disciplined solver
+  genuinely has: which optimal solution of one phase to carry into the
+  next). Steps sharing a regime stay fused inside one phase (the 'both'
+  semantics). The target is exact — enumerations are complete or the
+  scramble is rejected (never approximated) — and canonical enumeration
+  is ENDSTATE-COMPLETE: reordering commuting same-axis (fc) or
+  opposite-face (sealed/restricted) runs never changes the end state, so
+  the canonical harvest covers every optimal endstate (cross-checked by
+  a raw, suppression-free brute force in test-trainer). **The landing
+  REBASE theorem** (how a placement-neutral first-center landing re-enters
+  the method frame; init-asserted in fto-core spanEnv): a state with
+  white formed at formation Q, RECOLORED by color c → faceImg(Q, c), is
+  the same solve re-expressed against the Q-rotated solved target —
+  recoloring commutes with every slot-permutation move, so goals and
+  distances transport — and after the rebase the landing hexagon is
+  exactly home at its face X with position and color aligned, so pure
+  conjugation applies: the 3 rotations mapping X onto method D (the
+  white-axis spins; X = U gives the solver's {D,L}/{D,R}/{D,B} anchors)
+  each yield a valid method view. Every formed state has EXACTLY 3
+  views (12 anchors over the 4 landing faces = the tetrad-swapping half
+  of ROT24); a span's triples phase takes the min over them — the
+  solver's free choice of grip. Pinned corollaries: only the 3
+  white-adjacent corner pieces can ever be a landing's bottom-triple
+  corners, and only the 9 orbit-B triangles whose color is NOT white's
+  opposite can ever source one — the fc-led span mask is exactly the 9
+  white pieces + those 12 pieces (30 facelets). fc-led spans reach at
+  most t2: an exact fc→centers phased target costs the complete
+  triples-optimal expansion of every fc view (measured: tens of seconds
+  per scramble) and the site never shows a target it cannot prove.
+  Span reveals are ONE continuous engine text per optimal chain
+  (junction re-grips as relative {X,Y} brackets against the hold the
+  previous tokens actually leave — the 2026-07-14 contract), each line
+  re-proved end-to-end including the per-prefix block walk across center
+  segments. All pinned in tools/test-trainer.mjs (§step spans).
+- **LBT / L3T finish-step spaces and sheet coverage (step trainers v5,
+  2026-07-17, machine-measured)**: the finish steps are SHEET-ALGORITHM
+  steps — no move-search tables; a drill's target is the fewest PHYSICAL
+  turns over the machine-proven sheet executions. Facts, all measured on
+  the live data (probe scripts; the load-bearing ones pinned in
+  tools/test-trainer.mjs §v5):
+  - The L3T stage space = the {U,S,H} coset (4320; 1440 edges-home; real
+    LBT landings include the AUF-displaced states, so drills sample the
+    full coset minus the 3 solved±AUF trivials). The coset's 80 appearance
+    classes fold into exactly **12 orbits under AUF-turn × U-spin re-grip
+    = zwegner's 12 OLP groups** (measured 1:1).
+  - **The 1L3T sheet is NOT total**: exact-key matching over all 251 algs
+    with {ε,U,U'} pre/trailing AUFs AND the three U-spin re-grips covers
+    **3237 of the 4317** non-trivial coset states (1179 without re-grips —
+    the solver's fixed-grip index; its LBT effect-matching constructively
+    steers landings inside, which is why the solver never misses).
+  - **The 1LP sheet covers 6 of the 12 orbits** (its case numbers are NOT
+    orbit ids; several cases share orbits, 1350 states match no line even
+    re-gripped). **TCP one-look covers 165/216 formed states; the sheet's
+    own "or 2-look" (≤ 2 TCP algs + final AUF) closes ALL 216, worst 14
+    floor turns.** The full 1LP → TCP grammar ([re-grip][AUF] +
+    line/pairs-formed + ≤2-look TCP) reaches 2967 coset states; **both
+    systems together solve 2013 — the L3T drill space** (user spec: every
+    drill shows BOTH routes; refuse rather than show an unproven panel).
+    The TCP-direct route is GATED on formed-modulo-view states (some
+    grip/AUF view of the state is formed — aufFix/pre1 keys are so by
+    construction; adversarial review 2026-07-17: an ungated 2-look scan
+    admitted machine-found TCP concatenations from never-formed states,
+    outside both recognition systems and mislabeled "pairs formed" — the
+    gate costs ZERO coverage, all census figures unchanged).
+  - **Physical counting = the AXIS-RUN FLOOR** (finPhysMoves; the
+    adversarial review's decisive finding, 2026-07-17): a target must be
+    unbeatable by any execution of the shown lines, and plain-pair
+    canonical merging alone left ~16% of targets beatable — opposite-face
+    layer turns commute on each of the four axes, so `Rw R'` / `BL R'`
+    execute as ONE slice turn, an AUF merges into a leading Uw/Us setup,
+    and macro edges cancel (`R S` = 3 turns). The floor: fired natives
+    group into maximal consecutive same-AXIS runs (rotations fire nothing
+    and never block); a run's net twists (a, b) on its two faces cost 0,
+    1 (single face — plain/double/wide — or a + b ≡ 0 mod 3 — the slice),
+    else 2; every cost realizable as engine tokens plus free {X,Y}
+    re-grips. Every entry and displayed line is priced at its floor
+    (validated by an INDEPENDENT axis-run implementation over the whole
+    index and every displayed line, and by the review team's own scan
+    scripts: 0 beatable targets coset-wide, drill-level and span-level);
+    a "merges" chip marks lines whose printed token count exceeds the
+    floor. finCanonText remains display-only (our decoration collisions
+    fold textually; VERBATIM sheet texts — parens, (U) markers — are
+    never rewritten). Chain candidates materialize inside a floor-sum
+    window (FIN_CANON_WINDOW = 6) around the best spliced floor —
+    measured sufficient (0 divergence from an unwindowed search over 700
+    states; 74 divergences at W = 4) and PINNED in test-trainer against
+    an unwindowed run. The lbt+l3t SPAN's step boundary is deliberately
+    NEVER merged: the phased target prices step discipline (a cross-seam
+    merged turn physically skips the step-boundary state); the split chip
+    prices the steps separately.
+  - **The before-LBT space**: everything outside slot 4 + the top region
+    solved, edges home. The sheet-solvable part (≥1 of the 360 LBT entries
+    — 120 algs × {ε,U,U'} pre-AUFs, setup-undo closings appended — lands
+    the state inside the coset) measures **153,216 states** by constructive
+    enumeration (inverse entries × coset); 1344 of them have the LBT slot
+    already solved (pure-L3T states, excluded from the drill), and the
+    trapped-source dead-ends the sheet cannot solve are unreachable by the
+    construction (the solver's re-anchor rescue is the real-solve answer).
+    Drill sampling is EXACTLY uniform over the space: draw (entry, coset
+    state), apply the inverse entry effect, accept with probability 1/k
+    where k = the state's applicable-entry count (the constructive
+    distribution weights a state by k; 1/k-thinning uniformizes).
+  - **Scrambles** are setup scrambles: the drill state's {U,S,H} BFS word
+    (plus, for LBT, an applicable entry's inverse natives), flattened to
+    plain face letters and merged — replay-proved per drill.
+  - **The c4gap span rule**: the retired fourth-center EDGES residue
+    (always 1 or 3 turns) sits between the trainer's third-center goal and
+    the LBT start, so center steps never span into the finish steps
+    (spanPlan reason 'c4gap'); lbt+l3t is the only new span. Its phased
+    target = LBT optimal + min over the complete optimal-landing set of
+    the L3T step metric (min over both routes), rejected when no optimal
+    landing continues (~1%, measured).
+  - Measured (seeded scans, floor metric): LBT targets 5-13 med 9 (gen
+    ≤ 1 ms), L3T targets 4-16 med 11 (gen med 11 ms / max 76 ms),
+    lbt+l3t 15-32 med 21 (med 22 ms / max 164 ms); buildFinish ≈ 1 s
+    in-page, no IndexedDB.
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶
