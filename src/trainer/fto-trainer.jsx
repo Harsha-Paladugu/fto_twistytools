@@ -5,10 +5,9 @@ import { createCore, SEP } from "./fto-core.mjs";
 // FTO trainer (M4) — case drill over the authored algorithm sheet
 //   Drill: setup scrambles (inverted case alg + random AUF) onto sheet
 //   cases, timed; Recap: one pass over every enabled case.
-//   Bencisco steps (step trainers v4 — one section for every step drill):
-//   the user multi-selects a CONSECUTIVE run of Bencisco steps (first
-//   center / first triple / second triple / second center / third center —
-//   core.spanPlan validates; fc-led runs reach at most the second triple).
+//   Bencisco steps (step trainers v4/v6 — one section for every step
+//   drill): the user multi-selects any CONSECUTIVE run of Bencisco steps,
+//   first center through last 3 triples (core.spanPlan validates).
 //   Single-regime runs route to the original drills: the white-center
 //   drill (10-move scramble, masked diagram, counting toggle + exact
 //   optimal-length difficulty picker, God's number 6/7 pinned), the
@@ -24,9 +23,10 @@ import { createCore, SEP } from "./fto-core.mjs";
 //   LBT = uniform sheet-solvable before-LBT states, target = fewest turns
 //   over the applicable LBT entries; L3T = uniform over the coset states
 //   BOTH sheet systems solve, and the reveal shows the 1L3T line AND the
-//   1LP → TCP chain (user spec); lbt+l3t spans share the phased target.
-//   Center steps cannot span into the finish steps (the retired last-center
-//   edges residue sits between — spanPlan reason 'c4gap'). Tables load per
+//   1LP → TCP chain (user spec). Spans that cross into the finish steps
+//   (v6) fuse the retired last-center edges residue into the center phase
+//   (goal 'call' = all hexagons — the before-LBT junction) and price the
+//   finish segments at the sheet texts' axis-run floor. Tables load per
 //   selection (buildFirstCenter in-page; loadOrBuildF2T / loadOrBuildC23
 //   from IndexedDB; buildFinish in-page ~1s); generation is async behind a
 //   searching note. No timer: the shared move-count answer flow,
@@ -300,11 +300,14 @@ export default function FtoTrainer() {
     // every move-search span needs the FC bundle: the span environment
     // (landing anchors, rebase maps, the primary entry holds the reveal
     // junctions target) is derived against it even when the fc step itself
-    // is not selected. The finish steps (lbt/l3t and their span) need only
-    // the FIN bundle — built in-page from the fetched alg data.
+    // is not selected. The finish steps alone (lbt/l3t and the lbt-led
+    // span) need only the FIN bundle — built in-page from the fetched alg
+    // data; a span that CROSSES into the finish steps needs FIN on top of
+    // the move-search bundles.
     const finKind = plan.kind === "lbt" || plan.kind === "l3t" ||
       (plan.kind === "span" && plan.start === "lbt");
-    const needFIN = finKind;
+    const needFIN = finKind ||
+      (plan.kind === "span" && plan.phases.some((p) => p.kind === "lbt" || p.kind === "l3t"));
     // a restored lbt/l3t selection can commit before the alg JSON arrives —
     // stay in "building" until the fetch lands (the `ready` dep re-fires us)
     if (needFIN && !jsonRef.current) { setStepStatus("building"); return; }
@@ -312,8 +315,14 @@ export default function FtoTrainer() {
     const needFT = !finKind && plan.kind !== "fc";
     const needCT = !finKind && (plan.kind === "c23" ||
       (plan.kind === "span" && plan.phases.some((p) => p.kind === "ctr")));
+    // fc-led spans past the triples expand every landing view through a
+    // complete pair search — the index-DFS aux bundle (in-memory, a few
+    // seconds) keeps that interactive
+    const needAux = plan.kind === "span" && plan.start === "fc" &&
+      plan.phases.some((p) => p.kind !== "fc" && p.kind !== "tri");
     if ((!needFC || fcRef.current) && (!needFT || f2tRef.current) &&
-        (!needCT || ctRef.current) && (!needFIN || finRef.current)) {
+        (!needCT || ctRef.current) && (!needFIN || finRef.current) &&
+        (!needAux || (f2tRef.current && f2tRef.current.aux))) {
       setStepStatus("ready");
       return;
     }
@@ -339,6 +348,11 @@ export default function FtoTrainer() {
           const CT = await window.OOTables.loadOrBuildC23(E);
           if (cancelled) return;
           ctRef.current = CT;
+        }
+        if (needAux && f2tRef.current && !f2tRef.current.aux) {
+          const aux = await window.OOTables.buildF2TAux(E);
+          if (cancelled) return;
+          f2tRef.current.aux = aux;
         }
         setStepStatus("ready");
       } catch (e) {
@@ -387,9 +401,12 @@ export default function FtoTrainer() {
     const FINb = finRef.current;
     const finKind = plan.kind === "lbt" || plan.kind === "l3t" ||
       (plan.kind === "span" && plan.start === "lbt");
+    const spanFin = plan.kind === "span" &&
+      plan.phases.some((p) => p.kind === "lbt" || p.kind === "l3t");
     if (finKind ? !FINb
         : (!FT || (plan.kind === "c23" && !CTb) ||
-           (plan.kind === "span" && (!FCb || (plan.start !== "fc" && !CTb))))) { setCurrent(null); return; }
+           (plan.kind === "span" &&
+            (!FCb || (plan.phases.some((p) => p.kind === "ctr") && !CTb) || (spanFin && !FINb))))) { setCurrent(null); return; }
     setCurrent(null);
     setStepBusy(true);
     setTimeout(() => {
@@ -806,7 +823,8 @@ export default function FtoTrainer() {
   // instantly in the common path.
   function SpanSolutions({ drill }) {
     const FCb = fcRef.current, FT = f2tRef.current, CTb = ctRef.current, FINb = finRef.current;
-    if (drill.start === "lbt" ? !FINb : !FT) return null;
+    const needFin = drill.start === "lbt" || drill.steps.includes("lbt") || drill.steps.includes("l3t");
+    if (drill.start === "lbt" ? !FINb : (!FT || (needFin && !FINb))) return null;
     let res;
     if (spanSolsCache.current && spanSolsCache.current.drill === drill) res = spanSolsCache.current.res;
     else { res = core.spanSolutions(FCb, FT, CTb, drill, 10, FINb); spanSolsCache.current = { drill, res }; }
@@ -946,11 +964,9 @@ export default function FtoTrainer() {
                 </div>
                 {!plan.ok ? (
                   <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
-                    {plan.reason === "fcreach"
-                      ? "First-center selections reach at most the second triple for now: an exact first-center-to-centers target is beyond the current tables, and this trainer never shows a target it cannot prove."
-                      : plan.reason === "c4gap"
-                      ? "The center steps cannot span into the finish steps: the last center's edge alignment (always 1 or 3 turns) sits between the third center and the last bottom triple. Practice the finish steps on their own — last bottom triple, last 3 triples, or both together."
-                      : "Pick one step or a consecutive run of steps — first center + first triple works; a selection with a gap (like first center + second triple) does not."}
+                    Pick one step or a consecutive run of steps — any run from first center through
+                    last 3 triples works; a selection with a gap (like first center + second triple)
+                    does not.
                   </div>
                 ) : (
                   <>
@@ -1071,19 +1087,30 @@ export default function FtoTrainer() {
                       <>
                         <div className="hint" style={{ textAlign: "left", marginTop: 8 }}>
                           {plan.start === "fc"
-                            ? "A full 30-move scramble — from the first center on, the whole puzzle matters. Solve the white center around any face, then re-grip (white on BL) and solve the selected triples with R, U and Rw turns."
+                            ? "A full 30-move scramble — from the first center on, the whole puzzle matters. Solve the white center around any face, then re-grip (white on BL) and continue the selected steps in order: triples with R, U and Rw (free re-grips)" +
+                              (plan.phases.some((p) => p.kind === "ctr") ? ", centers with R, U and Rw only — the solved triples never leave their place" : "") +
+                              (plan.phases.some((p) => p.kind === "lbt" || p.kind === "l3t") ? ", then the finish steps with the sheet algorithms" : "") + "."
                             : plan.start === "lbt"
                             ? "The scramble leaves everything solved except the last bottom triple and the top layer. Solve the last bottom triple with an LBT sheet algorithm, then finish the last three triples with either sheet route (1L3T one-look, or 1LP pair formation + TCP)."
-                            : "Scramble a solved puzzle with white on top — the scramble pre-solves everything before your first selected step. Follow the {X,Y} bracket into the solving hold (white center on BL) and solve the selected steps in order: triples with R, U and Rw (free re-grips), then centers with R, U and Rw only — the solved triples never leave their place."}
+                            : "Scramble a solved puzzle with white on top — the scramble pre-solves everything before your first selected step. Follow the {X,Y} bracket into the solving hold (white center on BL) and solve the selected steps in order: " +
+                              (plan.phases.some((p) => p.kind === "tri") ? "triples with R, U and Rw (free re-grips), " : "") +
+                              (plan.phases.some((p) => p.kind === "ctr") ? "centers with R, U and Rw only — the solved triples never leave their place" +
+                                (plan.phases.some((p) => p.kind === "lbt" || p.kind === "l3t") ? ", finished through the last center's edge alignment" : "") : "").replace(/, $/, "") +
+                              (plan.phases.some((p) => p.kind === "lbt" || p.kind === "l3t") ? ", then the finish steps with the sheet algorithms (LBT, then 1L3T or 1LP + TCP)" : "") + "."}
                         </div>
                         <div className="hint" style={{ textAlign: "left", marginTop: 4 }}>
                           The target is the step-optimal total: each step solved in the fewest turns for its
                           own rules, and where a step has several optimal solutions, the one that sets up the
                           next step best counts — that lookahead is the skill this drill trains. {"{X,Y}"}
                           brackets are free re-orientations; count only the turns.
-                          {plan.start === "lbt"
+                          {plan.phases && plan.phases.some((p) => p.kind === "lbt" || p.kind === "l3t")
                             ? " Steps are priced separately — the step boundary is never merged away."
-                            : " Deep scrambles can take a few seconds to prepare."}
+                            : ""}
+                          {plan.start !== "lbt"
+                            ? (plan.start === "fc" && plan.phases.length >= 4
+                              ? " Proving the exact target across every step takes a while on the longest runs — up to a minute on deep scrambles."
+                              : " Deep scrambles can take a few seconds to prepare.")
+                            : ""}
                         </div>
                       </>
                     )}
@@ -1159,11 +1186,7 @@ export default function FtoTrainer() {
             <div className="empty" style={{ padding: "40px 0", textAlign: "center" }}>
               {mode === "steps"
                 ? (!plan.ok
-                  ? (plan.reason === "fcreach"
-                    ? "First-center selections reach at most the second triple — drop the center steps or the first center."
-                    : plan.reason === "c4gap"
-                    ? "The center steps cannot span into the finish steps — practice the last bottom triple and last 3 triples on their own."
-                    : "Pick one step or a consecutive run of steps in Setup to start.")
+                  ? "Pick one step or a consecutive run of steps in Setup to start."
                   : stepStatus.startsWith("error") ? "Couldn’t build the step tables: " + stepStatus.slice(7)
                   : stepStatus !== "ready" ? "Building the step distance tables… (a moment, first time only)"
                   : stepBusy ? "Searching for an optimal scramble… (deep ones take a few seconds)"
@@ -1211,6 +1234,7 @@ export default function FtoTrainer() {
                 {")"}
                 {current.metric === "native" ? " · face turns" : ""}
                 {current.start === "t2" ? " · the " + (current.presolved === 3 ? "back" : "right") + " corner triple is already solved" : ""}
+                {current.start === "c3" && current.presolvedCtrFace ? " · the center around the " + current.presolvedCtrFace + " face is already solved" : ""}
               </> : <>
                 solve {current.mode === "first" ? "either bottom triple"
                   : current.mode === "second" ? "the remaining bottom triple"

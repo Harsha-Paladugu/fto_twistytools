@@ -597,7 +597,58 @@ export function createCore(E) {
     if (L > 0) rec(s0, 0, -1);
     return { words, capped };
   }
+  // index-carrying sealed DFS (step trainers v6): when the aux transition
+  // bundle is attached (FT.aux — built for fc-led crossing spans, whose DP
+  // runs a complete pair search per landing view), the same canonical DFS
+  // steps FOUR small indices (corners, orbit-A pattern, orbit-B pattern,
+  // D-edge placement) through Int32 tables instead of full states, and the
+  // admissible max gains the two hexagon marginals (dE3D, dBD) the classic
+  // heuristic lacked. Same successor rules, same move order, table goals
+  // exactly the goal-set BFS seeds — the harvested word lists are IDENTICAL
+  // to the full-state DFS (pinned in test-trainer).
+  function f2tIxDFS(FT, s0, goal, L, cap, budget) {
+    const aux = FT.aux;
+    const { mA, mB, mC, mE3, dE3D, dBD, E3D_HOME } = aux;
+    const dC3 = FT.dC['3'], dC5 = FT.dC['5'], dC35 = FT.dC['3,5'];
+    const dA69 = FT.dA['6,9'], dA58 = FT.dA['5,8'], dAp = FT.dA['5,6,8,9'];
+    const goalIx = goal === '3' ? (c, a) => dC3[c] === 0 && dA69[a] === 0
+      : goal === '5' ? (c, a) => dC5[c] === 0 && dA58[a] === 0
+      : goal === 'either' ? (c, a) => (dC3[c] === 0 && dA69[a] === 0) || (dC5[c] === 0 && dA58[a] === 0)
+      : (c, a) => dC35[c] === 0 && dAp[a] === 0;
+    const hCA = goal === '3' ? (c, a) => Math.max(dC3[c], dA69[a])
+      : goal === '5' ? (c, a) => Math.max(dC5[c], dA58[a])
+      : goal === 'either' ? (c, a) => Math.min(Math.max(dC3[c], dA69[a]), Math.max(dC5[c], dA58[a]))
+      : (c, a) => Math.max(dC35[c], dAp[a]);
+    const moves = FT.BL.SEALED_MOVES;
+    const words = [], path = [];
+    let nodes = 0, capped = false;
+    const rec = (c, a, b, e3, g, lastFace) => {
+      if (capped || ++nodes > budget) { capped = true; return; }
+      if (g === L) {
+        if (e3 === E3D_HOME && dBD[b] === 0 && goalIx(c, a)) {
+          words.push(path.slice());
+          if (words.length >= cap) capped = true;
+        }
+        return;
+      }
+      const lim = L - g;
+      if (hCA(c, a) > lim || dE3D[e3] > lim || dBD[b] > lim) return;
+      for (const m of moves) {
+        const f = m >> 1;
+        if (f === lastFace) continue;
+        if (E.OPPF[f] === lastFace && f > lastFace) continue;
+        path.push(m);
+        rec(mC[c * 16 + m], mA[a * 16 + m], mB[b * 16 + m], mE3[e3 * 16 + m], g + 1, f);
+        path.pop();
+        if (capped) return;
+      }
+    };
+    if (L > 0)
+      rec(FT.cornerIndex(s0.cp, s0.co), FT.encA(s0.ctr), aux.encB(s0.ctr), aux.e3Of(s0.ep), 0, -1);
+    return { words, capped };
+  }
   function f2tEnumerate(FT, s0, goal, L, cap) {
+    if (FT.aux) return f2tIxDFS(FT, s0, goal, L, cap || F2T_ENUM_CAP, F2T_NODES);
     const h = f2tH(FT, goal);
     return sealedDFS(FT.BL.SEALED_MOVES, (s) => f2tGoalOK(s, goal), (s, lim) => h(s) > lim,
       s0, L, cap || F2T_ENUM_CAP, F2T_NODES);
@@ -824,11 +875,17 @@ export function createCore(E) {
     return true;
   }
   const c23CountHex = (s) => C23_FACES.reduce((n, f) => n + (c23HexOK(s, f) ? 1 : 0), 0);
-  // goals: 'c1' (any one hexagon formed) / 'c2' (any two). Every goal keeps
-  // the first center exactly home and both bottom triples re-solved.
+  // goals: 'c1' (any one hexagon formed) / 'c2' (any two) / 'call' (all
+  // three — the centers stage COMPLETE, used when a span crosses into the
+  // finish steps: the retired last-center edges residue shares this same
+  // restricted regime, so it fuses into the center phase rather than
+  // pricing a step boundary the user never selected). Every goal keeps the
+  // first center exactly home and both bottom triples re-solved; at 'call'
+  // the state is exactly the before-LBT predicate on the method frame.
+  const C23_NEED = { c1: 1, c2: 2, call: 3 };
   function c23GoalOK(s, goal) {
     if (!f2tHexOK(s) || !f2tTripleOK(s, 3) || !f2tTripleOK(s, 5)) return false;
-    return c23CountHex(s) >= (goal === 'c2' ? 2 : 1);
+    return c23CountHex(s) >= (C23_NEED[goal] || 1);
   }
 
   // The center searches run 10+ turns deep, so unlike the F2T DFS this one
@@ -867,8 +924,8 @@ export function createCore(E) {
     const hL_ = CT.dH1.L, hR_ = CT.dH1.R, hB_ = CT.dH1.B;
     const eLR = CT.dE33.LR, eLB = CT.dE33.LB, eRB = CT.dE33.RB;
     const MKB = CT.MKB, HOME = CT.HOME, MOVES = CT.RES.MOVES;
-    const pair = goal === 'c2';
-    const need = pair ? 2 : 1;
+    const need = C23_NEED[goal] || 1;
+    const pair = need === 2, all = need === 3;
     const words = [], path = [];
     let nodes = 0, capped = false;
     const goalIx = (eL, eR, eB, mL, mR, b) => {
@@ -889,7 +946,15 @@ export function createCore(E) {
       const lim = L - g;
       const u = mL * NMKc + mR;
       const u3 = u * 3 + b;
-      if (pair) {
+      if (all) {
+        // every hexagon is required, so every marginal is individually a bound
+        if (dBall[u3] > lim) return;
+        const hL = hL_[(eL * NMKc + mL) * 3 + b], hR = hR_[(eR * NMKc + mR) * 3 + b];
+        const hB = hB_[(eB * NMKc + MKB[u]) * 3 + b];
+        if (hL > lim || hR > lim || hB > lim) return;
+        if (eLR[(eL * NE3c + eR) * 3 + b] > lim || eLB[(eL * NE3c + eB) * 3 + b] > lim ||
+            eRB[(eR * NE3c + eB) * 3 + b] > lim) return;
+      } else if (pair) {
         if (dBall[u3] > lim) return;
         const hL = hL_[(eL * NMKc + mL) * 3 + b], hR = hR_[(eR * NMKc + mR) * 3 + b];
         let fits = hL <= lim && hR <= lim && eLR[(eL * NE3c + eR) * 3 + b] <= lim;
@@ -935,7 +1000,13 @@ export function createCore(E) {
     const bump = (v) => { if (v > h) h = v; };
     const hL = CT.dH1.L[(eL * NMKc + mL) * 3], hR = CT.dH1.R[(eR * NMKc + mR) * 3];
     const hB = mB === 255 ? 99 : CT.dH1.B[(eB * NMKc + mB) * 3];
-    if (goal === 'c2') {
+    if (goal === 'call') {
+      bump(CT.dB.all[u * 3]);
+      bump(hL); bump(hR); bump(hB);
+      bump(CT.dE33.LR[(eL * NE3c + eR) * 3]);
+      bump(CT.dE33.LB[(eL * NE3c + eB) * 3]);
+      bump(CT.dE33.RB[(eR * NE3c + eB) * 3]);
+    } else if (goal === 'c2') {
       bump(CT.dB.all[u * 3]);
       bump(Math.min(
         Math.max(hL, hR, CT.dE33.LR[(eL * NE3c + eR) * 3]),
@@ -1694,13 +1765,21 @@ export function createCore(E) {
     return { sys1, sys2 };
   }
   // the L3T step metric: fewest turns over the proven lines of EITHER system
-  // (null when neither system solves the state — the caller rejects)
+  // (null when neither system solves the state — the caller rejects).
+  // Cached on the FIN bundle: a pure function of the coset state (≤ 4320
+  // keys), and the crossing-span DP values hundreds of landings per drill
+  // across its value / reveal / verify runs.
   function l3tOptOf(FIN, s, k) {
     if (k === FIN.SOLVED_KEY) return 0;
+    if (!FIN._l3tOpt) FIN._l3tOpt = new Map();
+    const hit = FIN._l3tOpt.get(k);
+    if (hit !== undefined) return hit;
     const { sys1, sys2 } = l3tLines(FIN, s, k, 1);
     const a = sys1.length ? sys1[0].moves : Infinity;
     const b = sys2.length ? sys2[0].moves : Infinity;
-    return isFinite(Math.min(a, b)) ? Math.min(a, b) : null;
+    const v = isFinite(Math.min(a, b)) ? Math.min(a, b) : null;
+    FIN._l3tOpt.set(k, v);
+    return v;
   }
 
   // ---------- masks ----------
@@ -1997,13 +2076,13 @@ export function createCore(E) {
     return finMask(true).join() === (d.mask || []).join();
   }
 
-  // ---------------- Bencisco step-span drills (step trainers v4) ----------------
+  // ---------------- Bencisco step-span drills (step trainers v4/v6) ----------------
   // One drill spanning several CONSECUTIVE Bencisco steps (user spec
-  // 2026-07-16: first center + first triple, + first two triples, and any
-  // valid multi-step selection). Step chain and regimes:
+  // 2026-07-16: any valid multi-step selection; extended 2026-07-18 to EVERY
+  // contiguous run — fc through l3t). Step chain and regimes:
   //
-  //     fc | t1 t2 | sc c3            (LBT / L3T append to SPAN_STEPS later)
-  //     fc | triples | centers        regime = a human execution contract
+  //     fc | t1 t2 | sc c3 | lbt | l3t
+  //     fc | triples | centers | finish sheets   regime = an execution contract
   //
   // Each regime has its own TRUE turn metric (fc: the free 16-native metric
   // with the token/native counting toggle; triples: the sealed 10-move turn
@@ -2036,11 +2115,21 @@ export function createCore(E) {
   // Every formed state gets exactly 3 method views; the triples phase takes
   // the best of them — physically, the solver picks the grip.
   //
-  // fc-led spans reach at most t2: an exact fc->centers phased target needs
-  // the complete triples-optimal endstate expansion of EVERY fc view (about
-  // a hundred enumerations per scramble at reveal cost each) — measured in
-  // the tens of seconds. Rejected as a drill, not approximated; lift this
-  // only with a genuinely fused table.
+  // Every contiguous run is a valid span (step trainers v6, 2026-07-18).
+  // The two former refusals and their exact lifts:
+  //   fcreach  fc past t2 needed the complete triples-optimal expansion of
+  //            every fc view (measured: tens of seconds). Lifted by a PILOT
+  //            upper bound + certified branch-and-bound pruning + memoized
+  //            phase values (see spanDP) — still exact, never approximated.
+  //   c4gap    the retired last-center EDGES residue sits between the c3
+  //            goal and the LBT start. Lifted by fusing it into the center
+  //            phase: followed by a finish step, that phase's goal is
+  //            'call' (ALL hexagons — the same restricted regime, so the
+  //            regime-fusion rule applies), which at drift 0 IS the
+  //            before-LBT predicate.
+  // Finish phases price their segments at the AXIS-RUN FLOOR of the sheet
+  // texts (the v5 metric); move phases price words in their turn metrics;
+  // the step seams are never merged — the phased target IS step discipline.
 
   const SPAN_STEPS = ['fc', 't1', 't2', 'sc', 'c3', 'lbt', 'l3t'];
   const SPAN_REGIME = { fc: 'fc', t1: 'tri', t2: 'tri', sc: 'ctr', c3: 'ctr', lbt: 'lbt', l3t: 'l3t' };
@@ -2049,8 +2138,10 @@ export function createCore(E) {
   const SPAN_DP_TRIES = 25;        // DP-level rejections are not
   const SPAN_FC_CAP = 512;         // fc optimal-word harvest (reject if total exceeds)
   const SPAN_TRI_CAP = 512;        // interior-phase word harvest (reject if capped)
+  const SPAN_CTR_CAP = 2048;       // interior CENTER harvest (deep 'call' words are many)
   const SPAN_ENTRY_CAP = 4096;     // method-state frontier bound (reject beyond)
   const SPAN_CHAIN_CAP = 24;       // reveal: candidate chains materialized
+  const SPAN_PILOTS = 8;           // greedy upper-bound chains tried per DP value run
 
   // spanPlan(steps): validate a selection and derive its drill routing.
   // Valid = a nonempty CONTIGUOUS run of SPAN_STEPS (the user's rule: fc+t1+t2
@@ -2066,11 +2157,6 @@ export function createCore(E) {
     const ids = idx.map((i) => SPAN_STEPS[i]);
     const key = ids.join('+');
     const has = (t) => ids.includes(t);
-    // the last-center EDGES step sits between the third center and LBT (the
-    // retired fourth-center residue, always 1 or 3 turns) — a span cannot
-    // cross that boundary, so the finish steps pair only with each other
-    if ((has('lbt') || has('l3t')) && (has('sc') || has('c3'))) return { ok: false, reason: 'c4gap' };
-    if (has('fc') && (has('sc') || has('c3'))) return { ok: false, reason: 'fcreach' };
     if (ids.every((t) => SPAN_REGIME[t] === SPAN_REGIME[ids[0]])) {
       if (ids[0] === 'fc') return { ok: true, key, ids, kind: 'fc' };
       if (ids[0] === 'lbt') return { ok: true, key, ids, kind: 'lbt' };
@@ -2079,12 +2165,19 @@ export function createCore(E) {
         return { ok: true, key, ids, kind: 'f2t', mode: !has('t1') ? 'second' : has('t2') ? 'both' : 'first' };
       return { ok: true, key, ids, kind: 'c23', mode: !has('sc') ? 'third' : has('c3') ? 'both' : 'second' };
     }
+    const fin = has('lbt') || has('l3t');
     const phases = [];
     if (has('fc')) phases.push({ kind: 'fc' });
     if (has('t1') || has('t2'))
       phases.push({ kind: 'tri', goal: has('t1') && !has('t2') ? 'either' : 'pair' });
     if (has('sc') || has('c3'))
-      phases.push({ kind: 'ctr', goal: has('sc') && !has('c3') ? 'c1' : 'c2' });
+      // followed by a finish step, the center phase runs to ALL hexagons
+      // ('call'): the retired last-center edges residue shares the restricted
+      // regime, so it fuses into this phase (a separate phase would price a
+      // step boundary the user never selected and leave the target beatable
+      // by the fused difference), and 'call' at drift 0 IS the before-LBT
+      // predicate — the ctr → lbt junction is well-formed by construction
+      phases.push({ kind: 'ctr', goal: fin ? 'call' : has('sc') && !has('c3') ? 'c1' : 'c2' });
     if (has('lbt')) phases.push({ kind: 'lbt' });
     if (has('l3t')) phases.push({ kind: 'l3t' });
     return { ok: true, key, ids, kind: 'span', phases, start: ids[0] };
@@ -2176,12 +2269,99 @@ export function createCore(E) {
   }
 
   // ---------- the phased DP ----------
+  // Phase-value helpers shared by the DP, the pilot and the reveal.
+  //
+  // The LBT phase at a method-frame junction: value = the fewest floor
+  // turns over the applicable sheet entries (the step metric), optimal
+  // endstates = the optimal entries' coset landings. A junction whose LBT
+  // slot is already solved passes the step at 0 — iff the state itself
+  // sits inside the L3T coset (or is solved outright), the step's
+  // postcondition. null = certified no sheet continuation (the chain is
+  // infinite there; the caller minimizes over the others).
+  function lbtPhaseOf(FIN, sM) {
+    if (lbtSlotSolved(sM)) {
+      const k = E.stateKey(sM);
+      return (k === FIN.SOLVED_KEY || FIN.coset.has(k)) ? { v: 0, opt: null } : null;
+    }
+    const hits = lbtApplicable(FIN, sM);
+    if (!hits.length) return null;
+    let v = Infinity;
+    for (const h of hits) if (h.en.moves < v) v = h.en.moves;
+    return { v, opt: hits.filter((h) => h.en.moves === v) };
+  }
+  // admissible LBT lower bound: the fewest floor turns of ANY sheet entry
+  // matching the junction's (source slot, flip) — applicable entries are a
+  // subset, so the true value can only be larger. 99 = no entry at all.
+  function lbtHMin(FIN) {
+    if (!FIN._hSlotFlip) {
+      const m = {};
+      for (const en of FIN.lbt) {
+        const k = en.srcSlot * 2 + en.srcFlip;
+        if (m[k] === undefined || en.moves < m[k]) m[k] = en.moves;
+      }
+      FIN._hSlotFlip = m;
+    }
+    const m = FIN._hSlotFlip;
+    return (sM) => {
+      if (lbtSlotSolved(sM)) return 0;
+      const p4 = sM.cp.indexOf(4);
+      const v = m[p4 * 2 + sM.co[p4]];
+      return v === undefined ? 99 : v;
+    };
+  }
+  // memoized phase-value search: exact results are cached; a certified
+  // "nothing under maxBound" null is cached as a lower bound, so a later
+  // laxer query re-searches only when it must. An UNCERTIFIED null (budget
+  // trip) is never cached — the flags.tripped contract still rejects it.
+  function spanMemoSearch(map, key, maxBound, flags, run) {
+    const hit = map.get(key);
+    if (hit) {
+      if (hit.v !== undefined) return hit.v;
+      if (hit.lb === Infinity || (maxBound != null && hit.lb >= maxBound)) return null;
+    }
+    const f2 = {};
+    const v = run(maxBound, f2);
+    if (f2.tripped) { if (flags) flags.tripped = true; return null; }
+    if (v == null) map.set(key, { lb: maxBound == null ? Infinity : maxBound });
+    else map.set(key, { v });
+    return v;
+  }
+
   // Returns { optimal, breakdown, entries? } or null = reject this scramble
   // (an enumeration cap tripped, a search was uncertifiable, or no finite
   // chain exists — resample rather than approximate). retain keeps the
-  // provenance the reveal reconstructs chains from.
-  function spanDP(FC, FT, CT, plan, s0, metric, retain) {
+  // provenance the reveal reconstructs chains from; known (retain runs) is
+  // the drill's certified optimal, used as the pruning cut so the chain
+  // listing stays complete AT the optimal.
+  //
+  // Exactness under pruning: value runs first walk a PILOT chain (a greedy
+  // per-phase-optimal descent — every segment an exact proven search, so
+  // its total is ACHIEVED by a real chain). Interior entries are then
+  // dropped only when a bounded search CERTIFIES cost + value > cut (the
+  // tripped flag still rejects anything uncertifiable), so the frontier
+  // always retains every chain that can tie the true optimum. Phase values
+  // are memoized — the centers phase by its C23 index tuple (states sharing
+  // the tuple provably share the exact restricted distance and word set;
+  // the (cell, drift)-exact table property), the others by state key.
+  function spanDP(FC, FT, CT, plan, s0, metric, retain, FIN, known) {
     const env = f2tEnv(FT);
+    const memo = plan.phases.map(() => new Map());
+    const phaseLen = (q, sM, maxBound, flags) => {
+      const ph = plan.phases[q];
+      if (ph.kind === 'tri' || ph.kind === 'ctr') {
+        const key = ph.kind === 'ctr' ? c23IxOf(CT, sM).join(',') : E.stateKey(sM);
+        return spanMemoSearch(memo[q], key, maxBound, flags, (mb, f2) =>
+          ph.kind === 'tri' ? f2tSearchLen(FT, sM, ph.goal, mb, f2)
+            : c23SearchLen(FT, CT, sM, ph.goal, mb, f2));
+      }
+      if (ph.kind === 'lbt')
+        return spanMemoSearch(memo[q], E.stateKey(sM), null, flags, () => {
+          const r = lbtPhaseOf(FIN, sM);
+          return r ? r.v : null;
+        });
+      return spanMemoSearch(memo[q], E.stateKey(sM), null, flags, () =>
+        l3tOptOf(FIN, sM, E.stateKey(sM)));
+    };
     let entries;
     let pi = 0;
     if (plan.phases[0].kind === 'fc') {
@@ -2213,6 +2393,37 @@ export function createCore(E) {
     } else {
       entries = [{ sM: conjState(env.M, s0), cost: 0, split: [], prov: retain ? [] : null }];
     }
+    // pilot upper bound (value runs; retain runs cut at the known optimal)
+    let cut = retain ? (known == null ? Infinity : known) : Infinity;
+    if (!retain) {
+      let tried = 0;
+      for (const en0 of entries) {
+        if (tried++ >= SPAN_PILOTS) break;
+        let cur = en0.sM, total = en0.cost, ok = true;
+        for (let q = pi; q < plan.phases.length && ok; q++) {
+          const ph = plan.phases[q];
+          const v = phaseLen(q, cur, null, {});
+          if (v == null) { ok = false; break; }
+          total += v;
+          if (q === plan.phases.length - 1) break;
+          if (ph.kind === 'lbt') {
+            const r = lbtPhaseOf(FIN, cur);
+            if (!r) { ok = false; break; }
+            if (r.v > 0) {
+              const pk = r.opt[0].postKey;
+              cur = pk === FIN.SOLVED_KEY ? E.solved() : FIN.coset.get(pk).s;
+            }
+          } else if (v > 0) {
+            const res = ph.kind === 'tri' ? f2tEnumerate(FT, cur, ph.goal, v, 1)
+              : c23Enumerate(FT, CT, cur, ph.goal, v, 1);
+            const w = res.words && res.words[0];
+            if (!w) { ok = false; break; }
+            for (const m of w) cur = E.move(cur, m);
+          }
+        }
+        if (ok && total < cut) cut = total;
+      }
+    }
     for (; pi < plan.phases.length; pi++) {
       const ph = plan.phases[pi];
       const last = pi === plan.phases.length - 1;
@@ -2222,54 +2433,68 @@ export function createCore(E) {
         // the best ends the loop (everything after is at least as far).
         const hOf = ph.kind === 'tri'
           ? (() => { const h = f2tH(FT, ph.goal); return (sM) => h(sM); })()
-          : (sM) => c23HVal(FT, CT, sM, ph.goal);
+          : ph.kind === 'ctr' ? (sM) => c23HVal(FT, CT, sM, ph.goal)
+          : ph.kind === 'lbt' ? lbtHMin(FIN)
+          : (sM) => (E.stateKey(sM) === FIN.SOLVED_KEY ? 0 : 1);
         const scored = entries.map((en) => ({ en, lb: en.cost + hOf(en.sM) }));
         scored.sort((a, b) => a.lb - b.lb);
-        let best = Infinity, bestEn = null, bestV = 0;
+        let best = isFinite(cut) ? cut + 1 : Infinity, bestEn = null, bestV = 0;
         for (const { en, lb } of scored) {
           if (lb >= best) break;
           const flags = {};
-          const v = ph.kind === 'tri'
-            ? f2tSearchLen(FT, en.sM, ph.goal, best - en.cost, flags)
-            : c23SearchLen(FT, CT, en.sM, ph.goal, best - en.cost, flags);
+          const v = phaseLen(pi, en.sM, ph.kind === 'tri' || ph.kind === 'ctr' ? best - en.cost : null, flags);
           if (flags.tripped) return null;
           if (v == null || en.cost + v >= best) continue;
           best = en.cost + v; bestEn = en; bestV = v;
         }
-        if (!isFinite(best)) return null;
+        if (!bestEn) return null;
         return { optimal: best, breakdown: bestEn.split.concat([bestV]),
                  entries: retain ? entries : null, lastGoal: ph.goal, lastKind: ph.kind };
       }
-      // interior phase: every entry expands through its COMPLETE optimal-word
-      // set (per-entry optimality — a longer word never enters a chain)
+      // interior phase: every SURVIVING entry expands through its COMPLETE
+      // optimal-word / optimal-landing set (per-entry optimality — a longer
+      // word never enters a chain); entries certified unable to reach a
+      // chain totalling <= cut are dropped before their expensive harvest.
       const next = new Map();
       for (const en of entries) {
+        const room = cut - en.cost;
+        if (room < 0) continue;
         const flags = {};
-        const v = ph.kind === 'tri'
-          ? f2tSearchLen(FT, en.sM, ph.goal, null, flags)
-          : c23SearchLen(FT, CT, en.sM, ph.goal, null, flags);
-        if (v == null) return null;
-        const push = (sM2, word) => {
+        const v = phaseLen(pi, en.sM, isFinite(room) && (ph.kind === 'tri' || ph.kind === 'ctr') ? room + 1 : null, flags);
+        if (flags.tripped) return null;
+        if (v == null || v > room) continue;
+        const push = (sM2, item) => {
           const k = E.stateKey(sM2);
           const cost2 = en.cost + v;
           const prev = next.get(k);
           if (!prev || cost2 < prev.cost)
             next.set(k, { sM: sM2, cost: cost2, split: en.split.concat([v]),
-                          prov: retain ? [{ from: en, word }] : null });
-          else if (retain && cost2 === prev.cost && prev.prov.length < 6) prev.prov.push({ from: en, word });
+                          prov: retain ? [item] : null });
+          else if (retain && cost2 === prev.cost && prev.prov.length < 6) prev.prov.push(item);
         };
-        if (v === 0) { push(en.sM, []); continue; }
+        if (ph.kind === 'lbt') {
+          const r = lbtPhaseOf(FIN, en.sM);
+          if (!r) continue;
+          if (r.v === 0) { push(en.sM, { from: en, ph: 'lbt', lbtEn: null }); continue; }
+          for (const h of r.opt)
+            push(h.postKey === FIN.SOLVED_KEY ? E.solved() : FIN.coset.get(h.postKey).s,
+                 { from: en, ph: 'lbt', lbtEn: h.en });
+          if (next.size > SPAN_ENTRY_CAP) return null;
+          continue;
+        }
+        if (v === 0) { push(en.sM, { from: en, ph: ph.kind, word: [] }); continue; }
         const res = ph.kind === 'tri'
           ? f2tEnumerate(FT, en.sM, ph.goal, v, SPAN_TRI_CAP)
-          : c23Enumerate(FT, CT, en.sM, ph.goal, v, SPAN_TRI_CAP);
+          : c23Enumerate(FT, CT, en.sM, ph.goal, v, SPAN_CTR_CAP);
         if (res.capped) return null;
         for (const w of res.words) {
           let s2 = en.sM;
           for (const m of w) s2 = E.move(s2, m);
-          push(s2, w);
+          push(s2, { from: en, ph: ph.kind, word: w });
         }
         if (next.size > SPAN_ENTRY_CAP) return null;
       }
+      if (!next.size) return null;
       entries = [...next.values()];
     }
     return null;                               // unreachable: plans have >= 2 phases
@@ -2282,15 +2507,20 @@ export function createCore(E) {
     return st;
   };
 
-  // diagram mask. fc-led spans: the white pieces plus the union over ALL 36
-  // landing views (12 formations x 3 spins) of the triples rule's pieces —
-  // before a landing is chosen, exactly the pieces SOME landing's triples
-  // step can constrain. tri-led spans: the union of the triples and centers
-  // rules on the primary view. Any rebase anomaly falls back to an empty
-  // mask (show everything) — a mask may be generous, never hide a relevant
-  // facelet.
+  // diagram mask. Spans reaching the finish steps show EVERYTHING: the
+  // last-layer + slot pieces are drill-relevant wherever the scramble left
+  // them, on top of the centers rule that already keeps every edge and
+  // orbit-B triangle (a mask may be generous, never hide a relevant
+  // facelet). fc-led spans: the white pieces plus the union over ALL 36
+  // landing views (12 formations x 3 spins) of the downstream rules' pieces
+  // — before a landing is chosen, exactly the pieces SOME landing's later
+  // steps can constrain. tri-led spans: the union of the triples and
+  // centers rules on the primary view. Any rebase anomaly falls back to an
+  // empty mask (show everything).
   function spanMask(FC, FT, plan, st) {
     const env = f2tEnv(FT);
+    if (plan.phases.some((p) => p.kind === 'lbt' || p.kind === 'l3t')) return [];
+    const wantCtr = plan.phases.some((p) => p.kind === 'ctr');
     const keep = new Set();
     if (plan.start === 'fc') {
       const sp = spanEnv(FT, FC);
@@ -2298,10 +2528,11 @@ export function createCore(E) {
       for (let x = 0; x < 12; x++) if (st.ctr[x] === 0) keep.add(CTRF[x]);
       for (let e = 0; e < 12; e++)
         if (FC.U_EDGES.includes(st.ep[e])) for (const i of EDGEF[e]) keep.add(i);
-      // per-view TRIPLE pieces only (corners 3,5 + candidate source
-      // triangles, wherever they sit): the f2t rule's white-hexagon part is
-      // slot-based (white is home in f2t drills) and the white PIECES are
-      // already kept above, wherever the scramble put them.
+      // per-view TRIPLE pieces (corners 3,5 + candidate source triangles,
+      // wherever they sit): the f2t rule's white-hexagon part is slot-based
+      // (white is home in f2t drills) and the white PIECES are already kept
+      // above, wherever the scramble put them. A center phase adds each
+      // view's centers rule (all edges + orbit-B + the triple sources).
       for (const rb of sp.RB) {
         let sR;
         try { sR = recolorState(st, rb.cmap); } catch (err) { return []; }
@@ -2310,6 +2541,7 @@ export function createCore(E) {
           for (const c of [3, 5]) for (const i of env.CORNF[sM.cp.indexOf(c)]) keep.add(a.P[i]);
           for (let x = 0; x < 12; x++)
             if (sM.ctr[x] >= 1 && sM.ctr[x] <= 3) keep.add(a.P[env.CTRF[x]]);
+          if (wantCtr) for (const i of c23KeepM(env, sM)) keep.add(a.P[i]);
         }
       }
     } else {
@@ -2328,16 +2560,23 @@ export function createCore(E) {
   // fc step on, the WHOLE puzzle state matters) rejected until the white
   // center is displaced; tri-led spans reuse the F2T sealed-walk machinery
   // (white exactly home, drilled triples unsolved, one triple pre-solved by
-  // an appended machine-optimal word when the span starts at t2). The DP
-  // must certify an exact phased target or the scramble is resampled.
+  // an appended machine-optimal word when the span starts at t2); sc/c3-led
+  // spans use the C23 construction (sealed walk + both-triples solve, + a
+  // second-center solve for start c3), so the drill starts exactly where a
+  // real solve enters its first step. The DP must certify an exact phased
+  // target or the scramble is resampled, and a span that reaches the finish
+  // steps additionally requires a fully proven reveal line realizing the
+  // target (the v5 bar: a target is only ever shown with its proof).
   function makeSpanDrill(FC, FT, CT, plan, opts, rng, FIN) {
     if (plan.start === 'lbt') return makeFinSpanDrill(FIN, plan, rng);
     const rnd = rng || Math.random;
     const env = f2tEnv(FT);
     const metric = opts && opts.metric === 'native' ? 'native' : 'token';
+    const hasFin = plan.phases.some((p) => p.kind === 'lbt' || p.kind === 'l3t');
+    const toPhys = (m) => 2 * E.faceImg(env.Minv, m >> 1) + (m & 1);
     let dpTries = 0;
     for (let att = 0; att < SPAN_TRIES && dpTries < SPAN_DP_TRIES; att++) {
-      let seq = [], st, presolved = 0;
+      let seq = [], st, presolved = 0, presolvedCtr = null;
       if (plan.start === 'fc') {
         let last = -1, prev = -1, guard = 0;
         while (seq.length < SPAN_LEN_FC) {
@@ -2350,6 +2589,47 @@ export function createCore(E) {
         if (seq.length < SPAN_LEN_FC) continue;
         st = spanRefold(seq);
         if (fcDist(FC, metric)[FC.coordOf(st)] < 1) continue;
+      } else if (plan.start === 'sc' || plan.start === 'c3') {
+        let last = -1, guard = 0;
+        while (seq.length < C23_LEN) {
+          if (++guard > 600) break;
+          const m = env.PHYS[(rnd() * 10) | 0];
+          const f = m >> 1;
+          if (f === last) continue;
+          if (E.OPPF[f] === last && f > last) continue;
+          seq.push(m); last = f;
+        }
+        if (seq.length < C23_LEN) continue;
+        st = spanRefold(seq);
+        let sM = conjState(env.M, st);
+        // append a machine-optimal both-triples solve (re-aligns any white
+        // spin), then for start c3 a machine-optimal second-center solve
+        if (!f2tGoalOK(sM, 'pair')) {
+          const Lp = f2tSearchLen(FT, sM, 'pair');
+          if (Lp == null || Lp < 1) continue;
+          const w = f2tEnumerate(FT, sM, 'pair', Lp, 1).words[0];
+          if (!w) continue;
+          seq = mergeMoves(seq.concat(w.map(toPhys)));
+          st = spanRefold(seq);
+          sM = conjState(env.M, st);
+          if (!f2tGoalOK(sM, 'pair')) continue;
+        }
+        let solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
+        if (plan.start === 'c3') {
+          if (solvedNow.length === 0) {
+            const L1 = c23SearchLen(FT, CT, sM, 'c1');
+            if (L1 == null || L1 < 1) continue;
+            const w = c23Enumerate(FT, CT, sM, 'c1', L1, 1).words[0];
+            if (!w) continue;
+            seq = mergeMoves(seq.concat(w.map(toPhys)));
+            st = spanRefold(seq);
+            sM = conjState(env.M, st);
+            if (!f2tGoalOK(sM, 'pair')) continue;
+            solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
+          }
+          if (solvedNow.length !== 1) continue;
+          presolvedCtr = solvedNow[0];
+        } else if (solvedNow.length) continue;
       } else {
         let last = -1, guard = 0;
         while (seq.length < F2T_LEN) {
@@ -2371,7 +2651,7 @@ export function createCore(E) {
           if (L1 == null || L1 < 1) continue;
           const w = f2tEnumerate(FT, sM, String(c), L1, 1).words[0];
           if (!w) continue;
-          seq = mergeMoves(seq.concat(w.map((m) => 2 * E.faceImg(env.Minv, m >> 1) + (m & 1))));
+          seq = mergeMoves(seq.concat(w.map(toPhys)));
           st = spanRefold(seq);
           sM = conjState(env.M, st);
           if (!f2tWhiteHome(env, st) || !f2tTripleOK(sM, c) || f2tTripleOK(sM, c === 3 ? 5 : 3)) continue;
@@ -2379,54 +2659,90 @@ export function createCore(E) {
         }
       }
       dpTries++;
-      const dp = spanDP(FC, FT, CT, plan, st, metric, false);
+      const dp = spanDP(FC, FT, CT, plan, st, metric, false, FIN);
       if (!dp || dp.optimal < 1) continue;
-      return {
+      const drill = {
         kind: 'span', steps: plan.ids.slice(), spanKey: plan.key, start: plan.start,
         metric: plan.start === 'fc' ? metric : null, presolved,
+        presolvedCtr, presolvedCtrFace: presolvedCtr ? c23PhysFace(env, presolvedCtr) : null,
         scramble: seq.map((m) => E.MOVES[m]).join(' '),
         state: st, optimal: dp.optimal, breakdown: dp.breakdown,
         mask: spanMask(FC, FT, plan, st),
       };
+      if (hasFin && !spanSolutions(FC, FT, CT, drill, 1, FIN).lines.length) continue;
+      return drill;
     }
     return null;
   }
 
   // ---------- span reveal (continuous lines) ----------
-  // Every span plan today has exactly TWO phases (fc-led spans stop at the
-  // triples; tri-led spans run triples then centers), so a chain is one
-  // provenance item + one last-phase word. Chains are re-enumerated from the
-  // retained DP frontier: an entry contributes iff its exact last-phase
-  // distance closes the gap to the drill optimal.
+  // A chain is a SEGMENT LIST — one segment per phase, in step order:
+  //   { kind:'fc', seq, view } | { kind:'tri'|'ctr', word } |
+  //   { kind:'lbt', en|null } | { kind:'l3t', line|null }
+  // (null en/line = the step was already satisfied at its junction).
+  // Chains are re-enumerated from the retained DP frontier: an entry
+  // contributes iff its exact last-phase value closes the gap to the drill
+  // optimal; its provenance tree (parent links per interior phase) is then
+  // unwound into full prefix lists.
   // capped = the listing may be incomplete (an uncertifiable search, a word
   // or provenance cap, or the chain cap) — the reveal header then shows the
   // count as "N+", never a truncated count presented as exact.
-  function spanChains(FC, FT, CT, plan, drill, dp) {
+  function spanChains(FC, FT, CT, plan, drill, dp, FIN) {
     const chains = [];
     let capped = false;
+    const prefixesOf = (en) => {
+      if (!en.prov || !en.prov.length) return [[]];
+      if (en.prov.length >= 6) capped = true;   // the provenance cap may have bound
+      const out = [];
+      for (const pv of en.prov) {
+        if (pv.seq !== undefined) { out.push([{ kind: 'fc', seq: pv.seq, view: pv.view }]); continue; }
+        for (const pre of prefixesOf(pv.from)) {
+          out.push(pre.concat([pv.ph === 'lbt'
+            ? { kind: 'lbt', en: pv.lbtEn }
+            : { kind: pv.ph, word: pv.word }]));
+          if (out.length >= SPAN_CHAIN_CAP) { capped = true; return out; }
+        }
+      }
+      return out;
+    };
     for (const en of dp.entries) {
       if (en.cost > drill.optimal) continue;
       const need = drill.optimal - en.cost;
-      const flags = {};
-      const v = dp.lastKind === 'tri'
-        ? f2tSearchLen(FT, en.sM, dp.lastGoal, need + 1, flags)
-        : c23SearchLen(FT, CT, en.sM, dp.lastGoal, need + 1, flags);
-      if (flags.tripped) capped = true;
-      if (v !== need) continue;
-      let words = [[]];
-      if (need > 0) {
-        const res = dp.lastKind === 'tri'
-          ? f2tEnumerate(FT, en.sM, dp.lastGoal, need, 12)
-          : c23Enumerate(FT, CT, en.sM, dp.lastGoal, need, 12);
-        words = res.words;
-        if (res.capped || words.length >= 12) capped = true;
+      let tails;
+      if (dp.lastKind === 'tri' || dp.lastKind === 'ctr') {
+        const flags = {};
+        const v = dp.lastKind === 'tri'
+          ? f2tSearchLen(FT, en.sM, dp.lastGoal, need + 1, flags)
+          : c23SearchLen(FT, CT, en.sM, dp.lastGoal, need + 1, flags);
+        if (flags.tripped) capped = true;
+        if (v !== need) continue;
+        if (need === 0) tails = [{ kind: dp.lastKind, word: [] }];
+        else {
+          const res = dp.lastKind === 'tri'
+            ? f2tEnumerate(FT, en.sM, dp.lastGoal, need, 12)
+            : c23Enumerate(FT, CT, en.sM, dp.lastGoal, need, 12);
+          if (res.capped || res.words.length >= 12) capped = true;
+          tails = res.words.map((w) => ({ kind: dp.lastKind, word: w }));
+        }
+      } else if (dp.lastKind === 'lbt') {
+        const r = lbtPhaseOf(FIN, en.sM);
+        if (!r || r.v !== need) continue;
+        tails = r.v === 0 ? [{ kind: 'lbt', en: null }] : r.opt.map((h) => ({ kind: 'lbt', en: h.en }));
+      } else {
+        const k = E.stateKey(en.sM);
+        if (k === FIN.SOLVED_KEY) {
+          if (need !== 0) continue;
+          tails = [{ kind: 'l3t', line: null }];
+        } else {
+          const { sys1, sys2 } = l3tLines(FIN, en.sM, k, 6);
+          if (sys1.length >= 6 || sys2.length >= 6) capped = true;
+          tails = [...sys1, ...sys2].filter((l) => l.moves === need).map((l) => ({ kind: 'l3t', line: l }));
+          if (!tails.length) continue;
+        }
       }
-      if (en.prov.length >= 6) capped = true;    // the provenance cap may have bound
-      for (const w of words) {
-        for (const pv of en.prov) {
-          chains.push(pv.seq
-            ? { fcSeq: pv.seq, view: pv.view, triWord: w, ctrWord: null }
-            : { fcSeq: null, view: null, triWord: pv.word, ctrWord: w });
+      for (const pre of prefixesOf(en)) {
+        for (const tail of tails) {
+          chains.push(pre.concat([tail]));
           if (chains.length >= SPAN_CHAIN_CAP) return { chains, capped: true };
         }
       }
@@ -2439,98 +2755,155 @@ export function createCore(E) {
   // leave (the 2026-07-14 physical-loop contract), and the whole line proved
   // before it is returned: exact fired-move plan, phase-boundary predicates
   // through the line's own landing view, per-prefix block intactness for the
-  // center segment, and the total/segment counts. Returns null on ANY miss.
-  function spanBuildLine(FC, FT, CT, plan, drill, ch) {
+  // center segment, floor pricing of the finish segments, and the
+  // total/segment counts. Returns null on ANY miss.
+  //
+  // Finish segments are the sheets' method-frame texts: a junction bracket
+  // re-grips to the line's ANCHOR hold (the hold whose printed letters ARE
+  // method letters), then the text runs verbatim — its own internal
+  // brackets included — exactly the finSplice contract lifted to a
+  // non-identity base hold. Their split counts are the AXIS-RUN FLOOR of
+  // each text alone: the step seam is deliberately never merged.
+  function spanBuildLine(FC, FT, CT, plan, drill, segs, FIN) {
     const env = f2tEnv(FT);
     const sp = spanEnv(FT, FC);
     const holdOf = sp.holdOf;
     const ID_HOLD = [0, 1, 2, 3, 4, 5, 6, 7];
     const relSpell = (h1, h2) => (h1.join() === h2.join() ? ''
       : '{' + E.FACES[h1.indexOf(h2[0])] + ',' + E.FACES[h1.indexOf(h2[1])] + '}');
-    const anchor = ch.view ? ch.view.a : sp.primary;
+    const fcSeg = segs.find((g) => g.kind === 'fc');
+    const anchor = fcSeg ? fcSeg.view.a : sp.primary;
     const Ainv = E.mInv(anchor.M);
     const mapPhys = (w) => 2 * E.faceImg(Ainv, w >> 1) + (w & 1);
-    let text = '';
-    const firedPlan = [];
-    let holdAfterFc = null;
-    if (ch.fcSeq) {
-      const spd = fcRespell(FC, ch.fcSeq);
-      if (!spd) return null;
-      text = spd.text;
-      firedPlan.push(...spd.natives);
-      holdAfterFc = holdOf(text);
-    }
-    if (ch.triWord.length) {
-      const r = f2tRespell(env, ch.triWord);
-      if (!r) return null;
-      const target = anchor.entry[r.j0].hold;
+    const phGoal = {};
+    for (const p of plan.phases) phGoal[p.kind] = p.goal;
+    // regrip the accumulated text to a target hold; null on a spell miss
+    const regripTo = (text, target) => {
       const cur = text ? holdOf(text) : ID_HOLD;
       const br = relSpell(cur, target);
       const prefix = [text, br].filter(Boolean).join(' ');
       if (br && holdOf(prefix).join() !== target.join()) return null;
-      text = [prefix, r.text].filter(Boolean).join(' ');
-      firedPlan.push(...ch.triWord.map(mapPhys));
-    }
-    if (ch.ctrWord && ch.ctrWord.length) {
-      const spc = c23Spell(CT, ch.ctrWord);
-      if (!spc) return null;
-      const target = anchor.entry[CT.RES.j0].hold;
-      const br = relSpell(holdOf(text), target);
-      const prefix = text + (br ? ' ' + br : '');
-      if (br && holdOf(prefix).join() !== target.join()) return null;
-      text = prefix + ' ' + spc.text;
-      firedPlan.push(...ch.ctrWord.map(mapPhys));
+      return prefix;
+    };
+    // ---- assemble ----
+    let text = '';
+    const firedPlan = [];
+    const split = [];
+    let holdAfterFc = null;
+    let nFinSegs = 0;
+    for (const g of segs) {
+      if (g.kind === 'fc') {
+        const spd = fcRespell(FC, g.seq);
+        if (!spd) return null;
+        text = spd.text;
+        firedPlan.push(...spd.natives);
+        holdAfterFc = holdOf(text);
+        split.push(g.seq.length);
+      } else if (g.kind === 'tri' || g.kind === 'ctr') {
+        split.push(g.word.length);
+        if (!g.word.length) continue;
+        let body, target;
+        if (g.kind === 'tri') {
+          const r = f2tRespell(env, g.word);
+          if (!r) return null;
+          body = r.text;
+          target = anchor.entry[r.j0].hold;
+        } else {
+          const spc = c23Spell(CT, g.word);
+          if (!spc) return null;
+          body = spc.text;
+          target = anchor.entry[CT.RES.j0].hold;
+        }
+        const prefix = regripTo(text, target);
+        if (prefix == null) return null;
+        text = [prefix, body].filter(Boolean).join(' ');
+        firedPlan.push(...g.word.map(mapPhys));
+      } else {                                 // 'lbt' / 'l3t'
+        nFinSegs++;
+        const body = g.kind === 'lbt' ? (g.en ? g.en.text : '') : (g.line ? g.line.text : '');
+        const moves = g.kind === 'lbt' ? (g.en ? g.en.moves : 0) : (g.line ? g.line.moves : 0);
+        split.push(moves);
+        if (!body) continue;
+        if (finPhysMoves(body) !== moves) return null;   // floor pricing, re-proved
+        const prefix = regripTo(text, anchor.hold);
+        if (prefix == null) return null;
+        text = [prefix, body].filter(Boolean).join(' ');
+        const nats = nativeMovesOf(body, 'cif');
+        if (!nats) return null;
+        firedPlan.push(...nats.map(mapPhys));
+      }
     }
     // ---- proof ----
     const parsed = E.parseAlg(text);
     if (!parsed) return null;
-    const split = [];
-    if (ch.fcSeq) split.push(ch.fcSeq.length);
-    split.push(ch.triWord.length);
-    if (ch.ctrWord) split.push(ch.ctrWord.length);
-    if (E.countMoves(parsed) !== drill.optimal) return null;
     if (split.reduce((a, b) => a + b, 0) !== drill.optimal) return null;
+    if (!nFinSegs && E.countMoves(parsed) !== drill.optimal) return null;
     const fired = [];
     try { E.walkParsed(parsed, (m) => fired.push(m)); } catch (e) { return null; }
     if (fired.length !== firedPlan.length || fired.some((m, i) => m !== firedPlan[i])) return null;
-    const nFc = ch.fcSeq ? ch.fcSeq.reduce((n, gi) => n + FC.GENS[gi].moves.length, 0) : 0;
-    let st = drill.state;
-    for (let i = 0; i < nFc; i++) st = E.move(st, fired[i]);
-    let sM, landing = null;
-    if (ch.fcSeq) {
-      if (!fcStateOK(FC, st)) return null;
-      const views = sp.viewsOf(st);
-      if (!views) return null;
-      const view = views.find((v) => v.a === ch.view.a);
-      if (!view) return null;
-      sM = view.sM;
-      const X = sp.RB[view.qi].X;
-      const p = holdAfterFc.indexOf(X);
-      landing = E.FACES[p >= 0 ? p : X];
-    } else {
-      sM = conjState(env.M, drill.state);
-    }
-    const triGoal = plan.phases[ch.fcSeq ? 1 : 0].goal;
-    for (const m of ch.triWord) sM = E.move(sM, m);
-    if (!f2tGoalOK(sM, triGoal)) return null;
-    let corner = null;
-    if (triGoal === 'either')
-      corner = f2tTripleOK(sM, 3) && f2tTripleOK(sM, 5) ? 'both'
-        : f2tTripleOK(sM, 3) ? F2T_CORNER_NAME[3] : F2T_CORNER_NAME[5];
-    let centers = null;
-    if (ch.ctrWord) {
-      const D2 = 2 * E.FIDX.D;
-      let b = 0;
-      for (const m of ch.ctrWord) {
-        sM = E.move(sM, m);
-        b = (b + (m === D2 ? 1 : m === D2 + 1 ? 2 : 0)) % 3;
-        if (!c23BlockOK(CT, sM, b)) return null;
+    let fi = 0;                                // fired-move cursor
+    let sM = null, landing = null, corner = null, centers = null;
+    const labels = [];
+    for (const g of segs) {
+      if (g.kind === 'fc') {
+        const nFc = g.seq.reduce((n, gi) => n + FC.GENS[gi].moves.length, 0);
+        let st = drill.state;
+        for (let i = 0; i < nFc; i++) st = E.move(st, fired[i]);
+        fi = nFc;
+        if (!fcStateOK(FC, st)) return null;
+        const views = sp.viewsOf(st);
+        if (!views) return null;
+        const view = views.find((v) => v.a === g.view.a);
+        if (!view) return null;
+        sM = view.sM;
+        const X = sp.RB[view.qi].X;
+        const p = holdAfterFc.indexOf(X);
+        landing = E.FACES[p >= 0 ? p : X];
+        continue;
       }
-      if (b !== 0) return null;
-      if (!c23GoalOK(sM, plan.phases[1].goal)) return null;
-      centers = C23_FACES.filter((f) => c23HexOK(sM, f)).map((f) => c23PhysFace(env, f));
+      if (sM == null) sM = conjState(anchor.M, drill.state);
+      if (g.kind === 'tri') {
+        for (const m of g.word) { sM = E.move(sM, m); fi++; }
+        if (!f2tGoalOK(sM, phGoal.tri)) return null;
+        if (phGoal.tri === 'either')
+          corner = f2tTripleOK(sM, 3) && f2tTripleOK(sM, 5) ? 'both'
+            : f2tTripleOK(sM, 3) ? F2T_CORNER_NAME[3] : F2T_CORNER_NAME[5];
+      } else if (g.kind === 'ctr') {
+        const D2 = 2 * E.FIDX.D;
+        let b = 0;
+        for (const m of g.word) {
+          sM = E.move(sM, m);
+          fi++;
+          b = (b + (m === D2 ? 1 : m === D2 + 1 ? 2 : 0)) % 3;
+          if (!c23BlockOK(CT, sM, b)) return null;
+        }
+        if (b !== 0) return null;
+        if (!c23GoalOK(sM, phGoal.ctr)) return null;
+        centers = C23_FACES.filter((f) => c23HexOK(sM, f))
+          .map((f) => E.FACES[E.faceImg(Ainv, E.FIDX[f])]);
+      } else if (g.kind === 'lbt') {
+        if (!beforeLbtOK(sM)) return null;     // the junction the step contract assumes
+        if (g.en) {
+          const nats = nativeMovesOf(g.en.text, 'cif');
+          if (!nats) return null;
+          for (const m of nats) { sM = E.move(sM, m); fi++; }
+          labels.push(g.en.caseName);
+        } else if (!lbtSlotSolved(sM)) return null;
+        const k = E.stateKey(sM);
+        if (k !== FIN.SOLVED_KEY && !FIN.coset.has(k)) return null;
+      } else {                                 // 'l3t'
+        if (g.line) {
+          const nats = nativeMovesOf(g.line.text, 'cif');
+          if (!nats) return null;
+          for (const m of nats) { sM = E.move(sM, m); fi++; }
+          labels.push(g.line.label);
+        }
+        if (E.stateKey(sM) !== FIN.SOLVED_KEY) return null;
+      }
     }
+    if (fi !== fired.length) return null;
     return { text, split, landing, corner, centers,
+             label: labels.length ? labels.join(' → ') : null,
              brackets: (text.match(/\{/g) || []).length };
   }
 
@@ -2541,14 +2914,14 @@ export function createCore(E) {
     const plan = spanPlan(drill.steps);
     if (!plan.ok || plan.kind !== 'span') return { total: 0, dropped: 1, capped: false, lines: [] };
     if (plan.start === 'lbt') return finSpanSolutions(FIN, drill, show);
-    const dp = spanDP(FC, FT, CT, plan, drill.state, drill.metric || 'token', true);
+    const dp = spanDP(FC, FT, CT, plan, drill.state, drill.metric || 'token', true, FIN, drill.optimal);
     if (!dp || dp.optimal !== drill.optimal) return { total: 0, dropped: 1, capped: false, lines: [] };
-    const { chains, capped } = spanChains(FC, FT, CT, plan, drill, dp);
+    const { chains, capped } = spanChains(FC, FT, CT, plan, drill, dp, FIN);
     const built = [];
     const seenText = new Set();
     let dropped = 0;
     for (const ch of chains) {
-      const line = spanBuildLine(FC, FT, CT, plan, drill, ch);
+      const line = spanBuildLine(FC, FT, CT, plan, drill, ch, FIN);
       if (!line) { dropped++; continue; }
       // one physical solution can certify under two landing views (white-axis
       // spins) — identical texts are the same solve, shown once
@@ -2573,7 +2946,10 @@ export function createCore(E) {
     if (plan.start === 'fc') {
       if (toks.length !== SPAN_LEN_FC || !toks.every((t) => /^(BR|BL|[UFRLDB])'?$/.test(t))) return false;
     } else {
-      if (!toks.length || toks.length > F2T_LEN + 12) return false;
+      // sealed letters; length bound = the walk plus the appended solves
+      // (pair <= 12; start c3 adds a second-center word <= C23_LMAX)
+      const cap = F2T_LEN + (plan.start === 'c3' ? 12 + C23_LMAX : 12);
+      if (!toks.length || toks.length > cap) return false;
       if (!toks.every((x) => /^(U|F|BR|BL|D)'?$/.test(x))) return false;
     }
     for (let i = 1; i < toks.length; i++)
@@ -2588,6 +2964,16 @@ export function createCore(E) {
     if (plan.start === 'fc') {
       if (d.metric !== 'token' && d.metric !== 'native') return false;
       if (fcDist(FC, metric)[FC.coordOf(st)] < 1) return false;
+    } else if (plan.start === 'sc' || plan.start === 'c3') {
+      if (d.metric !== null || d.presolved !== 0) return false;
+      if (!f2tWhiteHome(env, st)) return false;
+      const sM = conjState(env.M, st);
+      if (!f2tGoalOK(sM, 'pair')) return false;
+      const solvedNow = C23_FACES.filter((f) => c23HexOK(sM, f));
+      if (plan.start === 'c3') {
+        if (solvedNow.length !== 1 || solvedNow[0] !== d.presolvedCtr) return false;
+        if (d.presolvedCtrFace !== c23PhysFace(env, d.presolvedCtr)) return false;
+      } else if (solvedNow.length !== 0 || d.presolvedCtr !== null) return false;
     } else {
       if (d.metric !== null) return false;
       if (!f2tWhiteHome(env, st)) return false;
@@ -2597,7 +2983,7 @@ export function createCore(E) {
         if (!f2tTripleOK(sM, d.presolved) || f2tTripleOK(sM, d.presolved === 3 ? 5 : 3)) return false;
       } else if (d.presolved !== 0 || f2tTripleOK(sM, 3) || f2tTripleOK(sM, 5)) return false;
     }
-    const dp = spanDP(FC, FT, CT, plan, st, metric, false);
+    const dp = spanDP(FC, FT, CT, plan, st, metric, false, FIN);
     if (!dp || dp.optimal !== d.optimal || d.optimal < 1) return false;
     if (dp.breakdown.join() !== (d.breakdown || []).join()) return false;
     return spanMask(FC, FT, plan, st).join() === (d.mask || []).join();
@@ -2610,7 +2996,7 @@ export function createCore(E) {
            c23HexOK, c23GoalOK, c23SearchLen, c23Enumerate, c23Spell,
            c23BlockOK, c23LineWalkOK, makeC23Drill, c23Solutions, verifyC23Drill,
            SPAN_STEPS, spanPlan, spanEnv, spanDP, makeSpanDrill, spanSolutions, verifySpanDrill,
-           buildFinish, beforeLbtOK, lbtApplicable, makeLbtDrill, lbtSolutions, verifyLbtDrill,
+           buildFinish, beforeLbtOK, lbtApplicable, lbtPhaseOf, makeLbtDrill, lbtSolutions, verifyLbtDrill,
            makeL3tDrill, l3tSolutions, verifyL3tDrill, l3tLines, l3tOptOf, finSpanDP,
            finCanonText, finCanonOrKeep, finPhysMoves, l3tChainLines };
 }

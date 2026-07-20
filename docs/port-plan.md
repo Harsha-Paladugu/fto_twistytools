@@ -552,10 +552,12 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   mapping the landing face onto method D (the white-axis spins; landing
   U gives the solver's {D,L}/{D,R}/{D,B}) is a method view. Every formed
   state has exactly 3 views; the triples phase takes the best (the
-  solver picks the grip). **fc-led spans reach at most t2** (user-visible
-  note): an exact fc→centers phased target needs the complete
-  triples-optimal expansion of every fc view — measured in the tens of
-  seconds per scramble — so it is REFUSED, not approximated. Scrambles:
+  solver picks the grip). **fc-led spans reach at most t2** (v4 rule,
+  LIFTED by v6 below — the index-carrying sealed DFS made the complete
+  per-view expansion interactive): an exact fc→centers phased target
+  needs the complete triples-optimal expansion of every fc view —
+  measured in the tens of seconds per scramble with full-state searches
+  — so v4 REFUSED it rather than approximate. Scrambles:
   fc-led = 30 canonical native moves (the community full-solve length —
   from fc on the whole puzzle matters), rejected until the white center
   is displaced; tri-led = the F2T 16-move sealed walk + presolves (one
@@ -651,8 +653,9 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   over the complete optimal-landing set of the L3T metric; ~1% rejected
   when no optimal landing continues); the step boundary is NEVER merged
   (step discipline — the split chip prices the steps). **Center steps
-  cannot span into the finish steps** (spanPlan reason 'c4gap': the
-  retired fourth-center EDGES residue sits between; UI explains).
+  cannot span into the finish steps** (v5 rule 'c4gap', LIFTED by v6
+  below: the retired fourth-center EDGES residue now FUSES into the
+  center phase as the 'call' goal when a finish step follows).
   Masks: LBT = 30 kept facelets (slot 4 + the top region + U edges),
   L3T = 24. Scrambles = setup scrambles (coset BFS word [+ inverse
   entry natives], merged, replay-proved). Measured (seeded, floor
@@ -672,7 +675,85 @@ their consumers with them milestone by milestone (see M1/M4/M5).
   concatenations from never-formed states (no recognition path — not a
   sheet system), and any approximation of the uncovered states —
   refused, never approximated.
-- [x] **M5 — Solver (2026-07-13). solver.html is LIVE: full step-by-step
+- [x] **STEP TRAINERS v6 — every contiguous run (2026-07-18, user spec:
+  "I want the bencisco step trainer to work with any in order sequence
+  of steps").** All 28 contiguous runs of fc → t1 → t2 → sc → c3 → lbt →
+  l3t are valid drills; the v4 'fcreach' and v5 'c4gap' refusals are
+  LIFTED — exactly, never approximately. **The c4gap lift:** when a
+  finish step follows the centers, the span's center phase runs to ALL
+  three hexagons (new c23 goal 'call') — the retired last-center edges
+  residue shares the restricted {R,U,Rw} regime, so the v4 regime-fusion
+  rule fuses it into the center phase (a separate residue phase would
+  price a step boundary the user never selected and leave the target
+  beatable by the fused difference); pinned: 'call' at drift 0 ⇔ the
+  before-LBT predicate, the residue corollary holds live ({0,1,3} from
+  any c2-optimal endstate), 'call' exactness by the same heuristic-free
+  restricted no-shorter proof as c1/c2, and the existing C23 tables
+  bound it admissibly (max over the three hexagon marginals + dB.all +
+  all three e33 pairs — NO new persisted tables). **The generalized
+  phased DP** (fto-core spanDP) runs any phase list [fc][tri][ctr][lbt]
+  [l3t]: the LBT phase values a method-frame junction at the fewest
+  applicable sheet-entry floor with the optimal entries' coset landings
+  as endstates (a slot-solved junction passes at 0 iff it sits in the
+  coset — an edges-home coset state IS the L3T stage, pinned — so an
+  optimal chain may honestly price LBT at 0 when center lookahead lands
+  the slot solved); the L3T phase reads l3tOptOf (either sheet route,
+  now FIN-cached — a pure function of ≤ 4320 coset states hit hundreds
+  of times per crossing drill). Exactness under the new pruning: value
+  runs walk a PILOT chain first (greedy per-phase-optimal descent —
+  every segment an exact search, so the bound is ACHIEVED by a real
+  chain), then interior entries drop only when a bounded search
+  CERTIFIES they cannot tie it (tripped flags still reject anything
+  uncertifiable); phase values memoize, the center phase by its C23
+  index tuple (states sharing it provably share the exact restricted
+  distance and word set); reveal runs prune at the drill's own optimal
+  so chain listings stay complete AT the target. **The fcreach lift:**
+  the tri phase's complete per-view pair expansion (full-state DFS,
+  60-300 ms × ~100 landing views ≈ 80 s/drill) now runs through an
+  INDEX-CARRYING sealed DFS when FT.aux is attached — tables.js
+  buildF2TAux (~2.8 s, ~50 MB, in-memory ONLY, built per session for
+  fc-led crossing spans): the orbit-A/orbit-B/corner/D-edge Int32
+  transition tables plus two NEW sealed-metric marginals (dE3D, dBD —
+  the white hexagon's own break-and-restore work the classic heuristic
+  never bounded). PINNED: the index DFS is word-IDENTICAL to the
+  full-state DFS (lengths, words, canonical order), and one full fc-led
+  crossing drill verifies under BOTH paths. Scrambles: sc/c3-led spans
+  use the C23 construction (16-move sealed walk + both-triples
+  presolve, + a second-center presolve for c3; drill fields
+  presolvedCtr/presolvedCtrFace); finish-reaching spans additionally
+  require a fully proven reveal line at generation (the v5 bar). Masks:
+  finish-reaching spans show EVERYTHING (the finish pieces are relevant
+  wherever the walk left them); fc-led spans into the centers keep the
+  per-view union incl. the centers rule. Reveals: N-segment continuous
+  lines — move segments as before, then a junction bracket re-gripping
+  to the line's ANCHOR hold (whose printed letters ARE method letters)
+  before each verbatim sheet text, spliced hold-aware, finish segments
+  priced at the v5 axis-run floor, seams never merged; every line
+  re-proved per segment (fired-plan match, tri/ctr goals, per-prefix
+  block walk, before-LBT at the center boundary, coset entry after LBT,
+  exactly solved after L3T). Measured (20 drills per span, seeds
+  90001+137i, SCAN CLEAN — 0 fails / 0 verify fails / 0 line fails):
+  c3+lbt gen med 2 ms (targets 11-24), sc+c3+lbt 3 ms (9-30),
+  t2+sc+c3+lbt 3 ms (16-32), t1+t2+sc+c3+lbt 3 ms (15-35), c3+lbt+l3t
+  198 ms (21-42), sc+c3+lbt+l3t 188 ms (24-48), t2+sc+c3+lbt+l3t
+  241 ms (24-45), t1+t2+sc+c3+lbt+l3t 558 ms / p90 2.1 s (14-48);
+  fc+t1+t2+sc med 1.9 s / p90 6.3 s / max 19.8 s (14-20), fc..c3 2.5 s
+  / p90 8.1 s (21-28), fc..lbt 3.9 s / p90 12.6 s (28-37), the full
+  7-step span 12.0 s / p90 31.9 s / max 42.5 s (37-46) — async behind
+  the searching note, and the setup hint says the longest runs can take
+  up to a minute. Gates: test:trainer **94** green (the v6 section:
+  28-run census + 'call' promotion, call ⇔ before-LBT + residue +
+  no-shorter pins, per-span drill shape/start/mask/verify, the
+  independent phased brute force ACROSS the ctr→lbt seam — raw
+  restricted DFS to every call-optimal endstate, every sheet entry
+  replayed, best L3T continuation re-derived —, independent reveal-line
+  walks, the aux word-identity pin, slot-solved-junction honesty,
+  tamper rejection), test:solver 28 / test:engine 73 / test:render 7 /
+  build + check:fresh green, fresh headless-Edge E2E **24 checks / 0
+  failures / 0 console errors** (7 pills, gap hint without the old
+  refusal copy, t2+sc+c3+lbt + c3+lbt+l3t + fc+t1+t2+sc + the FULL
+  7-step span end-to-end incl. reveals with split chips summing to the
+  target, selection persistence + restored full-span generation).
   Bencisco solves** (the USER's method decision this session), every line
   machine-proved end-to-end. **The sizing task came in far under the
   checkpoint thresholds** — xyzzy's actual tables (extracted from the

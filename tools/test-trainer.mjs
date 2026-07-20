@@ -37,8 +37,8 @@
  * end-to-end INCLUDING a per-prefix block-intactness walk.
  *
  * Plus the BENCISCO STEP SPANS (step trainers v4, 2026-07-16): spanPlan's
- * contiguity rule and routing (single-regime selections = the drills above;
- * fc-led selections reach at most t2), the 12 landing anchors + rebase
+ * contiguity rule and routing (single-regime selections = the drills above),
+ * the 12 landing anchors + rebase
  * (every Q-rotated solved state reads SOLVED in all 3 of its method views —
  * built independently from uniform facelet arrays), per-span drills
  * (30-native-move scrambles fc-led / sealed walks + presolves tri-led,
@@ -58,9 +58,20 @@
  * an independent merge-counter that also expands S/H macros), uniform LBT
  * sampling (inverse-entry construction + 1/k thinning), the both-systems
  * L3T drill space (every drill shows a proven 1L3T line AND a proven
- * 1LP→TCP chain), the c4gap span rule (center steps never span into the
- * finish steps — the retired last-center edges residue sits between), and
- * the lbt+l3t span's phased target with per-line boundary proofs.
+ * 1LP→TCP chain), and the lbt+l3t span's phased target with per-line
+ * boundary proofs.
+ *
+ * Plus EVERY CONTIGUOUS RUN (step trainers v6, 2026-07-18): all 28 runs of
+ * the 7-step chain valid; the centers→finish seam bridged by the 'call'
+ * center goal (the retired last-center edges residue FUSED into the center
+ * phase — same restricted regime — whose drift-0 states are exactly the
+ * before-LBT junction, pinned live), crossing-span targets cross-checked by
+ * an independent phased brute force across the seam (raw restricted DFS to
+ * every call-optimal endstate, every sheet entry replayed, best L3T
+ * continuation re-derived), fc-led spans past t2 via the index-carrying
+ * sealed DFS (FT.aux — word-identical to the full-state DFS, pinned), and
+ * every crossing reveal line walked independently through its center block
+ * proof, before-LBT junction, coset entry and solved end.
  *
  * Run: node tools/test-trainer.mjs   (exit 0 = OK, 1 = a test failed)
  */
@@ -911,7 +922,7 @@ function indepRestrictedLen(s0, goal, cap) {
   return null;
 }
 
-t('spanPlan: contiguity rule + routing — singles and single-regime runs map to the\n  existing drills, multi-regime runs are spans, fc past t2 and gapped picks refuse', () => {
+t('spanPlan: contiguity rule + routing — ALL 28 contiguous runs are valid (v6);\n  singles and single-regime runs map to the existing drills, multi-regime runs\n  are spans; gapped picks refuse; crossing spans promote the center goal to call', () => {
   const want = [
     [['fc'], 'fc', undefined], [['t1'], 'f2t', 'first'], [['t2'], 'f2t', 'second'],
     [['t1', 't2'], 'f2t', 'both'], [['sc'], 'c23', 'second'], [['c3'], 'c23', 'third'],
@@ -930,13 +941,27 @@ t('spanPlan: contiguity rule + routing — singles and single-regime runs map to
   }
   const pf = core.spanPlan(['lbt', 'l3t']);
   if (pf.start !== 'lbt' || pf.phases.map((x) => x.kind).join() !== 'lbt,l3t') return false;
+  // every contiguous run [i..j] of the 7 steps is valid — 28 selections
+  for (let i = 0; i < core.SPAN_STEPS.length; i++) {
+    for (let j = i; j < core.SPAN_STEPS.length; j++) {
+      const steps = core.SPAN_STEPS.slice(i, j + 1);
+      const p = core.spanPlan(steps);
+      if (!p.ok || p.key !== steps.join('+')) return false;
+      if (p.kind !== 'span') continue;
+      // phase shape: kinds in step order; the center phase goal is 'call'
+      // exactly when a finish step follows it (the fused residue rule)
+      const fin = steps.includes('lbt') || steps.includes('l3t');
+      const ctr = p.phases.find((x) => x.kind === 'ctr');
+      if (ctr && fin && ctr.goal !== 'call') return false;
+      if (ctr && !fin && ctr.goal === 'call') return false;
+      if (p.start !== steps[0]) return false;
+    }
+  }
   for (const [steps, reason] of [
     [[], 'empty'], [['xx'], 'empty'], [['fc', 'fc'], 'empty'],
     [['fc', 't2'], 'gap'], [['t1', 'sc'], 'gap'], [['fc', 'c3'], 'gap'],
-    [['fc', 't1', 't2', 'sc'], 'fcreach'], [['fc', 't1', 't2', 'sc', 'c3'], 'fcreach'],
     [['fc', 'lbt'], 'gap'], [['t2', 'lbt'], 'gap'], [['sc', 'l3t'], 'gap'],
-    [['c3', 'lbt'], 'c4gap'], [['sc', 'c3', 'lbt'], 'c4gap'],
-    [['t1', 't2', 'sc', 'c3', 'lbt', 'l3t'], 'c4gap'], [['c3', 'lbt', 'l3t'], 'c4gap'],
+    [['c3', 'l3t'], 'gap'], [['t1', 't2', 'lbt'], 'gap'],
   ]) {
     const p = core.spanPlan(steps);
     if (p.ok || p.reason !== reason) return false;
@@ -1513,6 +1538,289 @@ t('verifyLbtDrill / verifyL3tDrill / lbt-span verify: tampering rejected', () =>
   if (core.verifySpanDrill(null, null, null, { ...d3, breakdown: [d3.breakdown[0] + 1, d3.breakdown[1] - 1] }, FIN)) return false;
   if (core.verifySpanDrill(null, null, null, { ...d3, optimal: d3.optimal + 1 }, FIN)) return false;
   return true;
+});
+
+// ================ every contiguous run (step trainers v6) ================
+// The 12 selections the v4/v5 rules refused: fc-led runs past t2, and spans
+// crossing the centers -> finish seam. The seam is bridged by the 'call'
+// center goal (all three hexagons — the retired last-center edges residue
+// fused into the center phase, same restricted regime), whose drift-0 states
+// are exactly the before-LBT junction.
+
+t("'call' goal: c23GoalOK call ⇔ beforeLbtOK — every LBT drill state satisfies call,\n  every unfinished c23 drill state does not, every call-optimal word lands before-LBT", () => {
+  for (let i = 0; i < 4; i++) {
+    const d = core.makeLbtDrill(FIN, lcg(60100 + 7 * i));
+    if (!d || !core.c23GoalOK(d.state, 'call')) return false;
+  }
+  for (let i = 0; i < 3; i++) {
+    const d = core.makeC23Drill(FT, CT, { mode: 'both' }, lcg(60200 + 11 * i));
+    if (!d || core.c23GoalOK(d.stateM, 'call')) return false;
+    const L = core.c23SearchLen(FT, CT, d.stateM, 'call');
+    if (L == null || L < d.optimal) return false;       // call ⊇ c2 work
+    const w = core.c23Enumerate(FT, CT, d.stateM, 'call', L, 1).words[0];
+    if (!w) return false;
+    let s = d.stateM;
+    for (const m of w) s = E.move(s, m);
+    if (!core.beforeLbtOK(s) || !core.c23GoalOK(s, 'call')) return false;
+  }
+  return true;
+});
+t("'call' optimal is exact: the heuristic-free restricted no-shorter proof agrees\n  (the same independent search the c1/c2 goals are pinned by)", () => {
+  let checked = 0;
+  for (let i = 0; i < 30 && checked < 3; i++) {
+    const d = core.makeC23Drill(FT, CT, { mode: 'third' }, lcg(60300 + 13 * i));
+    if (!d) return false;
+    const L = core.c23SearchLen(FT, CT, d.stateM, 'call');
+    if (L == null) return false;
+    if (L > 7) continue;                                // keep the raw proof tractable
+    if (!c23NoShorter(d.stateM, 'call', L)) return false;
+    checked++;
+  }
+  return checked >= 3;
+});
+t("the fused-residue corollary holds live: from a c2-optimal endstate the remaining\n  call distance is always 0, 1 or 3 turns (the retired fourth-center measurement)", () => {
+  let checked = 0;
+  for (let i = 0; i < 20 && checked < 6; i++) {
+    const d = core.makeC23Drill(FT, CT, { mode: 'third' }, lcg(60400 + 17 * i));
+    if (!d) return false;
+    const w = core.c23Enumerate(FT, CT, d.stateM, 'c2', d.optimal, 1).words[0];
+    if (!w) continue;
+    let s = d.stateM;
+    for (const m of w) s = E.move(s, m);
+    const r = core.c23SearchLen(FT, CT, s, 'call');
+    if (![0, 1, 3].includes(r)) return false;
+    if (r > 0 && r <= 4 && indepRestrictedLen(s, 'call', 4) !== r) return false;
+    checked++;
+  }
+  return checked >= 6;
+});
+
+const V6_SPANS = [
+  ['c3', 'lbt'], ['sc', 'c3', 'lbt'], ['c3', 'lbt', 'l3t'],
+  ['t2', 'sc', 'c3', 'lbt'], ['sc', 'c3', 'lbt', 'l3t'],
+  ['t1', 't2', 'sc', 'c3', 'lbt', 'l3t'],
+];
+t('v6 crossing spans: drill shape per start (sealed letters, sc/c3 presolves), start\n  conditions, breakdown = one part per phase summing to the target, mask = show all,\n  verify agrees', () => {
+  for (const steps of V6_SPANS) {
+    const plan = core.spanPlan(steps);
+    if (!plan.ok || plan.kind !== 'span') return false;
+    for (let i = 0; i < 2; i++) {
+      const d = core.makeSpanDrill(FC, FT, CT, plan, {}, lcg(61000 + 37 * i + 7 * steps.length), FIN);
+      if (!d || d.kind !== 'span' || d.spanKey !== plan.key) return false;
+      const toks = d.scramble.split(/\s+/).filter(Boolean);
+      if (!toks.every((x) => F2T_TOK.test(x))) return false;
+      for (let j = 1; j < toks.length; j++)
+        if (toks[j].replace("'", '') === toks[j - 1].replace("'", '')) return false;
+      const st = E.applyParsed(E.parseAlg(d.scramble), E.solved());
+      if (!E.eq(st, d.state) || !f2tWhiteHomePhys(st)) return false;
+      const sM = conjM(st);
+      if (plan.start === 'sc' || plan.start === 'c3') {
+        if (!core.f2tGoalOK(sM, 'pair') || d.presolved !== 0) return false;
+        const formed = ['L', 'R', 'B'].filter((f) => {
+          const fi = E.FIDX[f];
+          return sM.ctr[3 * fi] === fi && sM.ctr[3 * fi + 1] === fi && sM.ctr[3 * fi + 2] === fi &&
+            E.EDGES.every((q, e) => (q[2] !== fi && q[3] !== fi) || sM.ep[e] === e);
+        });
+        if (plan.start === 'c3') {
+          if (formed.length !== 1 || formed[0] !== d.presolvedCtr) return false;
+        } else if (formed.length !== 0 || d.presolvedCtr !== null) return false;
+      } else if (plan.start === 't2') {
+        if (![3, 5].includes(d.presolved)) return false;
+      }
+      if (d.breakdown.length !== plan.phases.length) return false;
+      if (d.breakdown.reduce((a, b) => a + b, 0) !== d.optimal || d.optimal < 1) return false;
+      if (d.mask.length !== 0) return false;             // finish spans show everything
+      if (!core.verifySpanDrill(FC, FT, CT, d, FIN)) return false;
+    }
+  }
+  return true;
+});
+t('v6 crossing target is exact: an independent phased brute force across the seam —\n  raw restricted DFS to ALL call-optimal endstates, every sheet entry replayed at\n  each, best L3T continuation re-derived — reproduces the c3+lbt(+l3t) target', () => {
+  const SOLVED_KEY = E.stateKey(E.solved());
+  const lbtValOf = (sM) => {                    // independent LBT step value + landings
+    if (sM.cp[4] === 4 && sM.co[4] === 0 && sM.ctr[4] === 1 && sM.ctr[10] === 3) {
+      const k = E.stateKey(sM);
+      return (k === SOLVED_KEY || indepCoset.has(k)) ? { v: 0, lands: [k] } : null;
+    }
+    let v = Infinity;
+    const lands = [];
+    for (const en of FIN.lbt) {
+      let post = null;
+      try { post = E.applyParsed(E.parseAlg(en.text), E.copy(sM), 'cif'); } catch (e) { continue; }
+      const pk = E.stateKey(post);
+      if (pk !== SOLVED_KEY && !indepCoset.has(pk)) continue;
+      if (en.moves < v) { v = en.moves; lands.length = 0; }
+      if (en.moves === v) lands.push(pk);
+    }
+    return isFinite(v) ? { v, lands } : null;
+  };
+  for (const steps of [['c3', 'lbt'], ['c3', 'lbt', 'l3t']]) {
+    let checked = 0;
+    for (let i = 0; i < 40 && checked < 2; i++) {
+      const plan = core.spanPlan(steps);
+      const d = core.makeSpanDrill(FC, FT, CT, plan, {}, lcg(62000 + 41 * i + steps.length), FIN);
+      if (!d || d.breakdown[0] > 6) continue;            // keep the raw DFS tractable
+      const sM0 = conjM(d.state);
+      const L1 = indepRestrictedLen(sM0, 'call', 8);
+      if (L1 !== d.breakdown[0]) return false;
+      // ALL call-optimal endstates by raw restricted DFS (canonical
+      // opposite-face suppression only — endstate-complete, no tables)
+      const ends = new Map();
+      const rec = (s, b, g, lastFace) => {
+        if (g === L1) { if (core.c23GoalOK(s, 'call')) ends.set(E.stateKey(s), s); return; }
+        for (const [m, db] of CT.RES.MOVES[b]) {
+          const f = m >> 1;
+          if (f === lastFace || (E.OPPF[f] === lastFace && f > lastFace)) continue;
+          rec(E.move(s, m), (b + db) % 3, g + 1, f);
+        }
+      };
+      rec(sM0, 0, 0, -1);
+      if (!ends.size) return false;
+      let best = Infinity;
+      for (const e of ends.values()) {
+        const r = lbtValOf(e);
+        if (!r) continue;
+        if (steps.length === 2) { best = Math.min(best, L1 + r.v); continue; }
+        for (const pk of r.lands) {
+          const tail = pk === SOLVED_KEY ? 0 : core.l3tOptOf(FIN, indepCoset.get(pk), pk);
+          if (tail != null) best = Math.min(best, L1 + r.v + tail);
+        }
+      }
+      if (best !== d.optimal) return false;
+      checked++;
+    }
+    if (checked < 2) return false;
+  }
+  return true;
+});
+t('v6 reveal lines: one continuous proved text per chain — split sums to the target,\n  the center segment keeps the block at D^b(home) per prefix and lands before-LBT,\n  the finish enters the coset and (with l3t) ends exactly solved', () => {
+  for (const steps of [['t2', 'sc', 'c3', 'lbt'], ['sc', 'c3', 'lbt', 'l3t']]) {
+    const plan = core.spanPlan(steps);
+    for (let i = 0; i < 2; i++) {
+      const d = core.makeSpanDrill(FC, FT, CT, plan, {}, lcg(63000 + 29 * i + steps.length), FIN);
+      if (!d) return false;
+      const res = core.spanSolutions(FC, FT, CT, d, 6, FIN);
+      if (!res.lines.length || res.dropped !== 0) return false;
+      for (const l of res.lines) {
+        const parsed = E.parseAlg(l.text);
+        if (!parsed) return false;
+        if (l.split.length !== plan.phases.length) return false;
+        if (l.split.reduce((a, b) => a + b, 0) !== d.optimal) return false;
+        const fired = [];
+        E.walkParsed(parsed, (m) => fired.push(m));
+        // method-frame walk: move phases first (1 token = 1 native), then
+        // the finish part (sheet texts, floor-priced — count unknown here)
+        const nMovePhases = plan.phases.filter((p) => p.kind === 'tri' || p.kind === 'ctr').length;
+        const nMoves = l.split.slice(0, nMovePhases).reduce((a, b) => a + b, 0);
+        let sP = conjM(d.state), bP = 0, k = 0;
+        const triLen = plan.phases[0].kind === 'tri' ? l.split[0] : 0;
+        for (; k < nMoves; k++) {
+          const mM = 2 * E.faceImg(F2T_ENV.M, fired[k] >> 1) + (fired[k] & 1);
+          sP = E.move(sP, mM);
+          if (k >= triLen) {
+            bP = (bP + bShift(mM)) % 3;
+            if (!blockIntact(sP, bP)) return false;
+          } else if (k === triLen - 1 && !core.f2tGoalOK(sP, 'pair')) return false;
+        }
+        if (bP !== 0 || !core.beforeLbtOK(sP)) return false;
+        for (; k < fired.length; k++) {
+          const mM = 2 * E.faceImg(F2T_ENV.M, fired[k] >> 1) + (fired[k] & 1);
+          sP = E.move(sP, mM);
+        }
+        const endKey = E.stateKey(sP);
+        if (steps.includes('l3t')) { if (endKey !== E.stateKey(E.solved())) return false; }
+        else if (endKey !== E.stateKey(E.solved()) && !indepCoset.has(endKey)) return false;
+      }
+    }
+  }
+  return true;
+});
+const AUX = await T.buildF2TAux(E);
+const FTX = { ...FT, aux: AUX };               // the fc-led crossing spans' fast path
+t('v6 aux: the index-carrying sealed DFS is word-IDENTICAL to the full-state DFS\n  (same lengths, same harvested words in the same canonical order, per goal)', () => {
+  for (const mode of ['first', 'second', 'both']) {
+    for (let i = 0; i < 2; i++) {
+      const d = core.makeF2tDrill(FT, { mode }, lcg(67000 + 1000 * i + mode.length));
+      if (!d) return false;
+      for (const goal of ['3', '5', 'either', 'pair']) {
+        const a = core.f2tSearchLen(FT, d.stateM, goal);
+        const b = core.f2tSearchLen(FTX, d.stateM, goal);
+        if (a !== b) return false;
+        if (a == null || a === 0) continue;
+        const wa = core.f2tEnumerate(FT, d.stateM, goal, a, 256);
+        const wb = core.f2tEnumerate(FTX, d.stateM, goal, a, 256);
+        if (wa.capped !== wb.capped) return false;
+        if (JSON.stringify(wa.words) !== JSON.stringify(wb.words)) return false;
+      }
+    }
+  }
+  return true;
+});
+t('v6 fc-led spans past t2: drill shape (30 natives, white displaced), breakdown per\n  phase, verify agrees, and every line re-enters through a landing view and meets\n  the center goal', () => {
+  const plan = core.spanPlan(['fc', 't1', 't2', 'sc']);
+  if (!plan.ok || plan.kind !== 'span' || plan.phases.map((p) => p.kind).join() !== 'fc,tri,ctr') return false;
+  if (plan.phases[2].goal !== 'c1') return false;        // sc alone: any ONE hexagon
+  for (let i = 0; i < 2; i++) {
+    const d = core.makeSpanDrill(FC, FTX, CT, plan, { metric: 'token' }, lcg(64000 + 31 * i), FIN);
+    if (!d) return false;
+    const toks = d.scramble.split(/\s+/).filter(Boolean);
+    if (toks.length !== 30 || !toks.every((x) => SPAN_NATIVE_TOK.test(x))) return false;
+    const st = E.applyParsed(E.parseAlg(d.scramble), E.solved());
+    if (!E.eq(st, d.state) || core.fcStateOK(FC, st)) return false;
+    if (d.breakdown.length !== 3) return false;
+    if (d.breakdown.reduce((a, b) => a + b, 0) !== d.optimal || d.optimal < 1) return false;
+    if (!core.verifySpanDrill(FC, FTX, CT, d, FIN)) return false;
+    // the aux fast path and the classic full-state path certify the same
+    // drill (one seed — the classic DP costs ~25 s per run)
+    if (i === 0 && !core.verifySpanDrill(FC, FT, CT, d, FIN)) return false;
+    const res = core.spanSolutions(FC, FTX, CT, d, 4, FIN);
+    if (!res.lines.length || res.dropped !== 0) return false;
+    for (const l of res.lines) {
+      const parsed = E.parseAlg(l.text);
+      if (!parsed || E.countMoves(parsed) !== d.optimal) return false;
+      if (l.split.reduce((a, b) => a + b, 0) !== d.optimal) return false;
+      const stF = E.applyParsed(parsed, d.state);
+      if (!core.fcStateOK(FC, stF)) return false;
+      const views = SPANV.viewsOf(stF);
+      if (!views || !views.some((v) => core.c23GoalOK(v.sM, 'c1') &&
+        core.f2tGoalOK(v.sM, 'pair'))) return false;
+      if (!l.centers || l.centers.length < 1) return false;
+    }
+  }
+  return true;
+});
+t('v6: a 0-turn LBT phase is honest — an edges-home coset state IS the L3T stage\n  (slot solved by the coset construction) and lbtPhaseOf prices the step at 0 with\n  the state itself as the landing; slot-unsolved junctions always cost ≥ 1', () => {
+  let solved0 = 0;
+  const rnd = lcg(65000);
+  for (let i = 0; i < 200 && solved0 < 5; i++) {
+    const k = FIN.cosetKeys[(rnd() * FIN.cosetKeys.length) | 0];
+    const s = FIN.coset.get(k).s;
+    if (!core.beforeLbtOK(s)) continue;                  // edges-home coset states only
+    if (!(s.cp[4] === 4 && s.co[4] === 0 && s.ctr[4] === 1 && s.ctr[10] === 3)) return false;
+    const r = core.lbtPhaseOf(FIN, s);
+    if (!r || r.v !== 0 || r.opt !== null) return false;
+    solved0++;
+  }
+  if (solved0 < 5) return false;
+  for (let i = 0; i < 3; i++) {                          // slot unsolved: value ≥ 1
+    const d = core.makeLbtDrill(FIN, lcg(65500 + 3 * i));
+    const r = d && core.lbtPhaseOf(FIN, d.state);
+    if (!r || r.v < 1 || !r.opt.length) return false;
+  }
+  return true;
+});
+t('v6 tamper rejection: a crossing-span drill rejects a changed state, optimal,\n  breakdown, mask, presolved center, or step list', () => {
+  const plan = core.spanPlan(['c3', 'lbt']);
+  let d = null;
+  for (let i = 0; i < 6 && !d; i++)
+    d = core.makeSpanDrill(FC, FT, CT, plan, {}, lcg(66000 + i), FIN);
+  if (!d || !core.verifySpanDrill(FC, FT, CT, d, FIN)) return false;
+  return !core.verifySpanDrill(FC, FT, CT, { ...d, state: E.move(d.state, 2 * E.FIDX.R) }, FIN) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, optimal: d.optimal + 1 }, FIN) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, breakdown: [d.optimal] }, FIN) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, mask: [0] }, FIN) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, presolvedCtr: d.presolvedCtr === 'L' ? 'R' : 'L' }, FIN) &&
+    !core.verifySpanDrill(FC, FT, CT, { ...d, steps: ['sc', 'c3', 'lbt'], spanKey: 'sc+c3+lbt' }, FIN);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -601,10 +601,12 @@ The USER supplies the actual sheets; this section is context, not authority.
   white-adjacent corner pieces can ever be a landing's bottom-triple
   corners, and only the 9 orbit-B triangles whose color is NOT white's
   opposite can ever source one — the fc-led span mask is exactly the 9
-  white pieces + those 12 pieces (30 facelets). fc-led spans reach at
-  most t2: an exact fc→centers phased target costs the complete
-  triples-optimal expansion of every fc view (measured: tens of seconds
-  per scramble) and the site never shows a target it cannot prove.
+  white pieces + those 12 pieces (30 facelets) for spans ending at the
+  triples; spans continuing past them keep the per-view centers rule
+  too, and finish-reaching spans mask nothing. The v4 "fc-led spans
+  reach at most t2" rule (the complete triples-optimal expansion of
+  every fc view measured tens of seconds per scramble on full-state
+  searches) is LIFTED in v6 — see §every contiguous run below.
   Span reveals are ONE continuous engine text per optimal chain
   (junction re-grips as relative {X,Y} brackets against the hold the
   previous tokens actually leave — the 2026-07-14 contract), each line
@@ -681,17 +683,82 @@ The USER supplies the actual sheets; this section is context, not authority.
   - **Scrambles** are setup scrambles: the drill state's {U,S,H} BFS word
     (plus, for LBT, an applicable entry's inverse natives), flattened to
     plain face letters and merged — replay-proved per drill.
-  - **The c4gap span rule**: the retired fourth-center EDGES residue
-    (always 1 or 3 turns) sits between the trainer's third-center goal and
-    the LBT start, so center steps never span into the finish steps
-    (spanPlan reason 'c4gap'); lbt+l3t is the only new span. Its phased
-    target = LBT optimal + min over the complete optimal-landing set of
-    the L3T step metric (min over both routes), rejected when no optimal
-    landing continues (~1%, measured).
+  - **The c4gap span rule (v5, LIFTED in v6)**: the retired fourth-center
+    EDGES residue (always 1 or 3 turns) sits between the trainer's
+    third-center goal and the LBT start, so v5 center steps never spanned
+    into the finish steps (spanPlan reason 'c4gap'); v6 fuses the residue
+    into the center phase instead (§every contiguous run below). The
+    lbt+l3t span's phased target = LBT optimal + min over the complete
+    optimal-landing set of the L3T step metric (min over both routes),
+    rejected when no optimal landing continues (~1%, measured).
   - Measured (seeded scans, floor metric): LBT targets 5-13 med 9 (gen
     ≤ 1 ms), L3T targets 4-16 med 11 (gen med 11 ms / max 76 ms),
     lbt+l3t 15-32 med 21 (med 22 ms / max 164 ms); buildFinish ≈ 1 s
     in-page, no IndexedDB.
+- **Every contiguous run is a valid span (step trainers v6, 2026-07-18,
+  machine-verified)**: all 28 contiguous runs of fc → t1 → t2 → sc → c3 →
+  lbt → l3t are drillable; the two v4/v5 refusals were lifted EXACTLY,
+  never approximately:
+  - **The c4gap lift — the 'call' center goal.** When a finish step
+    follows the center steps, the span's center phase runs to ALL three
+    hexagons ('call') instead of any-two: the last-center edges residue
+    shares the restricted {R,U,Rw} regime, and the v4 fusion rule (steps
+    sharing a regime fuse into one phase) applies — a separate residue
+    phase would price a step boundary the user never selected and leave
+    the target beatable by the fused difference. Machine-checked and
+    pinned: c23GoalOK 'call' ⇔ the before-LBT predicate on the method
+    frame (every LBT drill state satisfies it; every call-optimal word
+    lands before-LBT), the residue corollary holds live (from a
+    c2-optimal endstate the remaining 'call' distance is always 0, 1 or
+    3), and 'call' optimality is proved by the same heuristic-free
+    restricted no-shorter search as c1/c2. The existing C23 tables bound
+    'call' admissibly (each hexagon's marginals + dB.all + all three
+    e33 pairs); no new tables.
+  - **The lbt/l3t phases in the general DP.** The LBT phase at a
+    method-frame junction: value = fewest floor turns over the applicable
+    sheet entries, optimal endstates = the optimal entries' coset
+    landings; a slot-solved junction passes at 0 iff the state sits in
+    the L3T coset (an edges-home coset state IS the L3T stage — pinned),
+    so an optimal chain may honestly price LBT at 0 when lookahead lands
+    the slot solved. The L3T phase reads l3tOptOf (either sheet route,
+    FIN-cached — a pure function of ≤ 4320 coset states). A chain whose
+    landing no sheet continues is infinite there; a scramble whose every
+    chain is infinite is rejected. Junction brackets re-grip the
+    continuous line to the ANCHOR hold (whose printed letters ARE method
+    letters) before each verbatim sheet text; finish segments price at
+    the v5 axis-run floor; seams never merge.
+  - **The fcreach lift — exact pruning + the index-carrying sealed DFS.**
+    Value runs walk a PILOT chain (greedy per-phase-optimal descent —
+    every segment an exact search, so the bound is ACHIEVED), then drop
+    interior entries only when a bounded search CERTIFIES they cannot tie
+    it (tripped flags still reject anything uncertifiable); phase values
+    memoize (the center phase by its C23 index tuple — states sharing it
+    share the exact restricted distance and word set). The remaining cost
+    was the tri phase's complete per-view pair searches (full-state DFS,
+    60-300 ms per landing view × ~100 views): the v6 aux bundle
+    (tables.js buildF2TAux, in-memory only, ~2.8 s build, ~50 MB — the
+    orbit-A/orbit-B/corner/D-edge Int32 transition tables plus two new
+    sealed-metric marginals dE3D/dBD, the white hexagon's own
+    break-and-restore work the classic heuristic never bounded) lets the
+    same canonical DFS step four small indices instead of full states.
+    PINNED: the index DFS is word-IDENTICAL to the full-state DFS (same
+    lengths, same words, same canonical order), and a full fc-led
+    crossing drill verifies under BOTH paths.
+  - Crossing-span targets are cross-checked by an independent phased
+    brute force ACROSS the seam (raw suppression-only restricted DFS to
+    every call-optimal endstate, every sheet entry replayed at each
+    landing, best L3T continuation re-derived), and every crossing reveal
+    line is walked independently: split sums, per-prefix center block
+    proof, before-LBT at the center boundary, coset entry after LBT,
+    exactly solved after L3T.
+  - Scrambles: sc/c3-led spans use the C23 construction (16-move sealed
+    walk + both-triples presolve, + a second-center presolve for c3);
+    fc-led unchanged (30 natives, white displaced); finish-reaching spans
+    additionally require a fully proven reveal line at generation (the
+    v5 bar). Masks: any span reaching lbt/l3t shows everything (the
+    finish pieces are relevant wherever the walk left them); fc-led
+    spans into the centers keep the per-view union incl. the centers
+    rule.
 - **Nautilus** (Straughan/Highducheck/Trang, 2024) — First Block → Centers →
   Triple → Last Layer; the main challenger. 🔶
 - **Vertigo** (Hudgens & Streeter) — corners-first; shares the L3T algset. 🔶

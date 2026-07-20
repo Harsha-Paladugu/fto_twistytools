@@ -824,6 +824,33 @@
       out.dC[key] = bfsTableSealed(NCORNER, mC, cornerGoals(C_SETS[key]), bl.SEALED_MOVES);
     return out;
   }
+  // ---------------- fc-led span search aux (step trainers v6) ----------------
+  // In-memory acceleration bundle for the span DP's TRIPLES phase: fc-led
+  // crossing spans expand every landing view through a complete sealed pair
+  // search, and the full-state DFS was measured in the tens of seconds per
+  // drill. This bundle carries the Int32 transition tables an index-carrying
+  // DFS steps instead (orbit-A pattern, orbit-B pattern, corners, D-edge
+  // placement) plus two sealed-metric marginals the classic heuristic lacked
+  // — the D-edge placement and D-triangle distances, the white hexagon's own
+  // break-and-restore work. Attached to the F2T bundle as FT.aux by callers
+  // that need it; ~50 MB in RAM, a few seconds to build, deliberately NOT
+  // persisted (the mtables dwarf the IndexedDB budget and rebuild fast).
+  async function buildF2TAux(E, tick) {
+    const bl = makeBLHold(E);
+    const mA = await buildOrbitMtable(E, 'A', tick || null);
+    const mB = await buildOrbitMtable(E, 'B', tick || null);
+    const mC = buildCornerMtable(E);
+    const mE3 = await buildEdgeMtable(E, 3, tick || null);
+    // the D hexagon's marginals: pieces 9,10,11 exactly home; orbit-B slots
+    // 6,7,8 (ctr 18..20) colored D (encB color 2)
+    const epHome = Array.from({ length: 12 }, (_, i) => i);
+    const E3D_HOME = edgePlaceIndex(epHome, [9, 10, 11]);
+    const dE3D = bfsTableSealed(NE3, mE3, [E3D_HOME], bl.SEALED_MOVES);
+    const dBD = bfsTableSealed(NPAT, mB, orbitGoals('B', [[6, 2], [7, 2], [8, 2]]), bl.SEALED_MOVES);
+    const e3Of = (ep) => edgePlaceIndex(ep, [9, 10, 11]);
+    return { mA, mB, mC, mE3, dE3D, dBD, E3D_HOME, encB, e3Of };
+  }
+
   async function loadOrBuildF2T(E, tick) {
     const cached = await idbGet(KEY_F2T);
     if (cached && cached.v === KEY_F2T) {
@@ -1113,7 +1140,7 @@
     permRank, evenPermUnrank, cornerIndex, cornerUnpack,
     edgePlaceIndex, edgePlaceUnrank,
     makeBLHold, buildPDBs, loadOrBuildPDBs, buildFirstCenter,
-    KEY_F2T, buildF2T, loadOrBuildF2T,
+    KEY_F2T, buildF2T, loadOrBuildF2T, buildF2TAux,
     KEY_C23, buildC23, loadOrBuildC23,
   };
   window.OOTables = module.exports;
